@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Product, Type, Category, Brand, ProductModel
+from .models import Product, Type, Category, Brand, ProductModel, Supplier, ProductUnit
 
 
 @admin.register(Product)
@@ -26,3 +26,5 @@ admin.site.register(Type)
 admin.site.register(Category)
 admin.site.register(Brand)
 admin.site.register(ProductModel)
+admin.site.register(Supplier)
+admin.site.register(ProductUnit)
