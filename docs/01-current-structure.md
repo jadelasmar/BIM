@@ -62,6 +62,7 @@ ProductUnit is used for:
 - stock status
 - supplier
 - cost
+- selling price
 - purchase date
 - sold date
 - notes
@@ -79,3 +80,9 @@ Current statuses:
 Supplier represents the company or person products are bought from.
 
 Supplier is connected to ProductUnit so each physical stock item can keep its own cost and purchase source.
+
+## Pricing Logic
+
+Supplier cost and client selling price are tracked on ProductUnit.
+
+This keeps purchase cost and sale price tied to each physical stock item.

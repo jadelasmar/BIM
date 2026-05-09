@@ -123,6 +123,7 @@ class ProductUnit(models.Model):
     )
 
     cost = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    selling_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
     purchase_date = models.DateField(blank=True, null=True)
     sold_date = models.DateField(blank=True, null=True)

@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.db import models
 from django.test import SimpleTestCase, TestCase
 
 from .admin import ProductAdmin, ProductUnitAdmin
@@ -98,6 +99,7 @@ class ProductUnitAdminTests(SimpleTestCase):
                 "status",
                 "supplier",
                 "cost",
+                "selling_price",
                 "purchase_date",
                 "sold_date",
                 "isactive",
@@ -121,3 +123,13 @@ class ProductUnitAdminTests(SimpleTestCase):
             self.product_unit_admin.list_select_related,
             ("product", "supplier"),
         )
+
+
+class ProductUnitModelTests(SimpleTestCase):
+    def test_product_unit_tracks_client_selling_price(self):
+        field = ProductUnit._meta.get_field("selling_price")
+
+        self.assertIsInstance(field, models.DecimalField)
+        self.assertEqual(field.max_digits, 10)
+        self.assertEqual(field.decimal_places, 2)
+        self.assertEqual(field.default, 0)

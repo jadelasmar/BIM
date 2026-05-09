@@ -86,16 +86,16 @@ Do not create custom frontend yet.
 ## Session 4: Product Pricing Fields
 
 Status:
-- pending
+- done
 
 Task:
 Add client price tracking.
 
 Focus:
-- pending: add selling price to Product or ProductUnit after checking best place
-- pending: keep supplier cost on ProductUnit
-- pending: run migrations
-- pending: update admin
+- done: add selling price to ProductUnit after checking best place
+- done: keep supplier cost on ProductUnit
+- done: run migrations
+- done: update admin
 
 ## Session 5: Purchase Workflow
 

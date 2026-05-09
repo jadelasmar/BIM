@@ -82,6 +82,7 @@ class ProductUnitAdmin(admin.ModelAdmin):
         "status",
         "supplier",
         "cost",
+        "selling_price",
         "purchase_date",
         "sold_date",
         "isactive",

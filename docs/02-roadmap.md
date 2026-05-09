@@ -14,6 +14,7 @@
 - Added ProductUnit
 - Improved Product admin
 - Improved ProductUnit admin
+- Added ProductUnit client selling price tracking
 
 ## Current Focus
 
@@ -24,14 +25,12 @@ Detailed task sessions are listed in:
 
 ## Next Steps
 
-1. Add stock count display
-2. Add client price tracking
-3. Add supplier purchase workflow
-4. Add selling workflow
-5. Add simple dashboard
-6. Add custom UI pages
-7. Add barcode support
-8. Polish BIM Stock UI
+1. Add supplier purchase workflow
+2. Add selling workflow
+3. Add simple dashboard
+4. Add custom UI pages
+5. Add barcode support
+6. Polish BIM Stock UI
 
 ## Later
 
