@@ -71,15 +71,15 @@ Do not change Product model.
 ## Session 3: Stock Count Display
 
 Status:
-- pending
+- done
 
 Task:
 Add stock count display.
 
 Focus:
-- pending: available quantity per product
-- pending: count ProductUnit where status is available and isactive is True
-- pending: show count in Product admin list
+- done: available quantity per product
+- done: count ProductUnit where status is available and isactive is True
+- done: show count in Product admin list
 
 Do not create custom frontend yet.
 

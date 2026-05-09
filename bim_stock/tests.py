@@ -1,8 +1,8 @@
 from django.contrib import admin
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase
 
 from .admin import ProductAdmin, ProductUnitAdmin
-from .models import Product, ProductUnit
+from .models import Brand, Category, Product, ProductModel, ProductUnit, Type
 
 
 class ProductAdminTests(SimpleTestCase):
@@ -17,6 +17,7 @@ class ProductAdminTests(SimpleTestCase):
                 "printed",
                 "sku",
                 "barcode",
+                "available_quantity",
                 "product_type",
                 "category",
                 "brand",
@@ -39,6 +40,49 @@ class ProductAdminTests(SimpleTestCase):
             self.product_admin.list_select_related,
             ("category__type", "model__brand"),
         )
+
+
+class ProductAdminStockCountTests(TestCase):
+    def setUp(self):
+        self.product_admin = ProductAdmin(Product, admin.site)
+        product_type = Type.objects.create(name="Printer")
+        category = Category.objects.create(type=product_type, name="Laser")
+        brand = Brand.objects.create(brandname="Canon")
+        model = ProductModel.objects.create(brand=brand, modelname="L100")
+        self.product = Product.objects.create(
+            descript="Canon laser printer",
+            printed="Canon L100",
+            category=category,
+            model=model,
+        )
+
+    def test_available_quantity_counts_only_active_available_units(self):
+        ProductUnit.objects.create(
+            product=self.product,
+            serial_number="AVAILABLE-1",
+            status=ProductUnit.STATUS_AVAILABLE,
+            isactive=True,
+        )
+        ProductUnit.objects.create(
+            product=self.product,
+            serial_number="AVAILABLE-2",
+            status=ProductUnit.STATUS_AVAILABLE,
+            isactive=True,
+        )
+        ProductUnit.objects.create(
+            product=self.product,
+            serial_number="INACTIVE",
+            status=ProductUnit.STATUS_AVAILABLE,
+            isactive=False,
+        )
+        ProductUnit.objects.create(
+            product=self.product,
+            serial_number="SOLD",
+            status=ProductUnit.STATUS_SOLD,
+            isactive=True,
+        )
+
+        self.assertEqual(self.product_admin.available_quantity(self.product), 2)
 
 
 class ProductUnitAdminTests(SimpleTestCase):

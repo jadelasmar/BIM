@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.db.models import Count, Q
 from .models import Product, Type, Category, Brand, ProductModel, Supplier, ProductUnit
 
 
@@ -9,6 +10,7 @@ class ProductAdmin(admin.ModelAdmin):
         "printed",
         "sku",
         "barcode",
+        "available_quantity",
         "product_type",
         "category",
         "brand",
@@ -33,6 +35,28 @@ class ProductAdmin(admin.ModelAdmin):
         "crdate",
         "isactive",
     )
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        return queryset.annotate(
+            available_unit_count=Count(
+                "units",
+                filter=Q(
+                    units__status=ProductUnit.STATUS_AVAILABLE,
+                    units__isactive=True,
+                ),
+            )
+        )
+
+    @admin.display(description="Available Qty", ordering="available_unit_count")
+    def available_quantity(self, obj):
+        if hasattr(obj, "available_unit_count"):
+            return obj.available_unit_count
+
+        return obj.units.filter(
+            status=ProductUnit.STATUS_AVAILABLE,
+            isactive=True,
+        ).count()
 
     @admin.display(description="Type", ordering="category__type__name")
     def product_type(self, obj):
