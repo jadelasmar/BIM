@@ -85,6 +85,8 @@ admin.site.register(Type)
 admin.site.register(Category)
 admin.site.register(Brand)
 admin.site.register(ProductModel)
+
+
 @admin.register(Supplier)
 class SupplierAdmin(admin.ModelAdmin):
     search_fields = ("name",)
@@ -94,6 +96,7 @@ class SupplierAdmin(admin.ModelAdmin):
 @admin.register(ProductUnit)
 class ProductUnitAdmin(admin.ModelAdmin):
     form = ProductUnitPurchaseForm
+    actions = ("mark_as_sold",)
     list_display = (
         "product",
         "serial_number",
@@ -156,3 +159,16 @@ class ProductUnitAdmin(admin.ModelAdmin):
             },
         ),
     )
+
+    @admin.action(description="Mark selected units as sold")
+    def mark_as_sold(self, request, queryset):
+        queryset.update(
+            status=ProductUnit.STATUS_SOLD,
+            sold_date=timezone.localdate(),
+        )
+
+    def save_model(self, request, obj, form, change):
+        if obj.status == ProductUnit.STATUS_SOLD and not obj.sold_date:
+            obj.sold_date = timezone.localdate()
+
+        super().save_model(request, obj, form, change)

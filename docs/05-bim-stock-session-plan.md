@@ -117,16 +117,16 @@ Keep it simple in Django admin first.
 ## Session 6: Selling Workflow
 
 Status:
-- pending
+- done
 
 Task:
 Add selling workflow.
 
 Focus:
-- pending: mark ProductUnit as sold
-- pending: sold date
-- pending: client price if already added
-- pending: prevent sold units from counting as available
+- done: mark ProductUnit as sold
+- done: sold date
+- done: client price if already added
+- done: prevent sold units from counting as available
 
 Keep it simple in Django admin first.
 

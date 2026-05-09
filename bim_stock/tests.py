@@ -86,6 +86,25 @@ class ProductAdminStockCountTests(TestCase):
 
         self.assertEqual(self.product_admin.available_quantity(self.product), 2)
 
+    def test_sold_units_do_not_count_as_available_after_admin_action(self):
+        product_unit_admin = ProductUnitAdmin(ProductUnit, admin.site)
+        unit = ProductUnit.objects.create(
+            product=self.product,
+            serial_number="SELL-ME",
+            status=ProductUnit.STATUS_AVAILABLE,
+            isactive=True,
+        )
+
+        product_unit_admin.mark_as_sold(
+            request=None,
+            queryset=ProductUnit.objects.filter(pk=unit.pk),
+        )
+        unit.refresh_from_db()
+
+        self.assertEqual(unit.status, ProductUnit.STATUS_SOLD)
+        self.assertEqual(unit.sold_date, timezone.localdate())
+        self.assertEqual(self.product_admin.available_quantity(self.product), 0)
+
 
 class ProductUnitAdminTests(SimpleTestCase):
     def setUp(self):
@@ -120,6 +139,7 @@ class ProductUnitAdminTests(SimpleTestCase):
             ("status", "supplier", "isactive", "purchase_date", "sold_date"),
         )
         self.assertEqual(self.product_unit_admin.readonly_fields, ("crdate",))
+        self.assertEqual(self.product_unit_admin.actions, ("mark_as_sold",))
         self.assertEqual(
             self.product_unit_admin.list_select_related,
             ("product", "supplier"),
@@ -183,6 +203,42 @@ class ProductUnitPurchaseFormTests(SimpleTestCase):
             ProductUnit.STATUS_AVAILABLE,
         )
         self.assertEqual(form.fields["purchase_date"].initial, timezone.localdate())
+
+
+class ProductUnitSellingWorkflowTests(TestCase):
+    def setUp(self):
+        self.product_unit_admin = ProductUnitAdmin(ProductUnit, admin.site)
+        product_type = Type.objects.create(name="Printer")
+        category = Category.objects.create(type=product_type, name="Laser")
+        brand = Brand.objects.create(brandname="Canon")
+        model = ProductModel.objects.create(brand=brand, modelname="L100")
+        product = Product.objects.create(
+            descript="Canon laser printer",
+            printed="Canon L100",
+            category=category,
+            model=model,
+        )
+        self.unit = ProductUnit.objects.create(
+            product=product,
+            serial_number="SOLD-BY-FORM",
+            status=ProductUnit.STATUS_AVAILABLE,
+        )
+
+    def test_admin_save_sets_sold_date_when_unit_is_sold(self):
+        self.unit.status = ProductUnit.STATUS_SOLD
+        self.unit.selling_price = 250
+
+        self.product_unit_admin.save_model(
+            request=None,
+            obj=self.unit,
+            form=None,
+            change=True,
+        )
+        self.unit.refresh_from_db()
+
+        self.assertEqual(self.unit.status, ProductUnit.STATUS_SOLD)
+        self.assertEqual(self.unit.selling_price, 250)
+        self.assertEqual(self.unit.sold_date, timezone.localdate())
 
 
 class ProductUnitModelTests(SimpleTestCase):
