@@ -106,7 +106,9 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+# Local business timezone. This keeps admin date/time notes and default dates
+# aligned with Beirut, Lebanon.
+TIME_ZONE = 'Asia/Beirut'
 
 USE_I18N = True
 

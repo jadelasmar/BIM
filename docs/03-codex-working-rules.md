@@ -4,7 +4,7 @@ Codex should focus on implementation, not long explanations.
 
 ## Response Style
 
-Keep replies concise.
+Keep replies short, precise, and practical.
 
 Only include:
 - files changed
@@ -13,14 +13,19 @@ Only include:
 - errors or blockers
 
 Do not explain every line of code unless asked.
+Avoid long answers unless the user explicitly asks for detailed explanation.
 
 ## Development Rules
 
 Before changing code:
 - inspect current files
+- understand the current structure and naming
+- follow existing project patterns
 - understand existing model names
 - avoid renaming unless requested
 - avoid large unrelated changes
+- avoid unrelated refactors
+- avoid changing models unless needed
 - apply requested changes directly
 - ask before destructive operations
 
@@ -34,9 +39,9 @@ After changing models:
 Do not use checked-in virtual environments.
 
 Use:
-- system Python
-or
-- create a fresh .venv
+- `.venv` if available
+- system Python only if `.venv` is unavailable or causing a blocker
+- create a fresh `.venv` when needed
 
 Install requirements with:
 
@@ -78,9 +83,9 @@ Use them only when relevant to the task.
 
 Suggested use:
 - GitHub for issues, PRs, repo review, and version-control workflows
+- Superpowers for coding workflow support when useful
 - Codex Security for security review
 - Figma for design inspection and UI implementation
-- Superpowers for extra coding workflow support
 
 For UI/design sessions, check whether Figma is relevant before implementing the UI.
 
