@@ -1,6 +1,20 @@
 from django.contrib import admin
+from django import forms
 from django.db.models import Count, Q
+from django.utils import timezone
 from .models import Product, Type, Category, Brand, ProductModel, Supplier, ProductUnit
+
+
+class ProductUnitPurchaseForm(forms.ModelForm):
+    class Meta:
+        model = ProductUnit
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.instance.pk:
+            self.fields["status"].initial = ProductUnit.STATUS_AVAILABLE
+            self.fields["purchase_date"].initial = timezone.localdate()
 
 
 @admin.register(Product)
@@ -71,11 +85,15 @@ admin.site.register(Type)
 admin.site.register(Category)
 admin.site.register(Brand)
 admin.site.register(ProductModel)
-admin.site.register(Supplier)
+@admin.register(Supplier)
+class SupplierAdmin(admin.ModelAdmin):
+    search_fields = ("name",)
+    ordering = ("name",)
 
 
 @admin.register(ProductUnit)
 class ProductUnitAdmin(admin.ModelAdmin):
+    form = ProductUnitPurchaseForm
     list_display = (
         "product",
         "serial_number",
@@ -96,3 +114,45 @@ class ProductUnitAdmin(admin.ModelAdmin):
     )
     list_select_related = ("product", "supplier")
     readonly_fields = ("crdate",)
+    autocomplete_fields = ("product", "supplier")
+    fieldsets = (
+        (
+            "Stock item",
+            {
+                "fields": (
+                    "product",
+                    "serial_number",
+                    "status",
+                    "isactive",
+                )
+            },
+        ),
+        (
+            "Purchase",
+            {
+                "fields": (
+                    "supplier",
+                    "cost",
+                    "purchase_date",
+                )
+            },
+        ),
+        (
+            "Sale",
+            {
+                "fields": (
+                    "selling_price",
+                    "sold_date",
+                )
+            },
+        ),
+        (
+            "Notes",
+            {
+                "fields": (
+                    "notes",
+                    "crdate",
+                )
+            },
+        ),
+    )

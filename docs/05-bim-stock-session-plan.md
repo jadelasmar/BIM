@@ -100,17 +100,17 @@ Focus:
 ## Session 5: Purchase Workflow
 
 Status:
-- pending
+- done
 
 Task:
 Improve supplier purchase workflow.
 
 Focus:
-- pending: easy ProductUnit creation when buying stock
-- pending: supplier
-- pending: cost
-- pending: purchase date
-- pending: initial status available
+- done: easy ProductUnit creation when buying stock
+- done: supplier
+- done: cost
+- done: purchase date
+- done: initial status available
 
 Keep it simple in Django admin first.
 

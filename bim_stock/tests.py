@@ -1,8 +1,9 @@
 from django.contrib import admin
 from django.db import models
 from django.test import SimpleTestCase, TestCase
+from django.utils import timezone
 
-from .admin import ProductAdmin, ProductUnitAdmin
+from .admin import ProductAdmin, ProductUnitAdmin, ProductUnitPurchaseForm
 from .models import Brand, Category, Product, ProductModel, ProductUnit, Type
 
 
@@ -123,6 +124,65 @@ class ProductUnitAdminTests(SimpleTestCase):
             self.product_unit_admin.list_select_related,
             ("product", "supplier"),
         )
+        self.assertEqual(
+            self.product_unit_admin.autocomplete_fields,
+            ("product", "supplier"),
+        )
+        self.assertEqual(
+            self.product_unit_admin.fieldsets,
+            (
+                (
+                    "Stock item",
+                    {
+                        "fields": (
+                            "product",
+                            "serial_number",
+                            "status",
+                            "isactive",
+                        )
+                    },
+                ),
+                (
+                    "Purchase",
+                    {
+                        "fields": (
+                            "supplier",
+                            "cost",
+                            "purchase_date",
+                        )
+                    },
+                ),
+                (
+                    "Sale",
+                    {
+                        "fields": (
+                            "selling_price",
+                            "sold_date",
+                        )
+                    },
+                ),
+                (
+                    "Notes",
+                    {
+                        "fields": (
+                            "notes",
+                            "crdate",
+                        )
+                    },
+                ),
+            ),
+        )
+
+
+class ProductUnitPurchaseFormTests(SimpleTestCase):
+    def test_new_product_unit_defaults_to_available_purchase_today(self):
+        form = ProductUnitPurchaseForm()
+
+        self.assertEqual(
+            form.fields["status"].initial,
+            ProductUnit.STATUS_AVAILABLE,
+        )
+        self.assertEqual(form.fields["purchase_date"].initial, timezone.localdate())
 
 
 class ProductUnitModelTests(SimpleTestCase):
