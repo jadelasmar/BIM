@@ -1,0 +1,43 @@
+{% extends "bim_stock/base.html" %}
+
+{% block title %}Products | BIM Stock{% endblock %}
+
+{% block content %}
+<h1>Products</h1>
+<section class="panel" aria-label="Products">
+    {% if products %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Product</th>
+                    <th>SKU</th>
+                    <th>Type</th>
+                    <th>Category</th>
+                    <th>Brand</th>
+                    <th>Model</th>
+                    <th>Available</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for product in products %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'bim_stock:product_detail' product.pk %}">
+                                {{ product.printed|default:product.descript }}
+                            </a>
+                        </td>
+                        <td>{{ product.sku }}</td>
+                        <td>{{ product.category.type }}</td>
+                        <td>{{ product.category.name }}</td>
+                        <td>{{ product.model.brand }}</td>
+                        <td>{{ product.model.modelname }}</td>
+                        <td>{{ product.available_unit_count }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="empty">No active products found.</p>
+    {% endif %}
+</section>
+{% endblock %}

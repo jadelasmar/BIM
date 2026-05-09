@@ -1,77 +1,25 @@
-<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>BIM Stock Dashboard</title>
-    <style>
-        body {
-            margin: 0;
-            font-family: Arial, sans-serif;
-            color: #1f2933;
-            background: #f5f7fa;
-        }
+{% extends "bim_stock/base.html" %}
 
-        main {
-            width: min(960px, calc(100% - 32px));
-            margin: 48px auto;
-        }
+{% block title %}BIM Stock Dashboard{% endblock %}
 
-        h1 {
-            margin: 0 0 24px;
-            font-size: 32px;
-            font-weight: 700;
-        }
-
-        .dashboard-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 16px;
-        }
-
-        .metric {
-            padding: 20px;
-            border: 1px solid #d9e2ec;
-            border-radius: 8px;
-            background: #ffffff;
-        }
-
-        .metric-label {
-            margin: 0 0 12px;
-            color: #52606d;
-            font-size: 14px;
-            font-weight: 700;
-            text-transform: uppercase;
-        }
-
-        .metric-value {
-            margin: 0;
-            font-size: 36px;
-            font-weight: 700;
-        }
-    </style>
-</head>
-<body>
-    <main>
-        <h1>BIM Stock Dashboard</h1>
-        <section class="dashboard-grid" aria-label="Stock summary">
-            <article class="metric">
-                <p class="metric-label">Total Products</p>
-                <p class="metric-value">{{ total_products }}</p>
-            </article>
-            <article class="metric">
-                <p class="metric-label">Available Units</p>
-                <p class="metric-value">{{ available_units }}</p>
-            </article>
-            <article class="metric">
-                <p class="metric-label">Sold Units</p>
-                <p class="metric-value">{{ sold_units }}</p>
-            </article>
-            <article class="metric">
-                <p class="metric-label">Damaged Units</p>
-                <p class="metric-value">{{ damaged_units }}</p>
-            </article>
-        </section>
-    </main>
-</body>
-</html>
+{% block content %}
+<h1>BIM Stock Dashboard</h1>
+<section class="dashboard-grid" aria-label="Stock summary">
+    <article class="metric">
+        <p class="metric-label">Total Products</p>
+        <p class="metric-value">{{ total_products }}</p>
+    </article>
+    <article class="metric">
+        <p class="metric-label">Available Units</p>
+        <p class="metric-value">{{ available_units }}</p>
+    </article>
+    <article class="metric">
+        <p class="metric-label">Sold Units</p>
+        <p class="metric-value">{{ sold_units }}</p>
+    </article>
+    <article class="metric">
+        <p class="metric-label">Damaged Units</p>
+        <p class="metric-value">{{ damaged_units }}</p>
+    </article>
+</section>
+{% endblock %}

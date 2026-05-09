@@ -22,6 +22,9 @@ Main app:
 
 - `/admin/` Django admin
 - `/stock/` BIM Stock dashboard
+- `/stock/products/` product list
+- `/stock/products/<id>/` product detail with available units
+- `/stock/units/` stock unit list
 
 Core product models:
 - Product
@@ -101,3 +104,12 @@ The BIM Stock dashboard shows:
 - active damaged units
 
 Low stock reporting is planned later after minimum stock quantity is added.
+
+## Custom Stock Page Logic
+
+Custom stock pages show active records first:
+- product list shows active products and available unit count
+- product detail shows product information and active available units
+- stock unit list shows active ProductUnit records with status and pricing
+
+Django admin remains the place for creating and editing stock records.

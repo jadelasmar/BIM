@@ -1,0 +1,45 @@
+{% extends "bim_stock/base.html" %}
+
+{% block title %}Stock Units | BIM Stock{% endblock %}
+
+{% block content %}
+<h1>Stock Units</h1>
+<section class="panel" aria-label="Stock units">
+    {% if units %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Product</th>
+                    <th>Serial Number</th>
+                    <th>Status</th>
+                    <th>Supplier</th>
+                    <th>Cost</th>
+                    <th>Selling Price</th>
+                    <th>Purchase Date</th>
+                    <th>Sold Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for unit in units %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'bim_stock:product_detail' unit.product.pk %}">
+                                {{ unit.product }}
+                            </a>
+                        </td>
+                        <td>{{ unit.serial_number }}</td>
+                        <td>{{ unit.get_status_display }}</td>
+                        <td>{{ unit.supplier|default:"-" }}</td>
+                        <td>{{ unit.cost }}</td>
+                        <td>{{ unit.selling_price }}</td>
+                        <td>{{ unit.purchase_date|default:"-" }}</td>
+                        <td>{{ unit.sold_date|default:"-" }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="empty">No active stock units found.</p>
+    {% endif %}
+</section>
+{% endblock %}

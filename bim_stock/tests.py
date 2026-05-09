@@ -297,6 +297,82 @@ class StockDashboardTests(TestCase):
         self.assertEqual(response.context["damaged_units"], 1)
 
 
+class CustomStockPageTests(TestCase):
+    def setUp(self):
+        product_type = Type.objects.create(name="Printer")
+        category = Category.objects.create(type=product_type, name="Laser")
+        brand = Brand.objects.create(brandname="Canon")
+        model = ProductModel.objects.create(brand=brand, modelname="L100")
+        inactive_model = ProductModel.objects.create(brand=brand, modelname="L200")
+        self.product = Product.objects.create(
+            descript="Canon laser printer",
+            printed="Canon L100",
+            category=category,
+            model=model,
+        )
+        self.inactive_product = Product.objects.create(
+            descript="Inactive printer",
+            printed="Inactive L200",
+            category=category,
+            model=inactive_model,
+            isactive=False,
+        )
+        self.available_unit = ProductUnit.objects.create(
+            product=self.product,
+            serial_number="AVAILABLE-DETAIL",
+            status=ProductUnit.STATUS_AVAILABLE,
+            isactive=True,
+        )
+        self.sold_unit = ProductUnit.objects.create(
+            product=self.product,
+            serial_number="SOLD-DETAIL",
+            status=ProductUnit.STATUS_SOLD,
+            isactive=True,
+        )
+        self.inactive_unit = ProductUnit.objects.create(
+            product=self.product,
+            serial_number="INACTIVE-DETAIL",
+            status=ProductUnit.STATUS_AVAILABLE,
+            isactive=False,
+        )
+
+    def test_product_list_shows_active_products_with_available_counts(self):
+        response = self.client.get("/stock/products/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "bim_stock/product_list.html")
+        products = list(response.context["products"])
+        self.assertEqual(products, [self.product])
+        self.assertEqual(products[0].available_unit_count, 1)
+
+    def test_product_detail_shows_available_units_only(self):
+        response = self.client.get(f"/stock/products/{self.product.pk}/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "bim_stock/product_detail.html")
+        self.assertEqual(response.context["product"], self.product)
+        self.assertEqual(response.context["available_unit_count"], 1)
+        self.assertEqual(
+            list(response.context["available_units"]),
+            [self.available_unit],
+        )
+
+    def test_product_detail_does_not_show_inactive_products(self):
+        response = self.client.get(f"/stock/products/{self.inactive_product.pk}/")
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_stock_list_shows_active_units(self):
+        response = self.client.get("/stock/units/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "bim_stock/stock_list.html")
+        self.assertEqual(
+            list(response.context["units"]),
+            [self.available_unit, self.sold_unit],
+        )
+
+
 class ProductUnitModelTests(SimpleTestCase):
     def test_product_unit_tracks_client_selling_price(self):
         field = ProductUnit._meta.get_field("selling_price")

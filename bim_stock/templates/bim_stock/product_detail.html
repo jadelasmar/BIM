@@ -1,0 +1,61 @@
+{% extends "bim_stock/base.html" %}
+
+{% block title %}{{ product }} | BIM Stock{% endblock %}
+
+{% block content %}
+<h1>{{ product }}</h1>
+<section class="detail-grid" aria-label="Product details">
+    <article class="detail-item">
+        <p class="detail-label">SKU</p>
+        <p class="detail-value">{{ product.sku }}</p>
+    </article>
+    <article class="detail-item">
+        <p class="detail-label">Type</p>
+        <p class="detail-value">{{ product.category.type }}</p>
+    </article>
+    <article class="detail-item">
+        <p class="detail-label">Category</p>
+        <p class="detail-value">{{ product.category.name }}</p>
+    </article>
+    <article class="detail-item">
+        <p class="detail-label">Brand</p>
+        <p class="detail-value">{{ product.model.brand }}</p>
+    </article>
+    <article class="detail-item">
+        <p class="detail-label">Model</p>
+        <p class="detail-value">{{ product.model.modelname }}</p>
+    </article>
+    <article class="detail-item">
+        <p class="detail-label">Available Units</p>
+        <p class="detail-value">{{ available_unit_count }}</p>
+    </article>
+</section>
+
+<h2>Available Units</h2>
+<section class="panel" aria-label="Available units">
+    {% if available_units %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Serial Number</th>
+                    <th>Supplier</th>
+                    <th>Cost</th>
+                    <th>Purchase Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for unit in available_units %}
+                    <tr>
+                        <td>{{ unit.serial_number }}</td>
+                        <td>{{ unit.supplier|default:"-" }}</td>
+                        <td>{{ unit.cost }}</td>
+                        <td>{{ unit.purchase_date|default:"-" }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="empty">No available units for this product.</p>
+    {% endif %}
+</section>
+{% endblock %}

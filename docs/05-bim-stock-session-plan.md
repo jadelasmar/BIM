@@ -150,16 +150,16 @@ Use Django templates.
 ## Session 8: Custom Stock Pages
 
 Status:
-- pending
+- done
 
 Task:
 Create custom stock pages.
 
 Focus:
-- pending: product list
-- pending: stock list
-- pending: product detail
-- pending: available units
+- done: product list
+- done: stock list
+- done: product detail
+- done: available units
 
 Do not replace Django admin.
 
