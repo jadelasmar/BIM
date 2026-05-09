@@ -7,6 +7,7 @@ Before making changes, read these files in order:
 3. docs/02-roadmap.md
 4. docs/03-codex-working-rules.md
 5. docs/04-session-prompts.md
+6. docs/05-bim-stock-session-plan.md
 
 Rules:
 - Keep replies short

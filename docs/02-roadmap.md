@@ -17,6 +17,9 @@
 
 Stabilize BIM Stock core.
 
+Detailed task sessions are listed in:
+- docs/05-bim-stock-session-plan.md
+
 ## Next Steps
 
 1. Improve Product admin
