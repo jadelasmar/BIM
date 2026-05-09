@@ -133,17 +133,17 @@ Keep it simple in Django admin first.
 ## Session 7: Stock Dashboard
 
 Status:
-- pending
+- done
 
 Task:
 Create simple stock dashboard.
 
 Focus:
-- pending: total products
-- pending: available units
-- pending: sold units
-- pending: damaged units
-- pending: low stock products later
+- done: total products
+- done: available units
+- done: sold units
+- done: damaged units
+- done: low stock products kept for later because minimum stock is not tracked yet
 
 Use Django templates.
 

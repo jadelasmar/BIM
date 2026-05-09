@@ -241,6 +241,62 @@ class ProductUnitSellingWorkflowTests(TestCase):
         self.assertEqual(self.unit.sold_date, timezone.localdate())
 
 
+class StockDashboardTests(TestCase):
+    def setUp(self):
+        product_type = Type.objects.create(name="Printer")
+        category = Category.objects.create(type=product_type, name="Laser")
+        brand = Brand.objects.create(brandname="Canon")
+        model = ProductModel.objects.create(brand=brand, modelname="L100")
+        self.product = Product.objects.create(
+            descript="Canon laser printer",
+            printed="Canon L100",
+            category=category,
+            model=model,
+        )
+        Product.objects.create(
+            descript="Inactive printer",
+            printed="Inactive L100",
+            category=category,
+            model=ProductModel.objects.create(brand=brand, modelname="L200"),
+            isactive=False,
+        )
+
+    def test_stock_dashboard_shows_current_stock_counts(self):
+        ProductUnit.objects.create(
+            product=self.product,
+            serial_number="AVAILABLE-1",
+            status=ProductUnit.STATUS_AVAILABLE,
+            isactive=True,
+        )
+        ProductUnit.objects.create(
+            product=self.product,
+            serial_number="AVAILABLE-INACTIVE",
+            status=ProductUnit.STATUS_AVAILABLE,
+            isactive=False,
+        )
+        ProductUnit.objects.create(
+            product=self.product,
+            serial_number="SOLD-1",
+            status=ProductUnit.STATUS_SOLD,
+            isactive=True,
+        )
+        ProductUnit.objects.create(
+            product=self.product,
+            serial_number="DAMAGED-1",
+            status=ProductUnit.STATUS_DAMAGED,
+            isactive=True,
+        )
+
+        response = self.client.get("/stock/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "bim_stock/dashboard.html")
+        self.assertEqual(response.context["total_products"], 1)
+        self.assertEqual(response.context["available_units"], 1)
+        self.assertEqual(response.context["sold_units"], 1)
+        self.assertEqual(response.context["damaged_units"], 1)
+
+
 class ProductUnitModelTests(SimpleTestCase):
     def test_product_unit_tracks_client_selling_price(self):
         field = ProductUnit._meta.get_field("selling_price")

@@ -18,6 +18,11 @@ Main app:
 - ProductUnit
 - Supplier
 
+## Current Pages
+
+- `/admin/` Django admin
+- `/stock/` BIM Stock dashboard
+
 Core product models:
 - Product
 - ProductUnit
@@ -86,3 +91,13 @@ Supplier is connected to ProductUnit so each physical stock item can keep its ow
 Supplier cost and client selling price are tracked on ProductUnit.
 
 This keeps purchase cost and sale price tied to each physical stock item.
+
+## Dashboard Logic
+
+The BIM Stock dashboard shows:
+- total active products
+- active available units
+- active sold units
+- active damaged units
+
+Low stock reporting is planned later after minimum stock quantity is added.
