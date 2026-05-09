@@ -35,129 +35,161 @@ Before BIM Stock is used by more people:
 
 ## Session 1: Product Admin Cleanup
 
+Status:
+- done
+
 Task:
 Improve Product admin only.
 
 Focus:
-- better list display
-- search by description, printed name, SKU, barcode
-- filter by category, brand, active state
-- readonly SKU and created date
-- clean ordering
+- done: better list display
+- done: search by description, printed name, SKU, barcode
+- done: filter by category, brand, active state
+- done: readonly SKU and created date
+- done: clean ordering
+- done: optimize related category type and brand lookups in Product admin
 
 Do not change database models unless needed.
 
 ## Session 2: ProductUnit Admin Cleanup
 
+Status:
+- done
+
 Task:
 Improve ProductUnit admin only.
 
 Focus:
-- list display for product, serial number, status, supplier, cost, purchase date, sold date
-- search by serial number, product name, SKU
-- filters for status, supplier, active state, dates
-- readonly created date
+- done: list display for product, serial number, status, supplier, cost, purchase date, sold date
+- done: search by serial number, product name, SKU
+- done: filters for status, supplier, active state, dates
+- done: readonly created date
+- done: optimize related product and supplier lookups in ProductUnit admin
 
 Do not change Product model.
 
 ## Session 3: Stock Count Display
 
+Status:
+- pending
+
 Task:
 Add stock count display.
 
 Focus:
-- available quantity per product
-- count ProductUnit where status is available and isactive is True
-- show count in Product admin list
+- pending: available quantity per product
+- pending: count ProductUnit where status is available and isactive is True
+- pending: show count in Product admin list
 
 Do not create custom frontend yet.
 
 ## Session 4: Product Pricing Fields
 
+Status:
+- pending
+
 Task:
 Add client price tracking.
 
 Focus:
-- add selling price to Product or ProductUnit after checking best place
-- keep supplier cost on ProductUnit
-- run migrations
-- update admin
+- pending: add selling price to Product or ProductUnit after checking best place
+- pending: keep supplier cost on ProductUnit
+- pending: run migrations
+- pending: update admin
 
 ## Session 5: Purchase Workflow
+
+Status:
+- pending
 
 Task:
 Improve supplier purchase workflow.
 
 Focus:
-- easy ProductUnit creation when buying stock
-- supplier
-- cost
-- purchase date
-- initial status available
+- pending: easy ProductUnit creation when buying stock
+- pending: supplier
+- pending: cost
+- pending: purchase date
+- pending: initial status available
 
 Keep it simple in Django admin first.
 
 ## Session 6: Selling Workflow
 
+Status:
+- pending
+
 Task:
 Add selling workflow.
 
 Focus:
-- mark ProductUnit as sold
-- sold date
-- client price if already added
-- prevent sold units from counting as available
+- pending: mark ProductUnit as sold
+- pending: sold date
+- pending: client price if already added
+- pending: prevent sold units from counting as available
 
 Keep it simple in Django admin first.
 
 ## Session 7: Stock Dashboard
 
+Status:
+- pending
+
 Task:
 Create simple stock dashboard.
 
 Focus:
-- total products
-- available units
-- sold units
-- damaged units
-- low stock products later
+- pending: total products
+- pending: available units
+- pending: sold units
+- pending: damaged units
+- pending: low stock products later
 
 Use Django templates.
 
 ## Session 8: Custom Stock Pages
 
+Status:
+- pending
+
 Task:
 Create custom stock pages.
 
 Focus:
-- product list
-- stock list
-- product detail
-- available units
+- pending: product list
+- pending: stock list
+- pending: product detail
+- pending: available units
 
 Do not replace Django admin.
 
 ## Session 9: Barcode Support
 
+Status:
+- pending
+
 Task:
 Plan and implement barcode support.
 
 Focus:
-- product barcode
-- future unit barcode
-- barcode search
-- avoid changing SKU logic unless needed
+- pending: product barcode
+- pending: future unit barcode
+- pending: barcode search
+- pending: avoid changing SKU logic unless needed
 
 ## Session 10: Stock UI Polish
+
+Status:
+- pending
 
 Task:
 Polish BIM Stock UI.
 
 Focus:
-- improve dashboard layout
-- improve product list layout
-- improve stock list layout
-- add clear navigation
-- keep pages simple and usable
+- pending: improve dashboard layout
+- pending: improve product list layout
+- pending: improve stock list layout
+- pending: add clear navigation
+- pending: keep pages simple and usable
 
 Do not work on other apps yet.

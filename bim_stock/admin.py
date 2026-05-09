@@ -18,6 +18,7 @@ class ProductAdmin(admin.ModelAdmin):
     )
     search_fields = ("descript", "printed", "sku", "barcode")
     list_filter = ("category", "model__brand", "isactive")
+    list_select_related = ("category__type", "model__brand")
     readonly_fields = ("sku", "crdate")
     ordering = ("descript", "printed", "sku")
 
@@ -62,5 +63,11 @@ class ProductUnitAdmin(admin.ModelAdmin):
         "isactive",
     )
     list_filter = ("status", "supplier", "isactive", "purchase_date", "sold_date")
-    search_fields = ("serial_number", "product__descript", "product__sku")
+    search_fields = (
+        "serial_number",
+        "product__descript",
+        "product__printed",
+        "product__sku",
+    )
+    list_select_related = ("product", "supplier")
     readonly_fields = ("crdate",)

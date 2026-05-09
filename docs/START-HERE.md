@@ -22,6 +22,10 @@ Rules:
 - For security tasks, use Codex Security if available
 - Use Superpowers if available when it helps the coding workflow
 - Use GitHub if available for repo, issue, PR, or version-control tasks
+- Work only on the requested session unless told otherwise
+- After each completed item, update its status in `docs/05-bim-stock-session-plan.md`
+- If you discover a needed item for the current session, add it under that same session
+- Keep replies short
 
 Session prompt:
 

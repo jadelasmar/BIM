@@ -86,3 +86,12 @@ When code changes affect models, workflows, app structure, or roadmap:
 - keep `docs/01-current-structure.md` matching the actual code
 - keep `docs/02-roadmap.md` matching the current plan
 - do not update docs for tiny internal code cleanup unless behavior or structure changes
+
+## Session Progress Rule
+
+During a session:
+- keep working on the same session/model unless requested otherwise
+- after each completed task inside the session, update the related status in `docs/05-bim-stock-session-plan.md`
+- mark items as `pending`, `in progress`, `done`, or `blocked`
+- add the next needed item under the same session when discovered
+- do not jump to the next session unless the user asks or the current session is complete

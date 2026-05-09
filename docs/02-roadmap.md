@@ -12,6 +12,8 @@
 - Added auto SKU generation
 - Added Supplier
 - Added ProductUnit
+- Improved Product admin
+- Improved ProductUnit admin
 
 ## Current Focus
 
@@ -22,16 +24,14 @@ Detailed task sessions are listed in:
 
 ## Next Steps
 
-1. Improve Product admin
-2. Improve ProductUnit admin
-3. Add stock count display
-4. Add client price tracking
-5. Add supplier purchase workflow
-6. Add selling workflow
-7. Add simple dashboard
-8. Add custom UI pages
-9. Add barcode support
-10. Polish BIM Stock UI
+1. Add stock count display
+2. Add client price tracking
+3. Add supplier purchase workflow
+4. Add selling workflow
+5. Add simple dashboard
+6. Add custom UI pages
+7. Add barcode support
+8. Polish BIM Stock UI
 
 ## Later
 
