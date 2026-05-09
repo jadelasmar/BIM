@@ -108,6 +108,33 @@
             overflow-x: auto;
         }
 
+        .search-form {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+            max-width: 520px;
+        }
+
+        .search-form input {
+            flex: 1;
+            min-width: 0;
+            padding: 10px 12px;
+            border: 1px solid #bcccdc;
+            border-radius: 6px;
+            font: inherit;
+        }
+
+        .search-form button {
+            padding: 10px 14px;
+            border: 1px solid #005ea8;
+            border-radius: 6px;
+            color: #ffffff;
+            background: #005ea8;
+            font: inherit;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
@@ -175,6 +202,10 @@
 
             h1 {
                 font-size: 28px;
+            }
+
+            .search-form {
+                flex-direction: column;
             }
         }
     </style>

@@ -114,6 +114,7 @@ class ProductUnitAdmin(admin.ModelAdmin):
         "product__descript",
         "product__printed",
         "product__sku",
+        "product__barcode",
     )
     list_select_related = ("product", "supplier")
     readonly_fields = ("crdate",)

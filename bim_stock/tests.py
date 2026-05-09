@@ -132,6 +132,7 @@ class ProductUnitAdminTests(SimpleTestCase):
                 "product__descript",
                 "product__printed",
                 "product__sku",
+                "product__barcode",
             ),
         )
         self.assertEqual(
@@ -252,6 +253,7 @@ class StockDashboardTests(TestCase):
             printed="Canon L100",
             category=category,
             model=model,
+            barcode="BAR-CANON-L100",
         )
         Product.objects.create(
             descript="Inactive printer",
@@ -309,6 +311,7 @@ class CustomStockPageTests(TestCase):
             printed="Canon L100",
             category=category,
             model=model,
+            barcode="BAR-CANON-L100",
         )
         self.inactive_product = Product.objects.create(
             descript="Inactive printer",
@@ -345,6 +348,13 @@ class CustomStockPageTests(TestCase):
         self.assertEqual(products, [self.product])
         self.assertEqual(products[0].available_unit_count, 1)
 
+    def test_product_list_can_search_by_barcode(self):
+        response = self.client.get("/stock/products/", {"q": "CANON-L100"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(list(response.context["products"]), [self.product])
+        self.assertEqual(response.context["query"], "CANON-L100")
+
     def test_product_detail_shows_available_units_only(self):
         response = self.client.get(f"/stock/products/{self.product.pk}/")
 
@@ -352,6 +362,7 @@ class CustomStockPageTests(TestCase):
         self.assertTemplateUsed(response, "bim_stock/product_detail.html")
         self.assertEqual(response.context["product"], self.product)
         self.assertEqual(response.context["available_unit_count"], 1)
+        self.assertContains(response, "BAR-CANON-L100")
         self.assertEqual(
             list(response.context["available_units"]),
             [self.available_unit],
@@ -371,6 +382,16 @@ class CustomStockPageTests(TestCase):
             list(response.context["units"]),
             [self.available_unit, self.sold_unit],
         )
+
+    def test_stock_list_can_search_by_product_barcode(self):
+        response = self.client.get("/stock/units/", {"q": "BAR-CANON-L100"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            list(response.context["units"]),
+            [self.available_unit, self.sold_unit],
+        )
+        self.assertEqual(response.context["query"], "BAR-CANON-L100")
 
 
 class ProductUnitModelTests(SimpleTestCase):

@@ -10,6 +10,10 @@
         <p class="detail-value">{{ product.sku }}</p>
     </article>
     <article class="detail-item">
+        <p class="detail-label">Barcode</p>
+        <p class="detail-value">{{ product.barcode|default:"-" }}</p>
+    </article>
+    <article class="detail-item">
         <p class="detail-label">Type</p>
         <p class="detail-value">{{ product.category.type }}</p>
     </article>

@@ -166,16 +166,16 @@ Do not replace Django admin.
 ## Session 9: Barcode Support
 
 Status:
-- pending
+- done
 
 Task:
 Plan and implement barcode support.
 
 Focus:
-- pending: product barcode
-- pending: future unit barcode
-- pending: barcode search
-- pending: avoid changing SKU logic unless needed
+- done: product barcode
+- done: future unit barcode planned as a later ProductUnit model change
+- done: barcode search
+- done: avoid changing SKU logic unless needed
 
 ## Session 10: Stock UI Polish
 

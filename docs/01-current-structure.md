@@ -43,7 +43,7 @@ Product fields:
 - category
 - model
 - sku
-- barcode
+- barcode, used for product-level barcode lookup
 - image
 - crdate
 - isactive
@@ -113,3 +113,13 @@ Custom stock pages show active records first:
 - stock unit list shows active ProductUnit records with status and pricing
 
 Django admin remains the place for creating and editing stock records.
+
+## Barcode Logic
+
+Product barcode is stored on Product and can be searched from:
+- Product admin
+- ProductUnit admin through the related product
+- custom product list
+- custom stock unit list
+
+ProductUnit does not have its own barcode yet. Unit-level barcode support is a future model change if serial number is not enough.

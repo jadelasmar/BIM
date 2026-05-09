@@ -19,6 +19,7 @@
 - Added simple selling workflow in ProductUnit admin
 - Added simple BIM Stock dashboard
 - Added custom BIM Stock product and stock unit pages
+- Added product barcode visibility and search
 
 ## Current Focus
 
@@ -29,8 +30,7 @@ Detailed task sessions are listed in:
 
 ## Next Steps
 
-1. Add barcode support
-2. Polish BIM Stock UI
+1. Polish BIM Stock UI
 
 ## Later
 

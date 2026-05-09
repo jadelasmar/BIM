@@ -4,12 +4,17 @@
 
 {% block content %}
 <h1>Stock Units</h1>
+<form class="search-form" method="get">
+    <input type="search" name="q" value="{{ query }}" placeholder="Search serial, product, SKU, or barcode" aria-label="Search serial, product, SKU, or barcode">
+    <button type="submit">Search</button>
+</form>
 <section class="panel" aria-label="Stock units">
     {% if units %}
         <table>
             <thead>
                 <tr>
                     <th>Product</th>
+                    <th>Product Barcode</th>
                     <th>Serial Number</th>
                     <th>Status</th>
                     <th>Supplier</th>
@@ -27,6 +32,7 @@
                                 {{ unit.product }}
                             </a>
                         </td>
+                        <td>{{ unit.product.barcode|default:"-" }}</td>
                         <td>{{ unit.serial_number }}</td>
                         <td>{{ unit.get_status_display }}</td>
                         <td>{{ unit.supplier|default:"-" }}</td>
