@@ -8,13 +8,18 @@ class ProductAdmin(admin.ModelAdmin):
         "descript",
         "printed",
         "sku",
+        "barcode",
         "product_type",
         "category",
         "brand",
         "model",
         "isactive",
+        "crdate",
     )
+    search_fields = ("descript", "printed", "sku", "barcode")
+    list_filter = ("category", "model__brand", "isactive")
     readonly_fields = ("sku", "crdate")
+    ordering = ("descript", "printed", "sku")
 
     fields = (
         "descript",

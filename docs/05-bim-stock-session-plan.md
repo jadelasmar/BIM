@@ -23,6 +23,16 @@ Read docs/START-HERE.md first, then do this task:
 9. Barcode support
 10. Stock UI polish
 
+## Before Wider Use
+
+Before BIM Stock is used by more people:
+- add user roles and permissions
+- add audit history for stock changes
+- confirm backup plan
+- review security settings
+- test common workflows with real data
+- add exports for stock reports
+
 ## Session 1: Product Admin Cleanup
 
 Task:
