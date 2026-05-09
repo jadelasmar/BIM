@@ -42,6 +42,11 @@ Install requirements with:
 
 pip install -r requirements.txt
 
+Codex / VS Code setup:
+- Codex is not a Django dependency and should not be added to `requirements.txt`
+- On another PC, install VS Code, install/configure the Codex or OpenAI developer tool used by the account, then open this repository
+- Project setup still uses `pip install -r requirements.txt`
+
 ## Project Rules
 
 - Keep BIM modular
