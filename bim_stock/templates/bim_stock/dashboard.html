@@ -1,9 +1,11 @@
+{# Uses the shared BIM Stock layout from base.html. #}
 {% extends "bim_stock/base.html" %}
 
 {% block title %}BIM Stock Dashboard{% endblock %}
 
 {% block content %}
 <h1>BIM Stock Dashboard</h1>
+{# Values below come from dashboard() in bim_stock/views.py. #}
 <section class="dashboard-grid" aria-label="Stock summary">
     <article class="metric">
         <p class="metric-label">Total Products</p>

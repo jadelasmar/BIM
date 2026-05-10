@@ -3,8 +3,10 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    {# Child templates can replace the browser tab title. #}
     <title>{% block title %}BIM Stock{% endblock %}</title>
     <style>
+        /* Shared page styles for all custom BIM Stock pages. */
         body {
             margin: 0;
             font-family: Arial, sans-serif;
@@ -211,6 +213,7 @@
     </style>
 </head>
 <body>
+    {# Shared navigation for the stock dashboard, product pages, and admin. #}
     <header>
         <div class="topbar">
             <a class="brand" href="{% url 'bim_stock:dashboard' %}">BIM Stock</a>
@@ -223,6 +226,7 @@
         </div>
     </header>
     <main>
+        {# Child templates put their page-specific content here. #}
         {% block content %}{% endblock %}
     </main>
 </body>

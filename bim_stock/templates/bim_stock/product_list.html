@@ -1,14 +1,17 @@
+{# Product list page. Data comes from product_list() in bim_stock/views.py. #}
 {% extends "bim_stock/base.html" %}
 
 {% block title %}Products | BIM Stock{% endblock %}
 
 {% block content %}
 <h1>Products</h1>
+{# The q field sends search text in the URL, for example /stock/products/?q=zebra. #}
 <form class="search-form" method="get">
     <input type="search" name="q" value="{{ query }}" placeholder="Search products, SKU, or barcode" aria-label="Search products, SKU, or barcode">
     <button type="submit">Search</button>
 </form>
 <section class="panel" aria-label="Products">
+    {# products contains active Product records with available_unit_count added. #}
     {% if products %}
         <table>
             <thead>
@@ -27,6 +30,7 @@
                 {% for product in products %}
                     <tr>
                         <td>
+                            {# product.pk is the product database ID used by the detail page URL. #}
                             <a href="{% url 'bim_stock:product_detail' product.pk %}">
                                 {{ product.printed|default:product.descript }}
                             </a>

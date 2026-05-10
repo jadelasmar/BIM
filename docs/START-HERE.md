@@ -1,5 +1,7 @@
 # Start Here
 
+This is the first file to read before any Codex work on the project.
+
 Before making changes, read these files in order:
 
 1. docs/00-project-overview.md

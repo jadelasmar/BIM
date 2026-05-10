@@ -1,5 +1,7 @@
 # Current Structure
 
+This file describes the current code structure and behavior that exists now.
+
 ## Django Project
 
 Project name:

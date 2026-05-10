@@ -1,5 +1,7 @@
 # Codex Session Prompts
 
+This file stores reusable prompts for focused project sessions.
+
 ## General Start Prompt
 
 You are working on a Django project called BIM.
@@ -62,7 +64,7 @@ Focus:
 - total products
 - available units
 - sold units
-- inactive products
+- damaged units
 
 Use Django templates.
 
@@ -79,13 +81,13 @@ Focus:
 ## UI Session
 
 Task:
-Create custom user-facing pages.
+Polish BIM Stock UI.
 
 Focus:
-- login
 - dashboard
 - product list
 - stock list
+- clear navigation
 
 Do not replace Django admin.
 

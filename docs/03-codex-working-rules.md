@@ -1,5 +1,7 @@
 # Codex Working Rules
 
+This file defines how Codex should work in this repository.
+
 Codex should focus on implementation, not long explanations.
 
 ## Response Style

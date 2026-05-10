@@ -1,13 +1,9 @@
 from django.db import models
 
 
-class Brand(models.Model):
-    brandname = models.CharField(max_length=100, unique=True)
-
-    def __str__(self):
-        return self.brandname
-
-
+# Type is the broad product group.
+# Create this first.
+# Example: Hardware.
 class Type(models.Model):  # renamed from ProductType
     name = models.CharField(max_length=100, unique=True)
 
@@ -15,6 +11,9 @@ class Type(models.Model):  # renamed from ProductType
         return self.name
 
 
+# Category belongs to a Type and narrows the product group.
+# Create this after Type.
+# Example: Type = Hardware, Category = Barcode Printer.
 class Category(models.Model):
     type = models.ForeignKey(Type, on_delete=models.PROTECT, related_name="categories")
     name = models.CharField(max_length=100)
@@ -32,6 +31,19 @@ class Category(models.Model):
         return f"{self.type} - {self.name}"
 
 
+# Brand stores the manufacturer or brand name for product models.
+# Create this before ProductModel.
+# Example: Zebra, Canon, HP.
+class Brand(models.Model):
+    brandname = models.CharField(max_length=100, unique=True)
+
+    def __str__(self):
+        return self.brandname
+
+
+# ProductModel stores the model name under a specific Brand.
+# Create this after Brand.
+# Example: Brand = Zebra, ProductModel = GK888T.
 class ProductModel(models.Model):
     brand = models.ForeignKey(Brand, on_delete=models.PROTECT, related_name="models")
     modelname = models.CharField(max_length=100)
@@ -48,6 +60,9 @@ class ProductModel(models.Model):
         return f"{self.brand} - {self.modelname}"
 
 
+# Product is the reusable product definition.
+# Create this after Type, Category, Brand, and ProductModel exist.
+# It is not one physical stock item; physical stock is stored in ProductUnit.
 class Product(models.Model):
     descript = models.CharField(max_length=200)
     printed = models.CharField(max_length=200, blank=True, null=True)
@@ -72,6 +87,8 @@ class Product(models.Model):
         ]
 
     def save(self, *args, **kwargs):
+        # SKU is generated from Category, Brand, and Model.
+        # Example: Laser + Canon + L100 becomes LAS-CAN-L100.
         category_code = self.category.name[:3].upper() if self.category else "PRD"
         brand_code = self.model.brand.brandname[:3].upper() if self.model else "GEN"
         model_code = (
@@ -86,6 +103,7 @@ class Product(models.Model):
         return self.printed or self.descript
 
 
+# Supplier stores the company or person that stock units are bought from.
 class Supplier(models.Model):
     name = models.CharField(max_length=150, unique=True)
 
@@ -93,6 +111,8 @@ class Supplier(models.Model):
         return self.name
 
 
+# ProductUnit is one real physical stock item.
+# It tracks serial number, purchase info, selling info, and stock status.
 class ProductUnit(models.Model):
     STATUS_AVAILABLE = "available"
     STATUS_RESERVED = "reserved"

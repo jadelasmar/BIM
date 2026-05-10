@@ -1,14 +1,17 @@
+{# Stock unit list page. Data comes from stock_list() in bim_stock/views.py. #}
 {% extends "bim_stock/base.html" %}
 
 {% block title %}Stock Units | BIM Stock{% endblock %}
 
 {% block content %}
 <h1>Stock Units</h1>
+{# The q field sends search text in the URL, for example /stock/units/?q=SN123. #}
 <form class="search-form" method="get">
     <input type="search" name="q" value="{{ query }}" placeholder="Search serial, product, SKU, or barcode" aria-label="Search serial, product, SKU, or barcode">
     <button type="submit">Search</button>
 </form>
 <section class="panel" aria-label="Stock units">
+    {# units contains active ProductUnit records. #}
     {% if units %}
         <table>
             <thead>
@@ -28,12 +31,14 @@
                 {% for unit in units %}
                     <tr>
                         <td>
+                            {# Link each unit back to its product detail page. #}
                             <a href="{% url 'bim_stock:product_detail' unit.product.pk %}">
                                 {{ unit.product }}
                             </a>
                         </td>
                         <td>{{ unit.product.barcode|default:"-" }}</td>
                         <td>{{ unit.serial_number }}</td>
+                        {# get_status_display shows the readable label from STATUS_CHOICES. #}
                         <td>{{ unit.get_status_display }}</td>
                         <td>{{ unit.supplier|default:"-" }}</td>
                         <td>{{ unit.cost }}</td>

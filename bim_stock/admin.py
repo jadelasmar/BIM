@@ -5,18 +5,23 @@ from django.utils import timezone
 from .models import Product, Type, Category, Brand, ProductModel, Supplier, ProductUnit
 
 
-class ProductUnitPurchaseForm(forms.ModelForm):
-    class Meta:
-        model = ProductUnit
-        fields = "__all__"
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if not self.instance.pk:
-            self.fields["status"].initial = ProductUnit.STATUS_AVAILABLE
-            self.fields["purchase_date"].initial = timezone.localdate()
+# Type is created first in the product setup flow.
+admin.site.register(Type)
 
 
+# Category belongs to Type.
+admin.site.register(Category)
+
+
+# Brand is created before ProductModel.
+admin.site.register(Brand)
+
+
+# ProductModel belongs to Brand.
+admin.site.register(ProductModel)
+
+
+# Product admin manages the reusable product definition, not physical stock units.
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
     list_display = (
@@ -81,18 +86,27 @@ class ProductAdmin(admin.ModelAdmin):
         return obj.model.brand
 
 
-admin.site.register(Type)
-admin.site.register(Category)
-admin.site.register(Brand)
-admin.site.register(ProductModel)
-
-
+# Supplier is used when adding purchased ProductUnit records.
 @admin.register(Supplier)
 class SupplierAdmin(admin.ModelAdmin):
     search_fields = ("name",)
     ordering = ("name",)
 
 
+# ProductUnitPurchaseForm sets useful defaults when buying stock.
+class ProductUnitPurchaseForm(forms.ModelForm):
+    class Meta:
+        model = ProductUnit
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.instance.pk:
+            self.fields["status"].initial = ProductUnit.STATUS_AVAILABLE
+            self.fields["purchase_date"].initial = timezone.localdate()
+
+
+# ProductUnit admin manages each physical stock item.
 @admin.register(ProductUnit)
 class ProductUnitAdmin(admin.ModelAdmin):
     form = ProductUnitPurchaseForm

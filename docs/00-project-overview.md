@@ -1,5 +1,7 @@
 # BIM Project Overview
 
+This file explains the project goal and the business modules planned for BIM.
+
 BIM is a Django-based internal company platform.
 
 The project should stay modular. Each main business area should be built as its own Django app, but the apps can still be connected and share data.
@@ -12,6 +14,8 @@ Example:
 ## Current App
 
 - BIM Stock
+
+BIM Stock is the only implemented business app right now.
 
 BIM Stock is used to manage inventory, products, quantities, suppliers, cost, selling status, and client pricing later.
 

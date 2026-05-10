@@ -1,5 +1,7 @@
 # Roadmap
 
+This file tracks completed work, the current focus, and later planned features.
+
 ## Done
 
 - Created Django project

@@ -4,6 +4,8 @@ from django.shortcuts import get_object_or_404, render
 from .models import Product, ProductUnit
 
 
+# Dashboard page: /stock/
+# Shows high-level stock counts only.
 def dashboard(request):
     context = {
         "total_products": Product.objects.filter(isactive=True).count(),
@@ -24,6 +26,9 @@ def dashboard(request):
     return render(request, "bim_stock/dashboard.html", context)
 
 
+# Product list page: /stock/products/
+# q is the optional search text from the URL, for example:
+# /stock/products/?q=zebra
 def product_list(request):
     query = request.GET.get("q", "").strip()
     products = (
@@ -42,6 +47,7 @@ def product_list(request):
     )
 
     if query:
+        # Search active products by name, SKU, or product barcode.
         products = products.filter(
             Q(descript__icontains=query)
             | Q(printed__icontains=query)
@@ -59,6 +65,8 @@ def product_list(request):
     )
 
 
+# Product detail page: /stock/products/<id>/
+# Shows one active product and its active available units.
 def product_detail(request, pk):
     product = get_object_or_404(
         Product.objects.select_related("category__type", "model__brand"),
@@ -83,6 +91,9 @@ def product_detail(request, pk):
     return render(request, "bim_stock/product_detail.html", context)
 
 
+# Stock unit list page: /stock/units/
+# q is the optional search text from the URL, for example:
+# /stock/units/?q=SN123
 def stock_list(request):
     query = request.GET.get("q", "").strip()
     units = (
@@ -92,6 +103,7 @@ def stock_list(request):
     )
 
     if query:
+        # Search stock units by serial number or related product identifiers.
         units = units.filter(
             Q(serial_number__icontains=query)
             | Q(product__descript__icontains=query)

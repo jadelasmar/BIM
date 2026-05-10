@@ -1,5 +1,7 @@
 # BIM Stock Session Plan
 
+This file tracks the step-by-step BIM Stock implementation sessions.
+
 Use one session per task.
 
 Start every session with:

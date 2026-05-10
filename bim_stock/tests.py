@@ -7,6 +7,7 @@ from .admin import ProductAdmin, ProductUnitAdmin, ProductUnitPurchaseForm
 from .models import Brand, Category, Product, ProductModel, ProductUnit, Type
 
 
+# Tests for Product admin list/search/filter configuration.
 class ProductAdminTests(SimpleTestCase):
     def setUp(self):
         self.product_admin = ProductAdmin(Product, admin.site)
@@ -44,6 +45,7 @@ class ProductAdminTests(SimpleTestCase):
         )
 
 
+# Tests the available stock count shown in Product admin.
 class ProductAdminStockCountTests(TestCase):
     def setUp(self):
         self.product_admin = ProductAdmin(Product, admin.site)
@@ -106,6 +108,7 @@ class ProductAdminStockCountTests(TestCase):
         self.assertEqual(self.product_admin.available_quantity(self.product), 0)
 
 
+# Tests for ProductUnit admin list/search/filter/form layout configuration.
 class ProductUnitAdminTests(SimpleTestCase):
     def setUp(self):
         self.product_unit_admin = ProductUnitAdmin(ProductUnit, admin.site)
@@ -195,6 +198,7 @@ class ProductUnitAdminTests(SimpleTestCase):
         )
 
 
+# Tests purchase defaults used when adding new ProductUnit records.
 class ProductUnitPurchaseFormTests(SimpleTestCase):
     def test_new_product_unit_defaults_to_available_purchase_today(self):
         form = ProductUnitPurchaseForm()
@@ -206,6 +210,7 @@ class ProductUnitPurchaseFormTests(SimpleTestCase):
         self.assertEqual(form.fields["purchase_date"].initial, timezone.localdate())
 
 
+# Tests selling workflow behavior in ProductUnit admin.
 class ProductUnitSellingWorkflowTests(TestCase):
     def setUp(self):
         self.product_unit_admin = ProductUnitAdmin(ProductUnit, admin.site)
@@ -242,6 +247,7 @@ class ProductUnitSellingWorkflowTests(TestCase):
         self.assertEqual(self.unit.sold_date, timezone.localdate())
 
 
+# Tests the /stock/ dashboard page counts.
 class StockDashboardTests(TestCase):
     def setUp(self):
         product_type = Type.objects.create(name="Printer")
@@ -299,6 +305,7 @@ class StockDashboardTests(TestCase):
         self.assertEqual(response.context["damaged_units"], 1)
 
 
+# Tests custom stock pages outside Django admin.
 class CustomStockPageTests(TestCase):
     def setUp(self):
         product_type = Type.objects.create(name="Printer")
@@ -394,6 +401,7 @@ class CustomStockPageTests(TestCase):
         self.assertEqual(response.context["query"], "BAR-CANON-L100")
 
 
+# Tests ProductUnit model fields that support pricing.
 class ProductUnitModelTests(SimpleTestCase):
     def test_product_unit_tracks_client_selling_price(self):
         field = ProductUnit._meta.get_field("selling_price")
