@@ -182,16 +182,16 @@ Focus:
 ## Session 10: Stock UI Polish
 
 Status:
-- pending
+- done
 
 Task:
 Polish BIM Stock UI.
 
 Focus:
-- pending: improve dashboard layout
-- pending: improve product list layout
-- pending: improve stock list layout
-- pending: add clear navigation
-- pending: keep pages simple and usable
+- done: improve dashboard layout
+- done: improve product list layout
+- done: improve stock list layout
+- done: add clear navigation
+- done: keep pages simple and usable
 
 Do not work on other apps yet.

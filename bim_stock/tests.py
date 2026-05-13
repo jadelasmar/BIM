@@ -400,6 +400,18 @@ class CustomStockPageTests(TestCase):
         )
         self.assertEqual(response.context["query"], "BAR-CANON-L100")
 
+    def test_custom_stock_pages_show_staff_navigation_helpers(self):
+        dashboard_response = self.client.get("/stock/")
+        product_response = self.client.get("/stock/products/", {"q": "CANON"})
+        stock_response = self.client.get("/stock/units/", {"q": "CANON"})
+
+        self.assertContains(dashboard_response, "Browse Products")
+        self.assertContains(dashboard_response, "Browse Stock Units")
+        self.assertContains(product_response, "Showing 1 product")
+        self.assertContains(product_response, "Clear Search")
+        self.assertContains(stock_response, "Showing 2 stock units")
+        self.assertContains(stock_response, "Clear Search")
+
 
 # Tests ProductUnit model fields that support pricing.
 class ProductUnitModelTests(SimpleTestCase):

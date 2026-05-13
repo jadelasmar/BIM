@@ -4,12 +4,27 @@
 {% block title %}Stock Units | BIM Stock{% endblock %}
 
 {% block content %}
-<h1>Stock Units</h1>
+<div class="page-header">
+    <div>
+        <p class="eyebrow">Physical inventory</p>
+        <h1>Stock Units</h1>
+    </div>
+    <div class="page-actions">
+        <a class="button" href="/admin/bim_stock/productunit/add/">Add Stock Unit</a>
+        <a class="button button-secondary" href="{% url 'bim_stock:product_list' %}">Products</a>
+    </div>
+</div>
 {# The q field sends search text in the URL, for example /stock/units/?q=SN123. #}
 <form class="search-form" method="get">
     <input type="search" name="q" value="{{ query }}" placeholder="Search serial, product, SKU, or barcode" aria-label="Search serial, product, SKU, or barcode">
     <button type="submit">Search</button>
+    {% if query %}
+        <a class="button button-secondary" href="{% url 'bim_stock:stock_list' %}">Clear Search</a>
+    {% endif %}
 </form>
+<p class="result-summary">
+    Showing {{ units|length }} stock unit{{ units|length|pluralize }}{% if query %} matching "{{ query }}"{% endif %}.
+</p>
 <section class="panel" aria-label="Stock units">
     {# units contains active ProductUnit records. #}
     {% if units %}
@@ -33,16 +48,19 @@
                         <td>
                             {# Link each unit back to its product detail page. #}
                             <a href="{% url 'bim_stock:product_detail' unit.product.pk %}">
-                                {{ unit.product }}
+                                <span class="item-title">{{ unit.product }}</span>
+                                <span class="item-meta">{{ unit.product.sku }}</span>
                             </a>
                         </td>
                         <td>{{ unit.product.barcode|default:"-" }}</td>
                         <td>{{ unit.serial_number }}</td>
                         {# get_status_display shows the readable label from STATUS_CHOICES. #}
-                        <td>{{ unit.get_status_display }}</td>
+                        <td>
+                            <span class="status-badge status-{{ unit.status }}">{{ unit.get_status_display }}</span>
+                        </td>
                         <td>{{ unit.supplier|default:"-" }}</td>
-                        <td>{{ unit.cost }}</td>
-                        <td>{{ unit.selling_price }}</td>
+                        <td class="number-cell">{{ unit.cost }}</td>
+                        <td class="number-cell">{{ unit.selling_price }}</td>
                         <td>{{ unit.purchase_date|default:"-" }}</td>
                         <td>{{ unit.sold_date|default:"-" }}</td>
                     </tr>

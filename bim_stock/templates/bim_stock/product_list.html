@@ -4,12 +4,27 @@
 {% block title %}Products | BIM Stock{% endblock %}
 
 {% block content %}
-<h1>Products</h1>
+<div class="page-header">
+    <div>
+        <p class="eyebrow">Product catalog</p>
+        <h1>Products</h1>
+    </div>
+    <div class="page-actions">
+        <a class="button" href="/admin/bim_stock/product/add/">Add Product</a>
+        <a class="button button-secondary" href="{% url 'bim_stock:stock_list' %}">Stock Units</a>
+    </div>
+</div>
 {# The q field sends search text in the URL, for example /stock/products/?q=zebra. #}
 <form class="search-form" method="get">
     <input type="search" name="q" value="{{ query }}" placeholder="Search products, SKU, or barcode" aria-label="Search products, SKU, or barcode">
     <button type="submit">Search</button>
+    {% if query %}
+        <a class="button button-secondary" href="{% url 'bim_stock:product_list' %}">Clear Search</a>
+    {% endif %}
 </form>
+<p class="result-summary">
+    Showing {{ products|length }} product{{ products|length|pluralize }}{% if query %} matching "{{ query }}"{% endif %}.
+</p>
 <section class="panel" aria-label="Products">
     {# products contains active Product records with available_unit_count added. #}
     {% if products %}
@@ -32,7 +47,10 @@
                         <td>
                             {# product.pk is the product database ID used by the detail page URL. #}
                             <a href="{% url 'bim_stock:product_detail' product.pk %}">
-                                {{ product.printed|default:product.descript }}
+                                <span class="item-title">{{ product.printed|default:product.descript }}</span>
+                                {% if product.printed %}
+                                    <span class="item-meta">{{ product.descript }}</span>
+                                {% endif %}
                             </a>
                         </td>
                         <td>{{ product.sku }}</td>
@@ -41,7 +59,7 @@
                         <td>{{ product.category.name }}</td>
                         <td>{{ product.model.brand }}</td>
                         <td>{{ product.model.modelname }}</td>
-                        <td>{{ product.available_unit_count }}</td>
+                        <td class="number-cell">{{ product.available_unit_count }}</td>
                     </tr>
                 {% endfor %}
             </tbody>
