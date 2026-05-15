@@ -39,7 +39,7 @@ Before BIM Stock is used by more people:
 
 Work one module/session at a time:
 
-1. Login, roles, and protected module launcher
+1. Login, roles, and protected Command Center
 2. Stock & Inventory hardening for BIMPOS statuses and permissions
 3. Stock Movement audit trail
 4. Companies / Sites
@@ -54,7 +54,7 @@ Work one module/session at a time:
 
 Do not add accounting, invoicing, payment, or Tasklogger/ticketing features.
 
-## Session 11: Login, Roles, and Module Launcher
+## Session 11: Login, Roles, and Command Center
 
 Status:
 - done
@@ -67,7 +67,7 @@ Focus:
 - done: create or prepare groups: Admin, Stock Manager, IT Support, Viewer
 - done: protect operational pages
 - done: add secure logout
-- done: add module launcher after login
+- done: add BIM Nexus Command Center after login
 - done: show/hide modules based on permissions
 - done: keep Django admin usable
 

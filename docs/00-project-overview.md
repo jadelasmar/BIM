@@ -1,10 +1,10 @@
-# BIMPOS Project Overview
+# BIM Nexus Project Overview
 
-This file explains the project goal and the business modules planned for BIMPOS.
+This file explains the project goal and the business modules planned for BIM Nexus.
 
-BIMPOS is a Django-based internal IT stock and operations platform.
+BIM Nexus is a Django-based internal IT operations platform.
 
-BIMPOS is not an accounting ERP, invoicing system, payment system, company ERP replacement, or Tasklogger replacement.
+BIM Nexus is not an accounting ERP, invoicing system, payment system, company ERP replacement, or Tasklogger replacement.
 
 The project should stay modular. Each main business area should be built as its own Django app when it has its own workflow, but apps can still share data through clear relationships and APIs.
 
@@ -36,7 +36,7 @@ Main goals:
 
 ## Usage Goal
 
-BIMPOS is being built for internal company use first.
+BIM Nexus is being built for internal company use first.
 
 The main operational UI will move to React. Django remains the source of truth, and Django admin remains available for internal backend/admin management.
 
@@ -68,13 +68,13 @@ React will be used for the main user interface. Figma screens should be inspecte
 
 Initial React targets:
 - login page
-- protected module launcher/dashboard
+- protected Command Center/dashboard
 - stock and inventory screens
 - receiving and delivery screens
 - companies/sites, suppliers, assets, knowledge base, and reports screens
 
 Brand:
-- name: BIMPOS
+- name: BIM Nexus
 - colors: black, white, orange
 - style: professional internal dashboard
 - layout: desktop-first, responsive for tablet/mobile

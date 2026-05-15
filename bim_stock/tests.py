@@ -452,14 +452,14 @@ class CustomStockPageTests(TestCase):
         self.assertEqual(response.status_code, 403)
 
 
-# Tests BIMPOS auth, role preparation, and module launcher behavior.
+# Tests BIM Nexus auth, role preparation, and Command Center behavior.
 class BIMPOSAccessTests(TestCase):
-    def test_login_page_uses_bimpos_template(self):
+    def test_login_page_uses_bim_nexus_template(self):
         response = self.client.get("/accounts/login/")
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "registration/login.html")
-        self.assertContains(response, "BIMPOS Login")
+        self.assertContains(response, "BIM Nexus Login")
 
     def test_logout_requires_post(self):
         user = User.objects.create_user(username="operator", password="test-pass")
@@ -478,7 +478,7 @@ class BIMPOSAccessTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, "/accounts/login/?next=/")
 
-    def test_module_launcher_shows_stock_module_by_permission(self):
+    def test_command_center_shows_inventory_module_by_permission(self):
         user = User.objects.create_user(username="viewer", password="test-pass")
         user.user_permissions.add(Permission.objects.get(codename="view_product"))
         self.client.force_login(user)
@@ -487,16 +487,19 @@ class BIMPOSAccessTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "bim/module_launcher.html")
-        self.assertContains(response, "Stock &amp; Inventory")
+        self.assertContains(response, "BIM Nexus Command Center")
+        self.assertContains(response, "Inventory")
+        self.assertContains(response, 'href="/stock/"')
 
-    def test_module_launcher_hides_stock_module_without_permission(self):
+    def test_command_center_disables_inventory_without_permission(self):
         user = User.objects.create_user(username="viewer", password="test-pass")
         self.client.force_login(user)
 
         response = self.client.get("/")
 
         self.assertEqual(response.status_code, 200)
-        self.assertNotContains(response, "Stock & Inventory")
+        self.assertContains(response, "Inventory")
+        self.assertNotContains(response, 'href="/stock/"')
 
     def test_bimpos_groups_are_prepared(self):
         for group_name in ("Admin", "Stock Manager", "IT Support", "Viewer"):

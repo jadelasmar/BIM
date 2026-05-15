@@ -35,9 +35,9 @@ Not implemented yet:
 ## Current Pages
 
 - `/admin/` Django admin
-- `/accounts/login/` BIMPOS login using Django auth
+- `/accounts/login/` BIM Nexus login using Django auth
 - `/accounts/logout/` secure POST logout using Django auth
-- `/` protected BIMPOS module launcher
+- `/` protected BIM Nexus Command Center
 - `/stock/` BIM Stock dashboard
 - `/stock/products/` product list
 - `/stock/products/<id>/` product detail with available units
@@ -164,4 +164,4 @@ BIMPOS prepares these Django auth groups after migrations:
 - IT Support
 - Viewer
 
-The module launcher shows Stock & Inventory only to users with stock view permissions. Django admin remains available at `/admin/` for staff users.
+The Command Center is the first post-login screen. It shows stock-backed KPIs, quick actions, recent stock activity, and module shortcuts. Future modules are shown as pending until their apps and APIs exist. Django admin remains available at `/admin/` for staff users.

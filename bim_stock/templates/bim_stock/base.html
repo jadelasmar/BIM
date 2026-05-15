@@ -401,9 +401,9 @@
     {# Shared navigation for the stock dashboard, product pages, and admin. #}
     <header>
         <div class="topbar">
-            <a class="brand" href="{% url 'bim_stock:dashboard' %}">BIM Stock</a>
+            <a class="brand" href="{% url 'module_launcher' %}">BIM Nexus / Inventory</a>
             <nav aria-label="Stock navigation">
-                <a class="nav-link" href="{% url 'module_launcher' %}">Modules</a>
+                <a class="nav-link" href="{% url 'module_launcher' %}">Command Center</a>
                 <a class="nav-link{% if request.resolver_match.url_name == 'dashboard' %} is-active{% endif %}" href="{% url 'bim_stock:dashboard' %}">Dashboard</a>
                 <a class="nav-link{% if request.resolver_match.url_name == 'product_list' or request.resolver_match.url_name == 'product_detail' %} is-active{% endif %}" href="{% url 'bim_stock:product_list' %}">Products</a>
                 <a class="nav-link{% if request.resolver_match.url_name == 'stock_list' %} is-active{% endif %}" href="{% url 'bim_stock:stock_list' %}">Stock Units</a>

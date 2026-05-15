@@ -22,11 +22,11 @@ This file tracks completed work, the current focus, and later planned features.
 - Added simple BIM Stock dashboard
 - Added custom BIM Stock product and stock unit pages
 - Added product barcode visibility and search
-- Added Django-auth BIMPOS login, secure logout, protected stock pages, role groups, and module launcher
+- Added Django-auth BIM Nexus login, secure logout, protected stock pages, role groups, and Command Center
 
 ## Current Focus
 
-Move BIMPOS from stock-only Django templates toward a modular internal IT operations platform.
+Move BIM Nexus from stock-only Django templates toward a modular internal IT operations platform.
 
 Detailed task sessions are listed in:
 - docs/05-bim-stock-session-plan.md
@@ -41,7 +41,7 @@ Detailed task sessions are listed in:
 
 ## Module Order
 
-1. Login, roles, protected module launcher
+1. Login, roles, protected Command Center
 2. Stock & Inventory hardening
 3. Stock Movement audit trail
 4. Companies / Sites
