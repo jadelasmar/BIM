@@ -22,6 +22,7 @@ This file tracks completed work, the current focus, and later planned features.
 - Added simple BIM Stock dashboard
 - Added custom BIM Stock product and stock unit pages
 - Added product barcode visibility and search
+- Added Django-auth BIMPOS login, secure logout, protected stock pages, role groups, and module launcher
 
 ## Current Focus
 
@@ -32,12 +33,11 @@ Detailed task sessions are listed in:
 
 ## Next Steps
 
-1. Add login/protected access using Django auth
-2. Prepare groups/roles: Admin, Stock Manager, IT Support, Viewer
-3. Add a module launcher that shows modules by permission
-4. Plan and scaffold React without removing Django admin
-5. Add API endpoints only where React needs them
-6. Expand backend modules one session at a time
+1. Harden Stock & Inventory BIMPOS statuses and permissions
+2. Add stock movement audit trail
+3. Plan and scaffold React without removing Django admin
+4. Add API endpoints only where React needs them
+5. Expand backend modules one session at a time
 
 ## Module Order
 

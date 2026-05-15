@@ -1,12 +1,25 @@
+from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, render
 
 from .models import Product, ProductUnit
 
 
+def require_any_stock_view_permission(user):
+    if user.has_perm("bim_stock.view_product") or user.has_perm(
+        "bim_stock.view_productunit"
+    ):
+        return
+
+    raise PermissionDenied
+
+
 # Dashboard page: /stock/
 # Shows high-level stock counts only.
+@login_required
 def dashboard(request):
+    require_any_stock_view_permission(request.user)
     context = {
         "total_products": Product.objects.filter(isactive=True).count(),
         "available_units": ProductUnit.objects.filter(
@@ -29,7 +42,11 @@ def dashboard(request):
 # Product list page: /stock/products/
 # q is the optional search text from the URL, for example:
 # /stock/products/?q=zebra
+@login_required
 def product_list(request):
+    if not request.user.has_perm("bim_stock.view_product"):
+        raise PermissionDenied
+
     query = request.GET.get("q", "").strip()
     products = (
         Product.objects.filter(isactive=True)
@@ -67,7 +84,11 @@ def product_list(request):
 
 # Product detail page: /stock/products/<id>/
 # Shows one active product and its active available units.
+@login_required
 def product_detail(request, pk):
+    if not request.user.has_perm("bim_stock.view_product"):
+        raise PermissionDenied
+
     product = get_object_or_404(
         Product.objects.select_related("category__type", "model__brand"),
         pk=pk,
@@ -94,7 +115,11 @@ def product_detail(request, pk):
 # Stock unit list page: /stock/units/
 # q is the optional search text from the URL, for example:
 # /stock/units/?q=SN123
+@login_required
 def stock_list(request):
+    if not request.user.has_perm("bim_stock.view_productunit"):
+        raise PermissionDenied
+
     query = request.GET.get("q", "").strip()
     units = (
         ProductUnit.objects.filter(isactive=True)

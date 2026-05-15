@@ -23,8 +23,6 @@ There is no React frontend app yet.
 - Supplier
 
 Not implemented yet:
-- login UI beyond Django admin auth
-- module launcher
 - API layer
 - stock movement model
 - receiving/delivery app
@@ -37,6 +35,9 @@ Not implemented yet:
 ## Current Pages
 
 - `/admin/` Django admin
+- `/accounts/login/` BIMPOS login using Django auth
+- `/accounts/logout/` secure POST logout using Django auth
+- `/` protected BIMPOS module launcher
 - `/stock/` BIM Stock dashboard
 - `/stock/products/` product list
 - `/stock/products/<id>/` product detail with available units
@@ -155,4 +156,12 @@ Current settings use:
 - Asia/Beirut timezone
 - static files only through `STATIC_URL`
 
-Current custom stock pages are not login-protected yet. Permission-based module visibility is planned before wider use.
+Current custom stock pages require login and Django `bim_stock` view permissions.
+
+BIMPOS prepares these Django auth groups after migrations:
+- Admin
+- Stock Manager
+- IT Support
+- Viewer
+
+The module launcher shows Stock & Inventory only to users with stock view permissions. Django admin remains available at `/admin/` for staff users.

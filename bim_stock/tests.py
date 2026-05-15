@@ -487,7 +487,7 @@ class BIMPOSAccessTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "bim/module_launcher.html")
-        self.assertContains(response, "Stock & Inventory")
+        self.assertContains(response, "Stock &amp; Inventory")
 
     def test_module_launcher_hides_stock_module_without_permission(self):
         user = User.objects.create_user(username="viewer", password="test-pass")

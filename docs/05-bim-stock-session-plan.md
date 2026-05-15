@@ -57,19 +57,19 @@ Do not add accounting, invoicing, payment, or Tasklogger/ticketing features.
 ## Session 11: Login, Roles, and Module Launcher
 
 Status:
-- pending
+- done
 
 Task:
 Add proper BIMPOS login and protected access.
 
 Focus:
-- use Django auth as source of truth
-- create or prepare groups: Admin, Stock Manager, IT Support, Viewer
-- protect operational pages
-- add secure logout
-- add module launcher after login
-- show/hide modules based on permissions
-- keep Django admin usable
+- done: use Django auth as source of truth
+- done: create or prepare groups: Admin, Stock Manager, IT Support, Viewer
+- done: protect operational pages
+- done: add secure logout
+- done: add module launcher after login
+- done: show/hide modules based on permissions
+- done: keep Django admin usable
 
 Do not build custom insecure authentication.
 

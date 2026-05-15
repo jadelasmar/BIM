@@ -34,17 +34,23 @@
     </article>
 </section>
 <section class="quick-links" aria-label="Common stock actions">
-    <a class="quick-link" href="/admin/bim_stock/product/add/">
-        <strong>Add Product</strong>
-        <span>Create the reusable product definition in admin.</span>
-    </a>
-    <a class="quick-link" href="/admin/bim_stock/productunit/add/">
-        <strong>Add Stock Unit</strong>
-        <span>Record one purchased physical stock item.</span>
-    </a>
-    <a class="quick-link" href="/admin/">
-        <strong>Open Admin</strong>
-        <span>Manage products, suppliers, and stock records.</span>
-    </a>
+    {% if perms.bim_stock.add_product %}
+        <a class="quick-link" href="/admin/bim_stock/product/add/">
+            <strong>Add Product</strong>
+            <span>Create the reusable product definition in admin.</span>
+        </a>
+    {% endif %}
+    {% if perms.bim_stock.add_productunit %}
+        <a class="quick-link" href="/admin/bim_stock/productunit/add/">
+            <strong>Add Stock Unit</strong>
+            <span>Record one purchased physical stock item.</span>
+        </a>
+    {% endif %}
+    {% if request.user.is_staff %}
+        <a class="quick-link" href="/admin/">
+            <strong>Open Admin</strong>
+            <span>Manage products, suppliers, and stock records.</span>
+        </a>
+    {% endif %}
 </section>
 {% endblock %}

@@ -11,7 +11,9 @@
     </div>
     <div class="page-actions">
         <a class="button button-secondary" href="{% url 'bim_stock:product_list' %}">Back to Products</a>
-        <a class="button" href="/admin/bim_stock/product/{{ product.pk }}/change/">Edit in Admin</a>
+        {% if perms.bim_stock.change_product %}
+            <a class="button" href="/admin/bim_stock/product/{{ product.pk }}/change/">Edit in Admin</a>
+        {% endif %}
     </div>
 </div>
 {# product is one active Product record selected by its primary key in the URL. #}

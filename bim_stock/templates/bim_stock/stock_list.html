@@ -10,7 +10,9 @@
         <h1>Stock Units</h1>
     </div>
     <div class="page-actions">
-        <a class="button" href="/admin/bim_stock/productunit/add/">Add Stock Unit</a>
+        {% if perms.bim_stock.add_productunit %}
+            <a class="button" href="/admin/bim_stock/productunit/add/">Add Stock Unit</a>
+        {% endif %}
         <a class="button button-secondary" href="{% url 'bim_stock:product_list' %}">Products</a>
     </div>
 </div>

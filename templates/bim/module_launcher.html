@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>BIMPOS Modules</title>
+    <style>
+        :root {
+            --orange: #f97316;
+            --black: #111827;
+            --border: #d9e2ec;
+            --muted: #52606d;
+            --page: #f5f7fa;
+            --surface: #ffffff;
+        }
+
+        body {
+            margin: 0;
+            color: var(--black);
+            background: var(--page);
+            font-family: Arial, sans-serif;
+        }
+
+        header {
+            border-bottom: 1px solid var(--border);
+            background: var(--surface);
+        }
+
+        .topbar,
+        main {
+            width: min(1120px, calc(100% - 32px));
+            margin: 0 auto;
+        }
+
+        .topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            min-height: 64px;
+        }
+
+        .brand {
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        main {
+            padding: 32px 0 48px;
+        }
+
+        h1 {
+            margin: 0 0 8px;
+            font-size: 32px;
+        }
+
+        .muted {
+            margin: 0 0 24px;
+            color: var(--muted);
+        }
+
+        .module-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 16px;
+        }
+
+        .module {
+            display: block;
+            min-height: 116px;
+            padding: 18px;
+            border: 1px solid var(--border);
+            border-top: 4px solid var(--orange);
+            border-radius: 8px;
+            color: var(--black);
+            background: var(--surface);
+            text-decoration: none;
+        }
+
+        .module:hover {
+            border-color: var(--orange);
+        }
+
+        .module strong {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 18px;
+        }
+
+        .module span {
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .logout {
+            display: inline;
+        }
+
+        .logout button {
+            border: 0;
+            color: var(--black);
+            background: transparent;
+            font: inherit;
+            font-weight: 700;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="topbar">
+            <div class="brand">BIMPOS</div>
+            <form class="logout" method="post" action="{% url 'logout' %}">
+                {% csrf_token %}
+                <button type="submit">Log out</button>
+            </form>
+        </div>
+    </header>
+    <main>
+        <h1>Modules</h1>
+        <p class="muted">Signed in as {{ request.user.get_username }}.</p>
+        {% if modules %}
+            <section class="module-grid" aria-label="Available modules">
+                {% for module in modules %}
+                    <a class="module" href="{% url module.url %}">
+                        <strong>{{ module.name }}</strong>
+                        <span>{{ module.description }}</span>
+                    </a>
+                {% endfor %}
+            </section>
+        {% else %}
+            <p class="muted">No modules are available for this account.</p>
+        {% endif %}
+    </main>
+</body>
+</html>

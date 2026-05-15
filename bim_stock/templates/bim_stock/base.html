@@ -72,10 +72,15 @@
             min-height: 36px;
             padding: 8px 10px;
             border-bottom: 3px solid transparent;
+            border-left: 0;
+            border-right: 0;
+            border-top: 0;
             color: #334e68;
+            background: transparent;
             font-size: 14px;
             font-weight: 700;
             line-height: 20px;
+            cursor: pointer;
         }
 
         .nav-link:hover,
@@ -83,6 +88,10 @@
             border-bottom-color: var(--blue);
             color: var(--blue);
             text-decoration: none;
+        }
+
+        .nav-logout {
+            margin: 0;
         }
 
         main {
@@ -394,10 +403,17 @@
         <div class="topbar">
             <a class="brand" href="{% url 'bim_stock:dashboard' %}">BIM Stock</a>
             <nav aria-label="Stock navigation">
+                <a class="nav-link" href="{% url 'module_launcher' %}">Modules</a>
                 <a class="nav-link{% if request.resolver_match.url_name == 'dashboard' %} is-active{% endif %}" href="{% url 'bim_stock:dashboard' %}">Dashboard</a>
                 <a class="nav-link{% if request.resolver_match.url_name == 'product_list' or request.resolver_match.url_name == 'product_detail' %} is-active{% endif %}" href="{% url 'bim_stock:product_list' %}">Products</a>
                 <a class="nav-link{% if request.resolver_match.url_name == 'stock_list' %} is-active{% endif %}" href="{% url 'bim_stock:stock_list' %}">Stock Units</a>
-                <a class="nav-link" href="/admin/">Admin</a>
+                {% if request.user.is_staff %}
+                    <a class="nav-link" href="/admin/">Admin</a>
+                {% endif %}
+                <form class="nav-logout" method="post" action="{% url 'logout' %}">
+                    {% csrf_token %}
+                    <button class="nav-link" type="submit">Log out</button>
+                </form>
             </nav>
         </div>
     </header>
