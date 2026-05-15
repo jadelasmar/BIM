@@ -1,6 +1,6 @@
-# BIM Stock Session Plan
+# BIMPOS Session Plan
 
-This file tracks the step-by-step BIM Stock implementation sessions.
+This file tracks step-by-step BIMPOS implementation sessions.
 
 Use one session per task.
 
@@ -12,7 +12,7 @@ Read docs/START-HERE.md first, then do this task:
 [session task]
 ```
 
-## Recommended Order
+## Completed BIM Stock Order
 
 1. Product admin cleanup
 2. ProductUnit admin cleanup
@@ -34,6 +34,216 @@ Before BIM Stock is used by more people:
 - review security settings
 - test common workflows with real data
 - add exports for stock reports
+
+## Next BIMPOS Order
+
+Work one module/session at a time:
+
+1. Login, roles, and protected module launcher
+2. Stock & Inventory hardening for BIMPOS statuses and permissions
+3. Stock Movement audit trail
+4. Companies / Sites
+5. Receiving / Delivery
+6. Suppliers improvements
+7. Company Assets
+8. Reusable Attachments
+9. Knowledge Base / IT Docs
+10. Reports structure
+11. React setup and API bridge
+12. Figma-to-React screen implementation
+
+Do not add accounting, invoicing, payment, or Tasklogger/ticketing features.
+
+## Session 11: Login, Roles, and Module Launcher
+
+Status:
+- pending
+
+Task:
+Add proper BIMPOS login and protected access.
+
+Focus:
+- use Django auth as source of truth
+- create or prepare groups: Admin, Stock Manager, IT Support, Viewer
+- protect operational pages
+- add secure logout
+- add module launcher after login
+- show/hide modules based on permissions
+- keep Django admin usable
+
+Do not build custom insecure authentication.
+
+## Session 12: Stock & Inventory Hardening
+
+Status:
+- pending
+
+Task:
+Align BIM Stock with BIMPOS stock requirements without duplicating models.
+
+Focus:
+- inspect existing Product and ProductUnit first
+- preserve SKU logic
+- review stock statuses before changing choices
+- add missing status values only if needed
+- keep admin readable
+- prepare API needs for React
+
+Avoid unrelated refactors.
+
+## Session 13: Stock Movement Audit Trail
+
+Status:
+- pending
+
+Task:
+Add stock movement history as an audit trail.
+
+Focus:
+- movement type
+- product
+- stock unit where applicable
+- quantity
+- user
+- date/time
+- notes/reason
+- related company/site where useful after those models exist
+
+No accounting logic.
+
+## Session 14: Companies / Sites
+
+Status:
+- pending
+
+Task:
+Add shared companies, sites/branches, contacts, addresses, notes, and active state.
+
+Focus:
+- reusable by delivery, receiving, stock movement, assets, and reports
+- clear admin lists/search/filters
+- avoid hardcoding one company only
+
+## Session 15: Receiving / Delivery
+
+Status:
+- pending
+
+Task:
+Add dedicated receiving and delivery modules.
+
+Focus:
+- receiving note number
+- delivery note number
+- supplier or company/site links
+- receiver/deliverer/contact
+- date
+- item lines
+- notes
+- linked stock/products
+- printable forms later
+- signed scan attachments later
+
+Do not merge into generic documents.
+Do not add invoices or payments.
+
+## Session 16: Company Assets
+
+Status:
+- pending
+
+Task:
+Add company-owned equipment tracking separate from stock inventory.
+
+Focus:
+- asset name/type
+- brand/model
+- serial number
+- asset tag/barcode
+- assigned employee/user
+- department
+- location
+- status
+- purchase/warranty dates if known
+- notes
+- attachments later
+
+Stock units remain inventory. Company assets are internal equipment in use.
+
+## Session 17: Attachments
+
+Status:
+- pending
+
+Task:
+Add reusable shared attachments.
+
+Focus:
+- file
+- title
+- notes
+- uploaded by
+- uploaded date
+- related record
+- admin inlines where useful
+
+## Session 18: Knowledge Base / IT Docs
+
+Status:
+- pending
+
+Task:
+Add internal IT documentation.
+
+Focus:
+- title
+- category
+- tags
+- content/body
+- attachments
+- active/inactive
+- created/updated audit fields
+
+This is documentation only, not ticketing.
+
+## Session 19: Reports
+
+Status:
+- pending
+
+Task:
+Prepare report structure.
+
+Focus:
+- current stock
+- available stock
+- damaged stock
+- delivery history
+- receiving history
+- stock movement history
+- supplier history
+- company assets
+- company/site history
+- structure for Excel/PDF exports later
+
+## Session 20: React Operational UI
+
+Status:
+- pending
+
+Task:
+Introduce React for the main BIMPOS operational UI.
+
+Focus:
+- inspect current Django pages first
+- keep Django admin
+- add protected routes/pages
+- use real APIs where data exists
+- build reusable components
+- use BIMPOS black/white/orange branding
+- desktop-first responsive design
+
+Implement Figma screens only after inspecting the provided designs.
 
 ## Session 1: Product Admin Cleanup
 

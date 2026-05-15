@@ -1,15 +1,18 @@
-# BIM Project Overview
+# BIMPOS Project Overview
 
-This file explains the project goal and the business modules planned for BIM.
+This file explains the project goal and the business modules planned for BIMPOS.
 
-BIM is a Django-based internal company platform.
+BIMPOS is a Django-based internal IT stock and operations platform.
 
-The project should stay modular. Each main business area should be built as its own Django app, but the apps can still be connected and share data.
+BIMPOS is not an accounting ERP, invoicing system, payment system, company ERP replacement, or Tasklogger replacement.
+
+The project should stay modular. Each main business area should be built as its own Django app when it has its own workflow, but apps can still share data through clear relationships and APIs.
 
 Example:
-- BIM Stock owns products and inventory
-- Receiving / Delivery can select products from BIM Stock
-- if a product does not exist yet, it should be created in BIM Stock first
+- BIM Stock owns products, inventory, SKU logic, and physical stock units
+- Receiving / Delivery can select stock/products from BIM Stock
+- Companies / Sites can be reused by deliveries, movements, assets, and reports
+- Attachments can be reused by delivery scans, receiving scans, warranties, manuals, and documentation
 
 ## Current App
 
@@ -17,15 +20,15 @@ Example:
 
 BIM Stock is the only implemented business app right now.
 
-BIM Stock is used to manage inventory, products, quantities, suppliers, cost, selling status, and client pricing later.
+BIM Stock is used to manage inventory, products, quantities, suppliers, supplier cost, selling price, serial numbers, and stock status.
 
 Main goals:
 - check stock
 - buy products from suppliers
-- sell products to clients
+- track issued/sold/delivered stock status without adding accounting logic
 - track product quantity
 - track supplier cost
-- track client price later
+- track client/selling price
 - track serial numbers where needed
 - keep stock status clear
 - track minimum quantity needed in stock
@@ -33,37 +36,53 @@ Main goals:
 
 ## Usage Goal
 
-BIM is being built for internal company use first.
+BIMPOS is being built for internal company use first.
 
-If BIM Stock works well, it may later be used by other users or companies.
+The main operational UI will move to React. Django remains the source of truth, and Django admin remains available for internal backend/admin management.
 
-Build choices should support that later without overbuilding now:
+Build choices should support controlled multi-user internal use without overbuilding:
 - keep data clean
 - keep workflows simple
 - use clear names
-- avoid hardcoding one company only
-- add user permissions before real multi-user use
+- use Django auth, groups, and permissions
+- show users only modules they can access
 - keep future reporting and exports in mind
+- preserve admin readability for non-technical staff
+- preserve SKU logic unless explicitly asked
 
-## Planned App
+## Planned Modules
 
-- Receiving / Delivery
+1. Stock & Inventory
+2. Stock Movement
+3. Receiving / Delivery
+4. Companies / Sites
+5. Suppliers
+6. Company Assets
+7. Attachments
+8. Knowledge Base / IT Docs
+9. Reports
 
-Receiving / Delivery will create simple printable documents from templates.
+## Frontend Direction
 
-Receiving / Delivery should use products already created in BIM Stock.
+React will be used for the main user interface. Figma screens should be inspected and mapped to Django models/APIs before implementation.
 
-The printable form should allow filling:
-- products
-- company
-- receiver
-- deliverer
-- date
-- notes
+Initial React targets:
+- login page
+- protected module launcher/dashboard
+- stock and inventory screens
+- receiving and delivery screens
+- companies/sites, suppliers, assets, knowledge base, and reports screens
 
-## Future Possible Apps
+Brand:
+- name: BIMPOS
+- colors: black, white, orange
+- style: professional internal dashboard
+- layout: desktop-first, responsive for tablet/mobile
 
-- BIM Support
-- BIM Tasks
-- BIM Reports
-- BIM Integrations
+## Explicit Exclusions
+
+Do not add:
+- accounting workflows
+- invoicing workflows
+- payment workflows
+- Tasklogger or ticketing workflows

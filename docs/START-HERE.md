@@ -14,6 +14,8 @@ Before making changes, read these files in order:
 Rules:
 - Keep replies short
 - Focus on implementation
+- BIMPOS is an internal IT stock and operations platform
+- Do not add accounting, invoicing, payment, or Tasklogger/ticketing features
 - Do not explain every change
 - Only show files changed, important decisions, commands to run, and blockers
 - Read the docs before editing code
@@ -37,10 +39,10 @@ Read docs/START-HERE.md first, then do this task:
 [task here]
 ```
 
-Default BIM Stock session prompt:
+Default BIMPOS session prompt:
 
 ```text
 Read docs/START-HERE.md first.
 Use the available tools/plugins when relevant.
-Continue with the next unfinished BIM Stock session from docs/05-bim-stock-session-plan.md.
+Continue with the next unfinished BIMPOS session from docs/05-bim-stock-session-plan.md.
 ```

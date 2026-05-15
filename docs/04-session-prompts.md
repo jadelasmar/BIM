@@ -4,7 +4,7 @@ This file stores reusable prompts for focused project sessions.
 
 ## General Start Prompt
 
-You are working on a Django project called BIM.
+You are working on a Django project called BIMPOS.
 
 Focus only on the requested task.
 Keep replies short.
@@ -12,6 +12,8 @@ Do not explain every change.
 Only summarize files changed, commands run, and blockers.
 
 Read docs/00-project-overview.md, docs/01-current-structure.md, docs/02-roadmap.md, and docs/03-codex-working-rules.md before making changes.
+
+Do not add accounting, invoicing, payment, or Tasklogger/ticketing features.
 
 ## Product Admin Session
 
@@ -107,3 +109,34 @@ Focus:
 
 Keep it simple first.
 Do not connect it to accounting or POS yet.
+
+## Login / Module Launcher Session
+
+Task:
+Add protected BIMPOS access using Django auth.
+
+Focus:
+- login page
+- secure logout
+- protected pages
+- groups: Admin, Stock Manager, IT Support, Viewer
+- module launcher after login
+- show/hide modules based on permissions
+
+Do not build custom insecure authentication.
+Do not remove Django admin.
+
+## React Setup Session
+
+Task:
+Prepare React as the main operational UI.
+
+Focus:
+- inspect existing Django templates first
+- choose a minimal frontend structure
+- keep Django as source of truth
+- use APIs only where React needs data
+- preserve Django admin
+- use BIMPOS black/white/orange branding
+
+Do not rewrite the project blindly.

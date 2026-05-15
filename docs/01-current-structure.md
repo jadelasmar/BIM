@@ -10,6 +10,8 @@ Project name:
 Main app:
 - bim_stock
 
+There is no React frontend app yet.
+
 ## Current Models
 
 - Brand
@@ -19,6 +21,18 @@ Main app:
 - Product
 - ProductUnit
 - Supplier
+
+Not implemented yet:
+- login UI beyond Django admin auth
+- module launcher
+- API layer
+- stock movement model
+- receiving/delivery app
+- companies/sites app
+- company assets app
+- reusable attachments model
+- knowledge base app
+- reports app
 
 ## Current Pages
 
@@ -85,6 +99,11 @@ Current statuses:
 - damaged
 - returned
 
+Planned status alignment for BIMPOS:
+- keep current values until a model change session expands them safely
+- future statuses should include delivered, transferred, and inactive if needed
+- preserve existing data and SKU logic during any status migration
+
 ## Supplier Logic
 
 Supplier represents the company or person products are bought from.
@@ -116,6 +135,8 @@ Custom stock pages show active records first:
 
 Django admin remains the place for creating and editing stock records.
 
+The current custom UI is Django templates, not React.
+
 ## Barcode Logic
 
 Product barcode is stored on Product and can be searched from:
@@ -125,3 +146,13 @@ Product barcode is stored on Product and can be searched from:
 - custom stock unit list
 
 ProductUnit does not have its own barcode yet. Unit-level barcode support is a future model change if serial number is not enough.
+
+## Settings and Permissions
+
+Current settings use:
+- SQLite database
+- Django auth/admin/session middleware
+- Asia/Beirut timezone
+- static files only through `STATIC_URL`
+
+Current custom stock pages are not login-protected yet. Permission-based module visibility is planned before wider use.

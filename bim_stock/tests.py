@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.contrib.auth.models import Group, Permission, User
 from django.db import models
 from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
@@ -250,6 +251,14 @@ class ProductUnitSellingWorkflowTests(TestCase):
 # Tests the /stock/ dashboard page counts.
 class StockDashboardTests(TestCase):
     def setUp(self):
+        self.user = User.objects.create_user(
+            username="stock-user",
+            password="test-pass",
+        )
+        self.user.user_permissions.add(
+            Permission.objects.get(codename="view_product"),
+            Permission.objects.get(codename="view_productunit"),
+        )
         product_type = Type.objects.create(name="Printer")
         category = Category.objects.create(type=product_type, name="Laser")
         brand = Brand.objects.create(brandname="Canon")
@@ -270,6 +279,7 @@ class StockDashboardTests(TestCase):
         )
 
     def test_stock_dashboard_shows_current_stock_counts(self):
+        self.client.force_login(self.user)
         ProductUnit.objects.create(
             product=self.product,
             serial_number="AVAILABLE-1",
@@ -304,10 +314,24 @@ class StockDashboardTests(TestCase):
         self.assertEqual(response.context["sold_units"], 1)
         self.assertEqual(response.context["damaged_units"], 1)
 
+    def test_stock_dashboard_requires_login(self):
+        response = self.client.get("/stock/")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/accounts/login/?next=/stock/")
+
 
 # Tests custom stock pages outside Django admin.
 class CustomStockPageTests(TestCase):
     def setUp(self):
+        self.user = User.objects.create_user(
+            username="stock-user",
+            password="test-pass",
+        )
+        self.user.user_permissions.add(
+            Permission.objects.get(codename="view_product"),
+            Permission.objects.get(codename="view_productunit"),
+        )
         product_type = Type.objects.create(name="Printer")
         category = Category.objects.create(type=product_type, name="Laser")
         brand = Brand.objects.create(brandname="Canon")
@@ -347,6 +371,7 @@ class CustomStockPageTests(TestCase):
         )
 
     def test_product_list_shows_active_products_with_available_counts(self):
+        self.client.force_login(self.user)
         response = self.client.get("/stock/products/")
 
         self.assertEqual(response.status_code, 200)
@@ -356,6 +381,7 @@ class CustomStockPageTests(TestCase):
         self.assertEqual(products[0].available_unit_count, 1)
 
     def test_product_list_can_search_by_barcode(self):
+        self.client.force_login(self.user)
         response = self.client.get("/stock/products/", {"q": "CANON-L100"})
 
         self.assertEqual(response.status_code, 200)
@@ -363,6 +389,7 @@ class CustomStockPageTests(TestCase):
         self.assertEqual(response.context["query"], "CANON-L100")
 
     def test_product_detail_shows_available_units_only(self):
+        self.client.force_login(self.user)
         response = self.client.get(f"/stock/products/{self.product.pk}/")
 
         self.assertEqual(response.status_code, 200)
@@ -376,11 +403,13 @@ class CustomStockPageTests(TestCase):
         )
 
     def test_product_detail_does_not_show_inactive_products(self):
+        self.client.force_login(self.user)
         response = self.client.get(f"/stock/products/{self.inactive_product.pk}/")
 
         self.assertEqual(response.status_code, 404)
 
     def test_stock_list_shows_active_units(self):
+        self.client.force_login(self.user)
         response = self.client.get("/stock/units/")
 
         self.assertEqual(response.status_code, 200)
@@ -391,6 +420,7 @@ class CustomStockPageTests(TestCase):
         )
 
     def test_stock_list_can_search_by_product_barcode(self):
+        self.client.force_login(self.user)
         response = self.client.get("/stock/units/", {"q": "BAR-CANON-L100"})
 
         self.assertEqual(response.status_code, 200)
@@ -401,6 +431,7 @@ class CustomStockPageTests(TestCase):
         self.assertEqual(response.context["query"], "BAR-CANON-L100")
 
     def test_custom_stock_pages_show_staff_navigation_helpers(self):
+        self.client.force_login(self.user)
         dashboard_response = self.client.get("/stock/")
         product_response = self.client.get("/stock/products/", {"q": "CANON"})
         stock_response = self.client.get("/stock/units/", {"q": "CANON"})
@@ -411,6 +442,65 @@ class CustomStockPageTests(TestCase):
         self.assertContains(product_response, "Clear Search")
         self.assertContains(stock_response, "Showing 2 stock units")
         self.assertContains(stock_response, "Clear Search")
+
+    def test_stock_pages_require_stock_permissions(self):
+        user = User.objects.create_user(username="viewer", password="test-pass")
+        self.client.force_login(user)
+
+        response = self.client.get("/stock/products/")
+
+        self.assertEqual(response.status_code, 403)
+
+
+# Tests BIMPOS auth, role preparation, and module launcher behavior.
+class BIMPOSAccessTests(TestCase):
+    def test_login_page_uses_bimpos_template(self):
+        response = self.client.get("/accounts/login/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "registration/login.html")
+        self.assertContains(response, "BIMPOS Login")
+
+    def test_logout_requires_post(self):
+        user = User.objects.create_user(username="operator", password="test-pass")
+        self.client.force_login(user)
+
+        get_response = self.client.get("/accounts/logout/")
+        post_response = self.client.post("/accounts/logout/")
+
+        self.assertEqual(get_response.status_code, 405)
+        self.assertEqual(post_response.status_code, 302)
+        self.assertEqual(post_response.url, "/accounts/login/")
+
+    def test_module_launcher_requires_login(self):
+        response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/accounts/login/?next=/")
+
+    def test_module_launcher_shows_stock_module_by_permission(self):
+        user = User.objects.create_user(username="viewer", password="test-pass")
+        user.user_permissions.add(Permission.objects.get(codename="view_product"))
+        self.client.force_login(user)
+
+        response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "bim/module_launcher.html")
+        self.assertContains(response, "Stock & Inventory")
+
+    def test_module_launcher_hides_stock_module_without_permission(self):
+        user = User.objects.create_user(username="viewer", password="test-pass")
+        self.client.force_login(user)
+
+        response = self.client.get("/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Stock & Inventory")
+
+    def test_bimpos_groups_are_prepared(self):
+        for group_name in ("Admin", "Stock Manager", "IT Support", "Viewer"):
+            self.assertTrue(Group.objects.filter(name=group_name).exists())
 
 
 # Tests ProductUnit model fields that support pricing.

@@ -58,6 +58,8 @@ Codex / VS Code setup:
 
 - Keep BIM modular
 - BIM Stock is only one module
+- BIMPOS is an internal IT stock and operations platform
+- Do not add accounting, invoicing, payment, or Tasklogger/ticketing features
 - Do not overbuild too early
 - Prefer small stable changes
 - One feature per session
@@ -69,9 +71,23 @@ Codex / VS Code setup:
 
 - Soft delete uses `isactive`
 - SKU is auto-generated
+- Preserve SKU logic unless explicitly asked
+- Django is the source of truth
+- Use Django auth, groups, and permissions for access control
+- Do not build custom insecure authentication
+- Do not remove Django admin
 - Preserve admin readability
 - Keep Django admin optimized for non-technical staff
 - Preserve SQL Anywhere compatibility considerations
+
+## React / UI Conventions
+
+- React is the main operational UI once introduced
+- Django admin remains for backend/admin management
+- Match BIMPOS branding: black, white, orange
+- Build desktop-first responsive screens
+- Inspect Figma designs before implementing Figma-provided UI
+- Avoid hardcoded sample data when real API data exists
 
 ## Optional Tools / Plugins
 
