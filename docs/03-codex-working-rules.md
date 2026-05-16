@@ -1,125 +1,103 @@
 # Codex Working Rules
 
-This file defines how Codex should work in this repository.
-
-Codex should focus on implementation, not long explanations.
+Codex should focus on implementation and keep replies short.
 
 ## Response Style
 
-Keep replies short, precise, and practical.
-
-Only include:
+Only summarize:
 - files changed
 - important decisions
-- commands to run
-- errors or blockers
+- commands run or commands to run
+- blockers
 
-Do not explain every line of code unless asked.
-Avoid long answers unless the user explicitly asks for detailed explanation.
+Do not explain every change unless asked.
 
-## Development Rules
+## Before Editing
 
-Before changing code:
-- inspect current files
-- understand the current structure and naming
-- follow existing project patterns
-- understand existing model names
-- avoid renaming unless requested
-- avoid large unrelated changes
-- avoid unrelated refactors
-- avoid changing models unless needed
-- apply requested changes directly
-- ask before destructive operations
-
-After changing models:
-- run makemigrations
-- run migrate
-- run python manage.py check
-
-## Important
-
-Do not use checked-in virtual environments.
-
-Use:
-- `.venv` if available
-- system Python only if `.venv` is unavailable or causing a blocker
-- create a fresh `.venv` when needed
-
-Install requirements with:
-
-pip install -r requirements.txt
-
-Codex / VS Code setup:
-- Codex is not a Django dependency and should not be added to `requirements.txt`
-- On another PC, install VS Code, install/configure the Codex or OpenAI developer tool used by the account, then open this repository
-- Project setup still uses `pip install -r requirements.txt`
+- Read relevant files first.
+- Understand current structure and naming.
+- Follow existing project patterns.
+- Avoid unrelated refactors.
+- Avoid model changes unless needed.
+- Ask before destructive actions.
+- Preserve user changes in the working tree.
 
 ## Project Rules
 
-- Keep BIM modular
-- BIM Stock is only one module
-- BIMPOS is an internal IT stock and operations platform
-- Do not add accounting, invoicing, payment, or Tasklogger/ticketing features
-- Do not overbuild too early
-- Prefer small stable changes
-- One feature per session
-- Preserve existing architecture unless explicitly requested
-- Avoid unnecessary migrations
-- Prefer explicit readable code over clever abstractions
+- Product name: BIM Nexus.
+- Active module: BIM Stock.
+- Keep BIM modular.
+- Work one session/task at a time.
+- Django is the source of truth.
+- Django admin must remain usable.
+- Use Django auth, groups, and permissions.
+- Do not build custom insecure authentication.
+- Do not remove Django admin.
+- Preserve SKU logic unless explicitly asked.
+- Preserve current naming unless there is a clear migration reason.
+- Avoid unnecessary migrations.
 
-## Django / BIM Conventions
+## Current Naming Conventions
 
-- Soft delete uses `isactive`
-- SKU is auto-generated
-- Preserve SKU logic unless explicitly asked
-- Django is the source of truth
-- Use Django auth, groups, and permissions for access control
-- Do not build custom insecure authentication
-- Do not remove Django admin
-- Preserve admin readability
-- Keep Django admin optimized for non-technical staff
-- Preserve SQL Anywhere compatibility considerations
+Current code uses:
+- `descript`
+- `printed`
+- `crdate`
+- `isactive`
+- `ProductUnit`
+- `ProductModel`
 
-## React / UI Conventions
+Do not rename these casually. Renames require a deliberate model/migration session.
 
-- React is the main operational UI once introduced
-- Django admin remains for backend/admin management
-- Match BIMPOS branding: black, white, orange
-- Build desktop-first responsive screens
-- Inspect Figma designs before implementing Figma-provided UI
-- Avoid hardcoded sample data when real API data exists
+## Scope Rules
 
-## Optional Tools / Plugins
+Do not add:
+- accounting workflows
+- invoicing workflows
+- payment workflows
+- ticketing or Tasklogger replacement workflows
 
-The following plugins may be available in Codex sessions:
-- GitHub
-- Superpowers
-- Codex Security
-- Figma
+Do not mark planned modules as completed until implementation exists.
 
-Use them only when relevant to the task.
+## Django Rules
 
-Suggested use:
-- GitHub for issues, PRs, repo review, and version-control workflows
-- Superpowers for coding workflow support when useful
-- Codex Security for security review
+Use `.venv` if available. Use global Python only if `.venv` is unavailable or blocked.
+
+After model changes:
+- run `python manage.py makemigrations`
+- run `python manage.py migrate`
+- run `python manage.py check`
+- update docs
+
+After template/view/admin changes:
+- run `python manage.py check`
+- run relevant tests when available
+
+## UI Rules
+
+- Current UI is Django templates and CSS.
+- No React app exists yet.
+- React should be introduced only in a dedicated setup session.
+- Figma UI should be inspected before implementation when a Figma URL or usable design asset is provided.
+- Match BIM Nexus branding: black, white, orange accent.
+- Build modern enterprise SaaS/admin screens.
+- Build compact, information-dense, desktop-first responsive screens.
+- Use a dark collapsible left sidebar, top navigation/header, and clear main content area for the main operational UI.
+- Prefer reusable components for cards, tables, forms, status badges, search/filter bars, page headers, quick actions, and module shortcuts.
+- Do not add mock data when real model data exists.
+
+## Documentation Rules
+
+When behavior, workflow, roadmap, or structure changes:
+- update the related file in `docs/`
+- keep `docs/01-current-structure.md` aligned with code
+- keep `docs/02-roadmap.md` realistic
+- keep `docs/current-focus.md` aligned with the active task
+
+## Tool Use
+
+Use available tools/plugins only when relevant:
+- GitHub for repo, issues, PRs, and version-control workflows
 - Figma for design inspection and UI implementation
-
-For UI/design sessions, check whether Figma is relevant before implementing the UI.
-
-## Documentation Rule
-
-When code changes affect models, workflows, app structure, or roadmap:
-- update the related docs in `docs/`
-- keep `docs/01-current-structure.md` matching the actual code
-- keep `docs/02-roadmap.md` matching the current plan
-- do not update docs for tiny internal code cleanup unless behavior or structure changes
-
-## Session Progress Rule
-
-During a session:
-- keep working on the same session/model unless requested otherwise
-- after each completed task inside the session, update the related status in `docs/05-bim-stock-session-plan.md`
-- mark items as `pending`, `in progress`, `done`, or `blocked`
-- add the next needed item under the same session when discovered
-- do not jump to the next session unless the user asks or the current session is complete
+- Codex Security for security review
+- Superpowers for coding workflow support when useful

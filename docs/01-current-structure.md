@@ -1,167 +1,164 @@
 # Current Structure
 
-This file describes the current code structure and behavior that exists now.
+This file reflects the current implementation in the repository.
 
-## Django Project
+## Project
 
-Project name:
-- bim
+- Django project: `bim`
+- Active Django app: `bim_stock`
+- Database: SQLite for current local development
+- Timezone: `Asia/Beirut`
+- Frontend: Django templates only; no React/Vite app exists yet
 
-Main app:
-- bim_stock
+## Installed Business Apps
 
-There is no React frontend app yet.
-
-## Current Models
-
-- Brand
-- Type
-- Category
-- ProductModel
-- Product
-- ProductUnit
-- Supplier
+- `bim_stock`
 
 Not implemented yet:
 - API layer
-- stock movement model
+- stock movement app/model
 - receiving/delivery app
 - companies/sites app
 - company assets app
-- reusable attachments model
+- reusable attachments
 - knowledge base app
 - reports app
 
-## Current Pages
+## URLs
 
 - `/admin/` Django admin
 - `/accounts/login/` BIM Nexus login using Django auth
-- `/accounts/logout/` secure POST logout using Django auth
+- `/accounts/logout/` Django auth logout, POST-only
 - `/` protected BIM Nexus Command Center
 - `/stock/` BIM Stock dashboard
 - `/stock/products/` product list
-- `/stock/products/<id>/` product detail with available units
+- `/stock/products/<id>/` product detail
 - `/stock/units/` stock unit list
 
-Core product models:
-- Product
-- ProductUnit
-- Brand
-- ProductModel
-- Category
+## Models
+
+Current `bim_stock` models:
+- `Type`
+- `Category`
+- `Brand`
+- `ProductModel`
+- `Product`
+- `Supplier`
+- `ProductUnit`
 
 ## Product Logic
 
-Product represents the item definition.
+`Product` is the reusable product definition, not one physical stock item.
 
-Product fields:
-- descript
-- printed
-- category
-- model
-- sku
-- barcode, used for product-level barcode lookup
-- image
-- crdate
-- isactive
+Fields:
+- `descript`
+- `printed`
+- `category`
+- `model`
+- `sku`
+- `barcode`
+- `image`
+- `crdate`
+- `isactive`
 
-Product type comes through Category.
+Naming conventions currently in code:
+- `descript` stores the internal description
+- `printed` stores the display/printed name
+- `crdate` stores created date/time
+- `isactive` is the active flag
 
-Product brand comes through ProductModel.
+SKU is generated automatically from category, brand, and model:
 
-SKU is auto-generated using:
-
+```text
 CATEGORY-BRAND-MODEL
+```
 
 Example:
+
+```text
 Printer + Zebra + GK888T = PRI-ZEB-GK888T
+```
+
+Do not change SKU logic unless explicitly requested.
 
 ## ProductUnit Logic
 
-ProductUnit represents one physical stock item.
+`ProductUnit` is one physical stock item.
 
-Each ProductUnit belongs to one Product.
-
-ProductUnit is used for:
-- serial number
-- stock status
-- supplier
-- cost
-- selling price
-- purchase date
-- sold date
-- notes
-- active/inactive state
+Fields:
+- `product`
+- `serial_number`
+- `status`
+- `supplier`
+- `cost`
+- `selling_price`
+- `purchase_date`
+- `sold_date`
+- `notes`
+- `crdate`
+- `isactive`
 
 Current statuses:
-- available
-- reserved
-- sold
-- damaged
-- returned
+- `available`
+- `reserved`
+- `sold`
+- `damaged`
+- `returned`
 
-Planned status alignment for BIMPOS:
-- keep current values until a model change session expands them safely
-- future statuses should include delivered, transferred, and inactive if needed
-- preserve existing data and SKU logic during any status migration
+Status changes should be handled carefully because existing stock counts depend on these values.
 
-## Supplier Logic
+## Admin Structure
 
-Supplier represents the company or person products are bought from.
+Registered directly:
+- `Type`
+- `Category`
+- `Brand`
+- `ProductModel`
 
-Supplier is connected to ProductUnit so each physical stock item can keep its own cost and purchase source.
+Custom admin:
+- `ProductAdmin`
+- `SupplierAdmin`
+- `ProductUnitAdmin`
 
-## Pricing Logic
+`ProductAdmin` includes:
+- list display with product identity, SKU, barcode, available quantity, type, category, brand, model, active state, created date
+- search by description, printed name, SKU, barcode
+- filters by category, brand, active state
+- readonly `sku` and `crdate`
+- available quantity annotation
 
-Supplier cost and client selling price are tracked on ProductUnit.
+`SupplierAdmin` includes:
+- search by name
+- ordering by name
 
-This keeps purchase cost and sale price tied to each physical stock item.
+`ProductUnitAdmin` includes:
+- purchase defaults for new units
+- list display for product, serial number, status, supplier, cost, selling price, dates, active state
+- filters by status, supplier, active state, purchase date, sold date
+- search by serial number and related product identifiers
+- readonly `crdate`
+- autocomplete for product and supplier
+- action to mark selected units as sold
 
-## Dashboard Logic
+## Current Custom Pages
 
-The BIM Stock dashboard shows:
-- total active products
-- active available units
-- active sold units
-- active damaged units
+The custom stock pages show active records.
 
-Low stock reporting is planned later after minimum stock quantity is added.
+- Dashboard shows total active products, available units, sold units, and damaged units.
+- Product list shows active products and available unit count.
+- Product detail shows one active product and active available units.
+- Stock unit list shows active stock units with status and pricing.
 
-## Custom Stock Page Logic
+The Command Center uses BIM Stock data for currently available KPIs and activity. Pending modules are shown as pending and are not backed by models yet.
 
-Custom stock pages show active records first:
-- product list shows active products and available unit count
-- product detail shows product information and active available units
-- stock unit list shows active ProductUnit records with status and pricing
-
-Django admin remains the place for creating and editing stock records.
-
-The current custom UI is Django templates, not React.
-
-## Barcode Logic
-
-Product barcode is stored on Product and can be searched from:
-- Product admin
-- ProductUnit admin through the related product
-- custom product list
-- custom stock unit list
-
-ProductUnit does not have its own barcode yet. Unit-level barcode support is a future model change if serial number is not enough.
-
-## Settings and Permissions
-
-Current settings use:
-- SQLite database
-- Django auth/admin/session middleware
-- Asia/Beirut timezone
-- static files only through `STATIC_URL`
+## Permissions
 
 Current custom stock pages require login and Django `bim_stock` view permissions.
 
-BIMPOS prepares these Django auth groups after migrations:
+Prepared groups:
 - Admin
 - Stock Manager
 - IT Support
 - Viewer
 
-The Command Center is the first post-login screen. It shows stock-backed KPIs, quick actions, recent stock activity, and module shortcuts. Future modules are shown as pending until their apps and APIs exist. Django admin remains available at `/admin/` for staff users.
+Django admin remains available for staff users.

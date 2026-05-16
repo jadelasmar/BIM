@@ -1,23 +1,37 @@
 # Codex Session Prompts
 
-This file stores reusable prompts for focused project sessions.
+Reusable prompts for focused BIM Nexus work.
 
 ## General Start Prompt
 
-You are working on a Django project called BIMPOS.
+```text
+You are working on BIM Nexus, a Django-based internal IT operations platform.
+
+Read:
+- docs/00-project-overview.md
+- docs/01-current-structure.md
+- docs/02-roadmap.md
+- docs/03-codex-working-rules.md
+- docs/current-focus.md
 
 Focus only on the requested task.
 Keep replies short.
-Do not explain every change.
-Only summarize files changed, commands run, and blockers.
+Summarize only files changed, important decisions, commands run, and blockers.
+Do not add accounting, invoicing, payment, or ticketing/Tasklogger replacement features.
+```
 
-Read docs/00-project-overview.md, docs/01-current-structure.md, docs/02-roadmap.md, and docs/03-codex-working-rules.md before making changes.
+## Documentation Review Session
 
-Do not add accounting, invoicing, payment, or Tasklogger/ticketing features.
+```text
+Review docs against the current codebase.
+Inspect models, admin, views, URLs, templates, and roadmap.
+Update docs so they describe the real current implementation.
+Do not invent future features as completed.
+```
 
 ## Product Admin Session
 
-Task:
+```text
 Improve Product admin only.
 
 Focus:
@@ -28,11 +42,12 @@ Focus:
 - clean ordering
 
 Do not change database models unless necessary.
+```
 
-## ProductUnit Session
+## ProductUnit Admin Session
 
-Task:
-Improve ProductUnit model/admin.
+```text
+Improve ProductUnit admin only.
 
 Focus:
 - serial number
@@ -40,103 +55,106 @@ Focus:
 - supplier
 - status
 - cost
+- selling price
 - active flag
 - admin list/search/filter
 
-Run migrations if models are changed.
+Run migrations only if models change.
+```
 
-## Stock Count Session
+## BIM Stock UI Session
 
-Task:
-Add stock count display.
-
-Focus:
-- available quantity per product
-- count ProductUnit where status is Available and isactive is True
-- show count in admin list
-
-Do not create custom frontend yet.
-
-## Dashboard Session
-
-Task:
-Create simple dashboard page.
-
-Focus:
-- total products
-- available units
-- sold units
-- damaged units
-
-Use Django templates.
-
-## Barcode Session
-
-Task:
-Plan and implement barcode support.
-
-Focus:
-- product barcode
-- future unit barcode
-- avoid changing SKU logic unless needed
-
-## UI Session
-
-Task:
-Polish BIM Stock UI.
+```text
+Polish BIM Stock Django-template UI.
 
 Focus:
 - dashboard
 - product list
-- stock list
-- clear navigation
+- product detail
+- stock unit list
+- clear navigation back to Command Center
 
 Do not replace Django admin.
+Do not introduce React in this session.
+```
 
-## Receiving / Delivery Session
+## Login UI From Figma Session
 
-Task:
-Create Receiving / Delivery app.
-
-Focus:
-- printable document template
-- product lines
-- company
-- receiver
-- deliverer
-- date
-- notes
-
-Keep it simple first.
-Do not connect it to accounting or POS yet.
-
-## Login / Module Launcher Session
-
-Task:
-Add protected BIMPOS access using Django auth.
+```text
+Implement the BIM Nexus login UI from the provided Figma URL or screenshot.
 
 Focus:
-- login page
-- secure logout
-- protected pages
-- groups: Admin, Stock Manager, IT Support, Viewer
-- module launcher after login
-- show/hide modules based on permissions
+- templates/registration/login.html
+- black, white, orange accent branding
+- professional internal operations style
+- responsive layout
+- keep Django auth form behavior intact
 
-Do not build custom insecure authentication.
-Do not remove Django admin.
+Do not change authentication logic.
+Do not add React unless this is explicitly part of a React setup session.
+```
+
+## Command Center Session
+
+```text
+Improve the BIM Nexus Command Center.
+
+Focus:
+- operational KPI cards
+- quick actions
+- module shortcuts
+- recent activity
+- permission-aware links
+
+Use real BIM Stock data where available.
+Show pending modules as pending; do not invent models.
+```
+
+## Stock Hardening Session
+
+```text
+Harden BIM Stock behavior.
+
+Focus:
+- permissions
+- stock statuses
+- admin clarity
+- SKU preservation
+- existing data compatibility
+
+Do not rename fields or statuses casually.
+```
+
+## Stock Movement Session
+
+```text
+Add stock movement audit history.
+
+Focus:
+- movement type
+- Product and ProductUnit links where useful
+- quantity
+- user
+- date/time
+- notes/reason
+
+No accounting logic.
+```
 
 ## React Setup Session
 
-Task:
+```text
 Prepare React as the main operational UI.
 
 Focus:
-- inspect existing Django templates first
-- choose a minimal frontend structure
+- inspect current Django templates first
+- add a minimal frontend structure
 - keep Django as source of truth
-- use APIs only where React needs data
 - preserve Django admin
-- use BIMPOS black/white/orange branding
+- add APIs only where React needs data
+- use BIM Nexus black/white/orange branding
+- create reusable layout/components for sidebar, topbar, cards, tables, forms, badges, filters, and page headers
+- keep the UI compact, professional, desktop-first, and responsive
 
 Do not rewrite the project blindly.
+```

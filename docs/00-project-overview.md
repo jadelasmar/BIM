@@ -1,83 +1,102 @@
 # BIM Nexus Project Overview
 
-This file explains the project goal and the business modules planned for BIM Nexus.
-
 BIM Nexus is a Django-based internal IT operations platform.
 
-BIM Nexus is not an accounting ERP, invoicing system, payment system, company ERP replacement, or Tasklogger replacement.
+It is not an accounting ERP, invoicing system, payment system, company ERP replacement, or Tasklogger replacement.
 
-The project should stay modular. Each main business area should be built as its own Django app when it has its own workflow, but apps can still share data through clear relationships and APIs.
+## Architecture Direction
 
-Example:
-- BIM Stock owns products, inventory, SKU logic, and physical stock units
-- Receiving / Delivery can select stock/products from BIM Stock
-- Companies / Sites can be reused by deliveries, movements, assets, and reports
-- Attachments can be reused by delivery scans, receiving scans, warranties, manuals, and documentation
+- Django is the source of truth.
+- Django admin must remain usable for non-technical staff.
+- Django auth, groups, and permissions control access.
+- Each major business workflow should become its own Django app when it has its own data and process.
+- Apps may share data through clear relationships and APIs.
+- React is the planned main operational UI, but no React app exists yet.
 
-## Current App
+## Active Module
 
-- BIM Stock
+BIM Stock is the only implemented business module.
 
-BIM Stock is the only implemented business app right now.
+BIM Stock currently owns:
+- product definitions
+- physical stock units
+- SKU generation
+- suppliers
+- supplier cost
+- selling price
+- serial numbers
+- stock status
+- product barcode search
+- basic stock dashboard and list pages
 
-BIM Stock is used to manage inventory, products, quantities, suppliers, supplier cost, selling price, serial numbers, and stock status.
+## Current Product Scope
 
-Main goals:
-- check stock
-- buy products from suppliers
-- track issued/sold/delivered stock status without adding accounting logic
-- track product quantity
-- track supplier cost
-- track client/selling price
-- track serial numbers where needed
-- keep stock status clear
-- track minimum quantity needed in stock
-- show what needs restocking
+BIM Nexus focuses on:
+- stock and inventory
+- stock movement
+- receiving and delivery operations
+- suppliers
+- companies and sites
+- company assets
+- internal IT documentation
+- operational reporting
 
-## Usage Goal
+## Target Users
 
-BIM Nexus is being built for internal company use first.
+- internal IT teams
+- operations staff
+- warehouse/admin users
+- management overview users
 
-The main operational UI will move to React. Django remains the source of truth, and Django admin remains available for internal backend/admin management.
+## Current UI
 
-Build choices should support controlled multi-user internal use without overbuilding:
-- keep data clean
-- keep workflows simple
-- use clear names
-- use Django auth, groups, and permissions
-- show users only modules they can access
-- keep future reporting and exports in mind
-- preserve admin readability for non-technical staff
-- preserve SKU logic unless explicitly asked
+Implemented UI:
+- Django-auth login page
+- protected BIM Nexus Command Center at `/`
+- BIM Stock dashboard at `/stock/`
+- product list, product detail, and stock unit list pages
+- Django admin
 
-## Planned Modules
+The current custom UI is Django templates and CSS. React should be introduced only after a focused setup/API session.
 
-1. Stock & Inventory
-2. Stock Movement
-3. Receiving / Delivery
-4. Companies / Sites
-5. Suppliers
-6. Company Assets
-7. Attachments
-8. Knowledge Base / IT Docs
-9. Reports
+## Brand Direction
+
+- Product name: BIM Nexus
+- Subtitle: Internal IT Operations Platform
+- Colors: black, white, orange accent
+- Style: professional enterprise dashboard, desktop-first, responsive
 
 ## Frontend Direction
 
-React will be used for the main user interface. Figma screens should be inspected and mapped to Django models/APIs before implementation.
+The main operational UI should be a modern enterprise SaaS/admin dashboard.
 
-Initial React targets:
-- login page
-- protected Command Center/dashboard
-- stock and inventory screens
-- receiving and delivery screens
-- companies/sites, suppliers, assets, knowledge base, and reports screens
+Use:
+- dark collapsible left sidebar
+- top navigation/header
+- main content area
+- compact KPI cards
+- professional tables and forms
+- reusable cards, buttons, badges, filters, and layout components
 
-Brand:
-- name: BIM Nexus
-- colors: black, white, orange
-- style: professional internal dashboard
-- layout: desktop-first, responsive for tablet/mobile
+Avoid:
+- flashy gradients
+- gaming-style UI
+- oversized marketing cards
+- excessive empty spacing
+- generic Bootstrap look
+
+## Planned Modules
+
+1. Command Center
+2. Inventory / BIM Stock
+3. Stock Movement
+4. Receiving / Delivery
+5. Companies / Sites
+6. Suppliers
+7. Company Assets
+8. Knowledge Base
+9. Reports
+10. Settings
 
 ## Explicit Exclusions
 
@@ -85,4 +104,4 @@ Do not add:
 - accounting workflows
 - invoicing workflows
 - payment workflows
-- Tasklogger or ticketing workflows
+- ticketing or Tasklogger replacement workflows
