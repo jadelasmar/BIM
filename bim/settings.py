@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-*85%i(ofy9ff93u84@&*-6)w$wy0b)9cr7ft^^rya@s=blcwao
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["192.168.10.218", "localhost", "127.0.0.1"]
 
 
 # Application definition
@@ -119,6 +119,7 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
 STATIC_URL = 'static/'
+STATICFILES_DIRS = [BASE_DIR / 'static']
 
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'module_launcher'

@@ -59,16 +59,20 @@ Implemented:
 ## Session 12: Login UI From Figma
 
 Status:
-- pending
+- done
 
 Task:
 Implement the BIM Nexus login screen from Figma.
 
 Focus:
-- keep Django auth form behavior
-- update `templates/registration/login.html`
-- match BIM Nexus black/white/orange branding
-- keep responsive internal dashboard style
+- done: keep Django auth form behavior
+- done: update `templates/registration/login.html`
+- done: save BIM Nexus brand assets under project-level static files
+- done: match BIM Nexus black/white/orange branding from the Figma login card
+- done: add dark/light theme support from Figma login variants
+- done: add a saved theme toggle on the login screen
+- done: set footer copy to `Built for BIMPOS`
+- done: keep responsive internal dashboard style
 
 Do not change authentication logic.
 

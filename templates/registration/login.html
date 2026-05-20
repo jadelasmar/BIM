@@ -1,17 +1,47 @@
+{% load static %}
 <!doctype html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>BIM Nexus Login</title>
+    <script>
+        const savedTheme = localStorage.getItem("bim-nexus-login-theme");
+        document.documentElement.dataset.theme = savedTheme === "light" ? "light" : "dark";
+    </script>
     <style>
         :root {
-            --orange: #f97316;
-            --black: #111827;
-            --border: #d9e2ec;
-            --muted: #52606d;
-            --page: #f5f7fa;
-            --surface: #ffffff;
+            --accent: #f49107;
+            --accent-hover: #ff9f1a;
+            --page: #0a0a0a;
+            --page-glow: rgba(244, 145, 7, 0.10);
+            --card: #171717;
+            --card-line: #262626;
+            --field: #171717;
+            --checkbox: #0a0a0a;
+            --text: #fafafa;
+            --muted: #a3a3a3;
+            --danger: #fca5a5;
+            --danger-bg: rgba(127, 29, 29, 0.22);
+            --danger-line: rgba(252, 165, 165, 0.3);
+        }
+
+        :root[data-theme="light"] {
+            --page: #f5f5f5;
+            --page-glow: rgba(244, 145, 7, 0.14);
+            --card: #ffffff;
+            --card-line: #e5e5e5;
+            --field: #fafafa;
+            --checkbox: #ffffff;
+            --text: #171717;
+            --muted: #737373;
+            --danger: #991b1b;
+            --danger-bg: #fef2f2;
+            --danger-line: #fecaca;
+        }
+
+        * {
+            box-sizing: border-box;
         }
 
         body {
@@ -19,83 +49,375 @@
             min-height: 100vh;
             margin: 0;
             place-items: center;
-            color: var(--black);
-            background: var(--page);
-            font-family: Arial, sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at 50% 0%, var(--page-glow), transparent 34rem),
+                var(--page);
+            font-family: Inter, Arial, sans-serif;
         }
 
         main {
-            width: min(420px, calc(100% - 32px));
-            padding: 28px;
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            background: var(--surface);
+            position: relative;
+            width: min(392px, calc(100% - 32px));
+        }
+
+        .theme-toggle {
+            position: absolute;
+            right: 0;
+            top: -46px;
+            display: grid;
+            width: 35px;
+            height: 35px;
+            padding: 0;
+            place-items: center;
+            border: 1px solid var(--card-line);
+            border-radius: 7px;
+            color: var(--text);
+            background: var(--card);
+            cursor: pointer;
+            box-shadow: 0 12px 24px -18px rgba(0, 0, 0, 0.45);
+        }
+
+        .theme-toggle svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .theme-toggle .sun-icon,
+        :root[data-theme="light"] .theme-toggle .moon-icon {
+            display: none;
+        }
+
+        :root[data-theme="light"] .theme-toggle .sun-icon {
+            display: block;
+        }
+
+        .login-card {
+            width: 100%;
+            padding: 14px;
+            border: 1px solid rgba(38, 38, 38, 0.5);
+            border-radius: 11px;
+            background: var(--card);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        }
+
+        .login-header {
+            display: grid;
+            gap: 14px;
+            padding-bottom: 21px;
+            text-align: center;
+        }
+
+        .logo {
+            display: block;
+            width: 221px;
+            height: auto;
+            margin: 0 auto;
+        }
+
+        .logo-light {
+            display: none;
+        }
+
+        :root[data-theme="light"] .logo-dark {
+            display: none;
+        }
+
+        :root[data-theme="light"] .logo-light {
+            display: block;
         }
 
         h1 {
-            margin: 0 0 8px;
-            font-size: 28px;
+            margin: 0 0 3px;
+            font-size: 21px;
+            font-weight: 600;
+            line-height: 28px;
+            letter-spacing: 0;
         }
 
         p {
-            margin: 0 0 20px;
+            margin: 0;
             color: var(--muted);
         }
 
+        .subtitle {
+            font-size: 12px;
+            line-height: 18px;
+        }
+
+        .login-form {
+            display: grid;
+            gap: 17px;
+        }
+
+        .field {
+            display: grid;
+            gap: 5px;
+        }
+
         label {
-            display: block;
-            margin: 14px 0 6px;
-            font-weight: 700;
+            color: var(--text);
+            font-size: 12px;
+            font-weight: 500;
+            line-height: 16px;
         }
 
-        input {
-            box-sizing: border-box;
+        input[type="text"],
+        input[type="password"] {
             width: 100%;
-            min-height: 42px;
-            padding: 10px 12px;
-            border: 1px solid #bcccdc;
-            border-radius: 6px;
+            min-height: 35px;
+            padding: 3px 10px;
+            border: 1px solid var(--card-line);
+            border-radius: 7px;
+            color: var(--text);
+            background: var(--field);
             font: inherit;
+            font-size: 12px;
+            line-height: 15px;
+            outline: none;
         }
 
-        button {
-            width: 100%;
-            min-height: 44px;
-            margin-top: 20px;
+        input[type="text"]::placeholder,
+        input[type="password"]::placeholder {
+            color: var(--muted);
+        }
+
+        input[type="text"]:focus,
+        input[type="password"]:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(244, 145, 7, 0.16);
+        }
+
+        .password-wrap {
+            position: relative;
+        }
+
+        .password-wrap input {
+            padding-right: 38px;
+        }
+
+        .password-toggle {
+            position: absolute;
+            top: 50%;
+            right: 10px;
+            display: grid;
+            width: 16px;
+            height: 16px;
+            padding: 0;
+            place-items: center;
             border: 0;
-            border-radius: 6px;
+            color: var(--muted);
+            background: transparent;
+            cursor: pointer;
+            transform: translateY(-50%);
+        }
+
+        .password-toggle svg {
+            width: 15px;
+            height: 15px;
+        }
+
+        .form-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            min-height: 18px;
+        }
+
+        .remember {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            color: var(--text);
+            font-size: 12px;
+            line-height: 18px;
+        }
+
+        .remember input {
+            width: 14px;
+            height: 14px;
+            margin: 0;
+            accent-color: var(--accent);
+        }
+
+        .remember input:not(:checked) {
+            appearance: none;
+            border: 1px solid var(--card-line);
+            border-radius: 3px;
+            background: var(--checkbox);
+        }
+
+        .forgot {
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 18px;
+            white-space: nowrap;
+        }
+
+        .submit {
+            width: 100%;
+            min-height: 35px;
+            border: 0;
+            border-radius: 7px;
             color: #ffffff;
-            background: var(--orange);
+            background: var(--accent);
             font: inherit;
-            font-weight: 700;
+            font-size: 12px;
+            font-weight: 500;
+            line-height: 18px;
             cursor: pointer;
         }
 
+        .submit:hover,
+        .submit:focus {
+            background: var(--accent-hover);
+        }
+
         .error {
-            padding: 10px 12px;
-            border: 1px solid #feb2b2;
-            border-radius: 6px;
-            color: #9b2c2c;
-            background: #fff5f5;
+            margin-bottom: 14px;
+            padding: 9px 10px;
+            border: 1px solid var(--danger-line);
+            border-radius: 7px;
+            color: var(--danger);
+            background: var(--danger-bg);
+            font-size: 12px;
+            line-height: 18px;
+        }
+
+        .powered {
+            margin-top: 21px;
+            color: var(--muted);
+            font-size: 10px;
+            line-height: 14px;
+            text-align: center;
+        }
+
+        .powered strong {
+            color: var(--text);
+            font-weight: 500;
+        }
+
+        @media (max-width: 440px) {
+            main {
+                width: min(392px, calc(100% - 24px));
+            }
+
+            .theme-toggle {
+                top: -43px;
+            }
+
+            .login-card {
+                padding: 14px;
+            }
+
+            .form-row {
+                align-items: flex-start;
+                flex-direction: column;
+                gap: 8px;
+            }
         }
     </style>
 </head>
 <body>
     <main>
-        <h1>BIM Nexus Login</h1>
-        <p>Use your Django account to access the internal IT operations platform.</p>
-        {% if form.errors %}
-            <p class="error">Invalid username or password.</p>
-        {% endif %}
-        <form method="post">
-            {% csrf_token %}
-            {{ form.username.label_tag }}
-            {{ form.username }}
-            {{ form.password.label_tag }}
-            {{ form.password }}
-            <input type="hidden" name="next" value="{{ next }}">
-            <button type="submit">Log in</button>
-        </form>
+        <button class="theme-toggle" type="button" aria-label="Switch to light theme" title="Switch theme">
+            <svg class="moon-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M20.5 15.5A8.5 8.5 0 0 1 8.5 3.5a7 7 0 1 0 12 12Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <svg class="sun-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <path d="M12 8.2a3.8 3.8 0 1 1 0 7.6 3.8 3.8 0 0 1 0-7.6Z" stroke="currentColor" stroke-width="1.7"/>
+                <path d="M12 2.75v2.1M12 19.15v2.1M4.2 4.2l1.5 1.5M18.3 18.3l1.5 1.5M2.75 12h2.1M19.15 12h2.1M4.2 19.8l1.5-1.5M18.3 5.7l1.5-1.5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            </svg>
+        </button>
+        <section class="login-card" aria-labelledby="login-title">
+            <header class="login-header">
+                <img class="logo logo-dark" src="{% static 'bim/brand/white-bimnexus.svg' %}" alt="BIM Nexus">
+                <img class="logo logo-light" src="{% static 'bim/brand/black-bimnexus.svg' %}" alt="BIM Nexus">
+                <div>
+                    <h1 id="login-title">Welcome Back</h1>
+                    <p class="subtitle">Internal IT Operations Platform</p>
+                </div>
+            </header>
+
+            {% if form.errors %}
+                <p class="error">Invalid username or password.</p>
+            {% endif %}
+
+            <form class="login-form" method="post">
+                {% csrf_token %}
+                <div class="field">
+                    <label for="{{ form.username.id_for_label }}">Email or Username</label>
+                    {{ form.username }}
+                </div>
+                <div class="field">
+                    <label for="{{ form.password.id_for_label }}">Password</label>
+                    <div class="password-wrap">
+                        {{ form.password }}
+                        <button class="password-toggle" type="button" aria-label="Show password" aria-pressed="false">
+                            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                                <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <label class="remember">
+                        <input type="checkbox" name="remember" value="1">
+                        <span>Remember me</span>
+                    </label>
+                    <span class="forgot" title="Contact an administrator to reset access.">Forgot password?</span>
+                </div>
+                <input type="hidden" name="next" value="{{ next }}">
+                <button class="submit" type="submit">Sign In</button>
+            </form>
+
+            <p class="powered">Built for <strong>BIMPOS</strong></p>
+        </section>
     </main>
+    <script>
+        const username = document.getElementById("{{ form.username.id_for_label }}");
+        const password = document.getElementById("{{ form.password.id_for_label }}");
+        const toggle = document.querySelector(".password-toggle");
+        const themeToggle = document.querySelector(".theme-toggle");
+
+        function syncThemeToggle() {
+            if (!themeToggle) {
+                return;
+            }
+
+            const isLight = document.documentElement.dataset.theme === "light";
+            themeToggle.setAttribute("aria-label", isLight ? "Switch to dark theme" : "Switch to light theme");
+        }
+
+        if (username) {
+            username.placeholder = "your.name@company.com";
+            username.autocomplete = "username";
+        }
+
+        if (password) {
+            password.placeholder = "Enter your password";
+        }
+
+        if (toggle && password) {
+            toggle.addEventListener("click", () => {
+                const isVisible = password.type === "text";
+                password.type = isVisible ? "password" : "text";
+                toggle.setAttribute("aria-pressed", String(!isVisible));
+                toggle.setAttribute("aria-label", isVisible ? "Show password" : "Hide password");
+            });
+        }
+
+        if (themeToggle) {
+            syncThemeToggle();
+            themeToggle.addEventListener("click", () => {
+                const nextTheme = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+                document.documentElement.dataset.theme = nextTheme;
+                localStorage.setItem("bim-nexus-login-theme", nextTheme);
+                syncThemeToggle();
+            });
+        }
+    </script>
 </body>
 </html>
