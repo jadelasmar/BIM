@@ -9,6 +9,37 @@ This file reflects the current implementation in the repository.
 - Database: SQLite for current local development
 - Timezone: `Asia/Beirut`
 - Frontend: Django templates only; no React/Vite app exists yet
+- Runtime Django assets: `static/bim/assets/`
+- Future React/Tailwind asset staging: `frontend/src/assets/`
+
+## Frontend Asset Structure
+
+Current runtime static asset buckets:
+
+```text
+static/bim/assets/
+|-- brand/
+|-- images/
+|-- icons/
+|-- illustrations/
+|-- screenshots/
+`-- backgrounds/
+```
+
+Future React/Tailwind asset buckets:
+
+```text
+frontend/src/assets/
+|-- brand/
+|-- images/
+|-- icons/
+|-- illustrations/
+`-- backgrounds/
+```
+
+Branding assets are centralized in both places for now:
+- `static/bim/assets/brand/` keeps the current Django templates working.
+- `frontend/src/assets/brand/` is the source path prepared for the future React/Vite app.
 
 ## Installed Business Apps
 

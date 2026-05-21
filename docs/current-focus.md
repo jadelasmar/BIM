@@ -4,7 +4,8 @@
 
 - Keep documentation aligned with the current Django implementation.
 - BIM Stock is the active implemented module.
-- Login UI has been updated from the provided Figma CSS/spec and project-level BIM Nexus brand assets.
+- Login UI has been updated from the provided Figma CSS/spec and centralized BIM Nexus brand assets under `static/bim/assets/brand/`.
+- Future React/Tailwind asset staging now exists under `frontend/src/assets/`.
 
 ## Do Not Modify Unnecessarily
 
