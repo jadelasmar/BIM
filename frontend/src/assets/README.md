@@ -1,6 +1,8 @@
 # BIM Nexus Frontend Assets
 
 This folder is the staging source for the future React/Tailwind frontend.
+Django remains the backend/source of truth. Node.js should be used only for
+frontend build tooling when the React setup is introduced.
 
 Use these buckets:
 

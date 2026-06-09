@@ -20,14 +20,24 @@ This roadmap separates completed work from planned work. Do not mark future modu
 - BIM Stock dashboard
 - Product list, product detail, and stock unit list pages
 - Django-auth login/logout
+- Email-or-username login
+- Email-only internal user creation
+- Admin-generated manual name/username/password setup links for internal users
 - Protected pages
 - Role/group preparation
 - BIM Nexus Command Center
 - BIM Nexus branding update in current UI
+- React/Vite/Tailwind frontend scaffold
+- React Command Center shell and dashboard at `/`
 
 ## Current Focus
 
 BIM Stock is the active module. The project is moving from stock-only Django templates toward a modular internal IT operations platform.
+
+Backend/frontend direction:
+- Django remains the backend, source of truth, auth layer, admin, and API provider.
+- React with Tailwind CSS is the planned main operational frontend.
+- Node.js is frontend build tooling only, not a backend replacement.
 
 Current UI work should focus on:
 - login screen alignment with Figma
@@ -40,7 +50,7 @@ Current UI work should focus on:
 2. Harden BIM Stock permissions and status behavior without changing SKU logic.
 3. Add stock movement audit history.
 4. Plan API endpoints only where the frontend needs real data.
-5. Introduce React in a dedicated setup session, not as an incidental change.
+5. Connect future React screens to focused Django APIs as each workflow is built.
 
 ## Planned Module Order
 
@@ -54,7 +64,7 @@ Current UI work should focus on:
 8. Reusable Attachments
 9. Knowledge Base / IT Docs
 10. Reports
-11. React operational UI and API bridge
+11. React/Tailwind operational UI and API bridge
 12. Figma-to-React implementation
 
 ## Later Enhancements

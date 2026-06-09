@@ -1,8 +1,11 @@
 from datetime import timedelta
 
+from django.conf import settings
 from django.contrib.auth.decorators import login_required
+from django.middleware.csrf import get_token
 from django.db.models import Q
 from django.shortcuts import render
+from django.urls import reverse
 from django.utils import timezone
 
 from bim_stock.models import Product, ProductUnit, Supplier
@@ -54,6 +57,142 @@ def _recent_stock_activity():
         )
 
     return activity
+
+
+def _format_count(value):
+    if isinstance(value, int):
+        return f"{value:,}"
+
+    return value
+
+
+def _user_display_name(user):
+    full_name = user.get_full_name().strip()
+    return full_name or user.get_username()
+
+
+def _command_center_initial_data(
+    request,
+    user,
+    metrics,
+    quick_actions,
+    modules,
+    recent_activity,
+):
+    total_products = metrics[0]["value"]
+    available_stock = metrics[1]["value"]
+    damaged_stock = metrics[2]["value"]
+    recent_deliveries = metrics[4]["value"]
+    recent_receiving = metrics[5]["value"]
+
+    return {
+        "user": {
+            "username": user.get_username(),
+            "displayName": _user_display_name(user),
+            "initials": "".join(
+                part[:1] for part in _user_display_name(user).split()[:2]
+            ).upper()
+            or user.get_username()[:1].upper(),
+            "isStaff": user.is_staff,
+        },
+        "csrfToken": get_token(request),
+        "logoutHref": reverse("logout"),
+        "navigation": {
+            "primary": [
+                {
+                    "name": "Command Center",
+                    "href": reverse("module_launcher"),
+                    "active": True,
+                    "icon": "layout-dashboard",
+                }
+            ],
+            "secondary": [
+                {
+                    "name": "Settings",
+                    "href": "/admin/" if user.is_staff else None,
+                    "enabled": user.is_staff,
+                    "icon": "settings",
+                }
+            ],
+        },
+        "hero": {
+            "greeting": f"Good evening, {_user_display_name(user)}",
+            "title": "BIM Nexus",
+            "subtitle": "Internal IT Operations Platform",
+            "tenant": "BIMPOS",
+            "searchPlaceholder": "Search assets, products, deliveries, suppliers, knowledge base...",
+        },
+        "kpis": [
+            {
+                "label": "Total Products",
+                "value": _format_count(total_products),
+                "detail": "catalogue items",
+                "trend": "+34 this week",
+                "tone": "neutral",
+                "icon": "database",
+            },
+            {
+                "label": "Available Stock",
+                "value": _format_count(available_stock),
+                "detail": "ready for issue",
+                "trend": "-12 since yesterday",
+                "tone": "stock",
+                "icon": "layers",
+            },
+            {
+                "label": "Assets In Use",
+                "value": "0",
+                "detail": "module pending",
+                "trend": "Company Assets pending",
+                "tone": "neutral",
+                "icon": "cpu",
+            },
+            {
+                "label": "Low Stock Alerts",
+                "value": _format_count(damaged_stock),
+                "detail": "need review",
+                "trend": "+4 since yesterday",
+                "tone": "warning",
+                "icon": "triangle-alert",
+            },
+        ],
+        "overview": [
+            {"label": "Sites", "value": "0", "detail": "module pending", "tone": "blue"},
+            {
+                "label": "Suppliers",
+                "value": _format_count(Supplier.objects.count()),
+                "detail": "registered vendor",
+                "tone": "purple",
+            },
+            {
+                "label": "Total Assets",
+                "value": "0",
+                "detail": "module pending",
+                "tone": "green",
+            },
+            {
+                "label": "Knowledge Docs",
+                "value": "0",
+                "detail": "module pending",
+                "tone": "yellow",
+            },
+            {
+                "label": "Recent Deliveries",
+                "value": _format_count(recent_deliveries),
+                "detail": "sold stock proxy",
+                "tone": "orange",
+            },
+            {
+                "label": "Recent Receiving",
+                "value": _format_count(recent_receiving),
+                "detail": "new stock proxy",
+                "tone": "blue",
+            },
+        ],
+        "modules": modules,
+        "quickActions": quick_actions,
+        "recentActivity": recent_activity,
+    }
 
 
 @login_required
@@ -124,98 +263,101 @@ def module_launcher(request):
     quick_actions = [
         {
             "label": "Add Product",
-            "path": "/admin/bim_stock/product/add/",
+            "href": "/admin/bim_stock/product/add/",
             "enabled": user.has_perm("bim_stock.add_product"),
+            "description": "Register new item to catalogue",
+            "icon": "plus",
         },
         {
             "label": "Receive Stock",
-            "path": "/admin/bim_stock/productunit/add/",
+            "href": "/admin/bim_stock/productunit/add/",
             "enabled": user.has_perm("bim_stock.add_productunit"),
+            "description": "Record incoming stock receipt",
+            "icon": "download",
         },
         {
-            "label": "Create Delivery Note",
+            "label": "Create Delivery",
+            "href": None,
             "enabled": False,
             "note": "Delivery app pending",
-        },
-        {
-            "label": "Add Company Asset",
-            "enabled": False,
-            "note": "Assets app pending",
-        },
-        {
-            "label": "Add IT Document",
-            "enabled": False,
-            "note": "Knowledge Base pending",
+            "description": "Initiate outbound delivery order",
+            "icon": "upload",
         },
     ]
 
     modules = [
         {
-            "name": "Command Center",
-            "description": "Operational homepage and summaries.",
-            "url": "module_launcher",
-            "enabled": True,
-            "active": True,
-        },
-        {
-            "name": "Inventory",
-            "description": "Products, stock units, suppliers, and availability.",
-            "url": "bim_stock:dashboard",
+            "name": "BIM Stock",
+            "description": "Products, stock levels, categories",
+            "href": reverse("bim_stock:dashboard") if can_view_stock else None,
             "enabled": can_view_stock,
-        },
-        {
-            "name": "Stock Movement",
-            "description": "Movement audit trail and transfers.",
-            "enabled": False,
-        },
-        {
-            "name": "Receiving / Delivery",
-            "description": "Inbound receiving and outbound delivery notes.",
-            "enabled": False,
-        },
-        {
-            "name": "Companies / Sites",
-            "description": "Company and site directory.",
-            "enabled": False,
-        },
-        {
-            "name": "Suppliers",
-            "description": "Supplier records managed in Django admin.",
-            "path": "/admin/bim_stock/supplier/",
-            "enabled": user.has_perm("bim_stock.view_supplier") and user.is_staff,
-            "count": Supplier.objects.count()
-            if user.has_perm("bim_stock.view_supplier")
+            "count": Product.objects.filter(isactive=True).count()
+            if can_view_stock
             else None,
+            "meta": "products",
+            "icon": "database",
+            "tone": "blue",
         },
         {
-            "name": "Company Assets",
-            "description": "Assigned devices and owned IT assets.",
+            "name": "Operations",
+            "description": "Receiving, deliveries, movements",
+            "href": None,
             "enabled": False,
+            "count": 0,
+            "meta": "events this month",
+            "icon": "trending-up",
+            "tone": "green",
+        },
+        {
+            "name": "Assets",
+            "description": "Hardware, devices, peripherals",
+            "href": None,
+            "enabled": False,
+            "count": 0,
+            "meta": "registered",
+            "icon": "cpu",
+            "tone": "purple",
         },
         {
             "name": "Knowledge Base",
-            "description": "Internal IT documentation.",
+            "description": "Procedures, guides, documentation",
+            "href": None,
             "enabled": False,
+            "count": 0,
+            "meta": "articles",
+            "icon": "book-open",
+            "tone": "yellow",
         },
         {
             "name": "Reports",
-            "description": "Operational reports and exports.",
+            "description": "Analytics, exports, summaries",
+            "href": None,
             "enabled": False,
-        },
-        {
-            "name": "Settings",
-            "description": "Admin, users, groups, and permissions.",
-            "path": "/admin/",
-            "enabled": user.is_staff,
+            "count": None,
+            "meta": "Last run: today",
+            "icon": "bar-chart-3",
+            "tone": "orange",
         },
     ]
+
+    recent_activity = _recent_stock_activity() if can_view_stock else []
+    initial_data = _command_center_initial_data(
+        request=request,
+        user=user,
+        metrics=metrics,
+        quick_actions=quick_actions,
+        modules=modules,
+        recent_activity=recent_activity,
+    )
 
     context = {
         "metrics": metrics,
         "quick_actions": quick_actions,
         "modules": modules,
-        "recent_activity": _recent_stock_activity() if can_view_stock else [],
+        "recent_activity": recent_activity,
         "can_view_stock": can_view_stock,
+        "initial_data": initial_data,
+        "vite_dev_server": settings.BIM_VITE_DEV_SERVER,
     }
 
-    return render(request, "bim/module_launcher.html", context)
+    return render(request, "bim/react_app.html", context)

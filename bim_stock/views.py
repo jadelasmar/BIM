@@ -88,13 +88,14 @@ def product_list(request):
 def product_detail(request, pk):
     if not request.user.has_perm("bim_stock.view_product"):
         raise PermissionDenied
+    can_view_product_units = request.user.has_perm("bim_stock.view_productunit")
 
     product = get_object_or_404(
         Product.objects.select_related("category__type", "model__brand"),
         pk=pk,
         isactive=True,
     )
-    available_units = (
+    available_units_query = (
         product.units.filter(
             status=ProductUnit.STATUS_AVAILABLE,
             isactive=True,
@@ -102,11 +103,15 @@ def product_detail(request, pk):
         .select_related("supplier")
         .order_by("serial_number")
     )
+    available_units = (
+        available_units_query if can_view_product_units else ProductUnit.objects.none()
+    )
 
     context = {
         "product": product,
         "available_units": available_units,
-        "available_unit_count": available_units.count(),
+        "available_unit_count": available_units_query.count(),
+        "can_view_product_units": can_view_product_units,
     }
 
     return render(request, "bim_stock/product_detail.html", context)

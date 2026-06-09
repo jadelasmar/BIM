@@ -38,7 +38,7 @@ Before BIM Stock is used by more people:
 8. Reusable Attachments
 9. Knowledge Base / IT Docs
 10. Reports
-11. React setup and API bridge
+11. React/Tailwind setup and API bridge
 12. Figma-to-React screen implementation
 
 Do not add accounting, invoicing, payment, or ticketing/Tasklogger replacement features.
@@ -50,8 +50,12 @@ Status:
 
 Implemented:
 - Django auth login/logout
+- username-or-email login
+- email-only admin user creation
+- admin-generated manual name/username/password setup/reset links
 - protected operational pages
-- prepared groups: Admin, Stock Manager, IT Support, Viewer
+- prepared groups: Administrator, Operations Manager, IT Support, Viewer
+- new users start in Viewer unless changed by staff
 - BIM Nexus Command Center at `/`
 - permission-aware Inventory link
 - Django admin preserved
@@ -79,7 +83,7 @@ Do not change authentication logic.
 ## Session 13: Stock & Inventory Hardening
 
 Status:
-- pending
+- in progress
 
 Task:
 Align BIM Stock behavior with current operations without duplicating models.
@@ -91,6 +95,20 @@ Focus:
 - improve permissions where needed
 - keep admin readable
 - prepare API needs for future React screens
+
+Implemented so far:
+- Product detail hides stock-unit rows from users without `view_productunit`.
+- `ProductUnit` direct saves keep `sold_date` aligned with stock status.
+- Username-or-email login works through Django auth.
+- Name/username/password setup and reset uses admin-generated manual secure links, not public sign-up.
+- Blank setup usernames default to the email name before `@`.
+- Prepared stock groups are Administrator, Operations Manager, IT Support, and Viewer.
+- IT Support can view/change stock records but cannot add new stock.
+- Email-created users are assigned to Viewer by default.
+- Product exposes active-only stock count properties for React/API use.
+- Product admin shows total, available, reserved, sold, damaged, and returned quantities.
+- ProductUnit supports an `inactive` status choice.
+- DRF is not installed yet, so inventory JSON API endpoints are still pending a focused API dependency/session.
 
 Avoid unrelated refactors.
 
@@ -245,16 +263,18 @@ Focus:
 ## Session 22: React Operational UI
 
 Status:
-- pending
+- in progress
 
 Task:
-Introduce React for the main operational UI.
+Introduce React with Tailwind CSS for the main operational UI.
 
 Focus:
 - inspect current Django pages first
 - keep Django admin
+- keep Django as backend/source of truth
 - add protected routes/pages
 - use real APIs where data exists
+- use Node/Vite only as frontend build tooling
 - build reusable components
 - use BIM Nexus black/white/orange branding
 - implement dark collapsible sidebar, topbar, and main content layout
@@ -262,3 +282,11 @@ Focus:
 - desktop-first responsive design
 
 Implement Figma screens only after inspecting the provided designs.
+
+Implemented so far:
+- React/Vite/Tailwind frontend scaffold under `frontend/`.
+- Django serves the protected `/` Command Center through `templates/bim/react_app.html`.
+- Built frontend assets output to `static/frontend/`.
+- Command Center sidebar currently includes Command Center, divider, and Settings.
+- Command Center dashboard follows the provided dark BIM Nexus reference image.
+- Quick Add currently exposes Add Product, Receive Stock, and a disabled Create Delivery placeholder.

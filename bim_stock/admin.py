@@ -29,7 +29,12 @@ class ProductAdmin(admin.ModelAdmin):
         "printed",
         "sku",
         "barcode",
+        "total_quantity",
         "available_quantity",
+        "reserved_quantity",
+        "sold_quantity",
+        "damaged_quantity",
+        "returned_quantity",
         "product_type",
         "category",
         "brand",
@@ -58,24 +63,76 @@ class ProductAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
         return queryset.annotate(
+            total_unit_count=Count(
+                "units",
+                filter=Q(units__isactive=True),
+            ),
             available_unit_count=Count(
                 "units",
                 filter=Q(
                     units__status=ProductUnit.STATUS_AVAILABLE,
                     units__isactive=True,
                 ),
-            )
+            ),
+            reserved_unit_count=Count(
+                "units",
+                filter=Q(
+                    units__status=ProductUnit.STATUS_RESERVED,
+                    units__isactive=True,
+                ),
+            ),
+            sold_unit_count=Count(
+                "units",
+                filter=Q(
+                    units__status=ProductUnit.STATUS_SOLD,
+                    units__isactive=True,
+                ),
+            ),
+            damaged_unit_count=Count(
+                "units",
+                filter=Q(
+                    units__status=ProductUnit.STATUS_DAMAGED,
+                    units__isactive=True,
+                ),
+            ),
+            returned_unit_count=Count(
+                "units",
+                filter=Q(
+                    units__status=ProductUnit.STATUS_RETURNED,
+                    units__isactive=True,
+                ),
+            ),
         )
+
+    def stock_quantity(self, obj, annotation_name, property_name):
+        if hasattr(obj, annotation_name):
+            return getattr(obj, annotation_name)
+
+        return getattr(obj, property_name)
+
+    @admin.display(description="Total Qty", ordering="total_unit_count")
+    def total_quantity(self, obj):
+        return self.stock_quantity(obj, "total_unit_count", "total_units")
 
     @admin.display(description="Available Qty", ordering="available_unit_count")
     def available_quantity(self, obj):
-        if hasattr(obj, "available_unit_count"):
-            return obj.available_unit_count
+        return self.stock_quantity(obj, "available_unit_count", "available_units")
 
-        return obj.units.filter(
-            status=ProductUnit.STATUS_AVAILABLE,
-            isactive=True,
-        ).count()
+    @admin.display(description="Reserved Qty", ordering="reserved_unit_count")
+    def reserved_quantity(self, obj):
+        return self.stock_quantity(obj, "reserved_unit_count", "reserved_units")
+
+    @admin.display(description="Sold Qty", ordering="sold_unit_count")
+    def sold_quantity(self, obj):
+        return self.stock_quantity(obj, "sold_unit_count", "sold_units")
+
+    @admin.display(description="Damaged Qty", ordering="damaged_unit_count")
+    def damaged_quantity(self, obj):
+        return self.stock_quantity(obj, "damaged_unit_count", "damaged_units")
+
+    @admin.display(description="Returned Qty", ordering="returned_unit_count")
+    def returned_quantity(self, obj):
+        return self.stock_quantity(obj, "returned_unit_count", "returned_units")
 
     @admin.display(description="Type", ordering="category__type__name")
     def product_type(self, obj):
@@ -122,7 +179,15 @@ class ProductUnitAdmin(admin.ModelAdmin):
         "sold_date",
         "isactive",
     )
-    list_filter = ("status", "supplier", "isactive", "purchase_date", "sold_date")
+    list_filter = (
+        "status",
+        "product__category",
+        "product__model__brand",
+        "supplier",
+        "isactive",
+        "purchase_date",
+        "sold_date",
+    )
     search_fields = (
         "serial_number",
         "product__descript",
@@ -130,7 +195,12 @@ class ProductUnitAdmin(admin.ModelAdmin):
         "product__sku",
         "product__barcode",
     )
-    list_select_related = ("product", "supplier")
+    list_select_related = (
+        "product",
+        "product__category",
+        "product__model__brand",
+        "supplier",
+    )
     readonly_fields = ("crdate",)
     autocomplete_fields = ("product", "supplier")
     fieldsets = (
@@ -183,7 +253,4 @@ class ProductUnitAdmin(admin.ModelAdmin):
         )
 
     def save_model(self, request, obj, form, change):
-        if obj.status == ProductUnit.STATUS_SOLD and not obj.sold_date:
-            obj.sold_date = timezone.localdate()
-
         super().save_model(request, obj, form, change)

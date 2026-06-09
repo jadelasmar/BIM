@@ -10,10 +10,19 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+def env_bool(name, default=False):
+    value = os.environ.get(name)
+    if value is None:
+        return default
+
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 # Quick-start development settings - unsuitable for production
@@ -38,6 +47,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
+    'bim_accounts',
     'bim_stock',
 ]
 
@@ -124,3 +134,26 @@ STATICFILES_DIRS = [BASE_DIR / 'static']
 LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'module_launcher'
 LOGOUT_REDIRECT_URL = 'login'
+
+AUTHENTICATION_BACKENDS = [
+    'bim_accounts.backends.UsernameOrEmailBackend',
+]
+
+EMAIL_BACKEND = os.environ.get(
+    "BIM_EMAIL_BACKEND",
+    "django.core.mail.backends.console.EmailBackend",
+)
+EMAIL_HOST = os.environ.get("BIM_EMAIL_HOST", "")
+EMAIL_PORT = int(os.environ.get("BIM_EMAIL_PORT", "587"))
+EMAIL_USE_TLS = env_bool("BIM_EMAIL_USE_TLS", True)
+EMAIL_HOST_USER = os.environ.get("BIM_EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("BIM_EMAIL_HOST_PASSWORD", "")
+DEFAULT_FROM_EMAIL = os.environ.get(
+    "BIM_DEFAULT_FROM_EMAIL",
+    "BIM Nexus <noreply@bimpos.com>",
+)
+
+BIM_VITE_DEV_SERVER = os.environ.get(
+    "BIM_VITE_DEV_SERVER",
+    "",
+)

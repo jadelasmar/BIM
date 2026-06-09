@@ -4,8 +4,11 @@
 
 - Keep documentation aligned with the current Django implementation.
 - BIM Stock is the active implemented module.
+- Django is the backend/source of truth; React with Tailwind CSS is the Command Center frontend.
+- Node.js is frontend build tooling only.
 - Login UI has been updated from the provided Figma CSS/spec and centralized BIM Nexus brand assets under `static/bim/assets/brand/`.
-- Future React/Tailwind asset staging now exists under `frontend/src/assets/`.
+- React/Vite/Tailwind source now exists under `frontend/src/`.
+- Built React assets are served from `static/frontend/`.
 
 ## Do Not Modify Unnecessarily
 
@@ -21,4 +24,4 @@
 1. Harden BIM Stock permissions and status behavior.
 2. Add stock movement audit history.
 3. Add Companies / Sites before workflows that need company/site references.
-4. Plan React, APIs, and reusable operational UI components in a dedicated session after current Django workflows are stable.
+4. Expand React screens only when the matching Django workflow/API exists.

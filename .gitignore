@@ -65,6 +65,10 @@ db.sqlite3-journal
 media/
 staticfiles/
 
+# Frontend dependencies and local build cache
+frontend/node_modules/
+frontend/.vite/
+
 # VS Code
 .vscode/
 
@@ -137,6 +141,7 @@ celerybeat.pid
 # Environments
 .env
 .venv
+.codex-venv/
 env/
 venv/
 ENV/

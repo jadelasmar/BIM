@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 
 
 # Type is the broad product group.
@@ -102,6 +103,37 @@ class Product(models.Model):
     def __str__(self):
         return self.printed or self.descript
 
+    def active_unit_count(self, status=None):
+        units = self.units.filter(isactive=True)
+        if status:
+            units = units.filter(status=status)
+
+        return units.count()
+
+    @property
+    def total_units(self):
+        return self.active_unit_count()
+
+    @property
+    def available_units(self):
+        return self.active_unit_count(ProductUnit.STATUS_AVAILABLE)
+
+    @property
+    def reserved_units(self):
+        return self.active_unit_count(ProductUnit.STATUS_RESERVED)
+
+    @property
+    def sold_units(self):
+        return self.active_unit_count(ProductUnit.STATUS_SOLD)
+
+    @property
+    def damaged_units(self):
+        return self.active_unit_count(ProductUnit.STATUS_DAMAGED)
+
+    @property
+    def returned_units(self):
+        return self.active_unit_count(ProductUnit.STATUS_RETURNED)
+
 
 # Supplier stores the company or person that stock units are bought from.
 class Supplier(models.Model):
@@ -119,6 +151,7 @@ class ProductUnit(models.Model):
     STATUS_SOLD = "sold"
     STATUS_DAMAGED = "damaged"
     STATUS_RETURNED = "returned"
+    STATUS_INACTIVE = "inactive"
 
     STATUS_CHOICES = [
         (STATUS_AVAILABLE, "Available"),
@@ -126,6 +159,7 @@ class ProductUnit(models.Model):
         (STATUS_SOLD, "Sold"),
         (STATUS_DAMAGED, "Damaged"),
         (STATUS_RETURNED, "Returned"),
+        (STATUS_INACTIVE, "Inactive"),
     ]
 
     product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="units")
@@ -151,6 +185,21 @@ class ProductUnit(models.Model):
 
     crdate = models.DateTimeField(auto_now_add=True)
     isactive = models.BooleanField(default=True)
+
+    def sync_status_dates(self):
+        if self.status == self.STATUS_SOLD and not self.sold_date:
+            self.sold_date = timezone.localdate()
+        elif self.status in (
+            self.STATUS_AVAILABLE,
+            self.STATUS_RESERVED,
+            self.STATUS_DAMAGED,
+            self.STATUS_INACTIVE,
+        ):
+            self.sold_date = None
+
+    def save(self, *args, **kwargs):
+        self.sync_status_dates()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.product} - {self.serial_number}"

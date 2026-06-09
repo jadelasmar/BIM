@@ -18,6 +18,9 @@ Focus only on the requested task.
 Keep replies short.
 Summarize only files changed, important decisions, commands run, and blockers.
 Do not add accounting, invoicing, payment, or ticketing/Tasklogger replacement features.
+Keep Django as backend/source of truth.
+Use React with Tailwind CSS only in a dedicated frontend setup session.
+Treat Node.js as frontend build tooling only.
 ```
 
 ## Documentation Review Session
@@ -144,7 +147,7 @@ No accounting logic.
 ## React Setup Session
 
 ```text
-Prepare React as the main operational UI.
+Prepare React with Tailwind CSS as the main operational UI.
 
 Focus:
 - inspect current Django templates first
@@ -152,6 +155,7 @@ Focus:
 - keep Django as source of truth
 - preserve Django admin
 - add APIs only where React needs data
+- use Node/Vite only as frontend build tooling
 - use BIM Nexus black/white/orange branding
 - create reusable layout/components for sidebar, topbar, cards, tables, forms, badges, filters, and page headers
 - keep the UI compact, professional, desktop-first, and responsive

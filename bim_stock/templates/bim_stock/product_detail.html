@@ -51,7 +51,9 @@
 <h2>Available Units</h2>
 <section class="panel" aria-label="Available units">
     {# available_units contains only active ProductUnit records with status=available. #}
-    {% if available_units %}
+    {% if not can_view_product_units %}
+        <p class="empty">Stock unit details require stock unit permission.</p>
+    {% elif available_units %}
         <table>
             <thead>
                 <tr>

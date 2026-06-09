@@ -6,12 +6,17 @@ It is not an accounting ERP, invoicing system, payment system, company ERP repla
 
 ## Architecture Direction
 
-- Django is the source of truth.
+- Django is the backend, source of truth, auth layer, admin, and API provider.
+- BIM Nexus is the product/platform name shown to users.
+- The current internal Django project package is `bim`; do not rename it only to match the product name.
 - Django admin must remain usable for non-technical staff.
 - Django auth, groups, and permissions control access.
 - Each major business workflow should become its own Django app when it has its own data and process.
+- Each Django app should appear in BIM Nexus as a clear module, such as BIM Stock.
 - Apps may share data through clear relationships and APIs.
-- React is the planned main operational UI, but no React app exists yet.
+- React is the main operational frontend for the protected Command Center.
+- Tailwind CSS is the planned frontend styling system.
+- Node.js should be used only as frontend build tooling, not as a backend for BIM Nexus.
 
 ## Active Module
 
@@ -52,12 +57,16 @@ BIM Nexus focuses on:
 
 Implemented UI:
 - Django-auth login page
+- email-or-username login using Django auth
+- admin-generated manual setup links for internal users to enter first name, last name, username, and password
+- blank setup usernames default to the email name before `@`
 - protected BIM Nexus Command Center at `/`
+- React/Tailwind Command Center app shell with sidebar and operational dashboard
 - BIM Stock dashboard at `/stock/`
 - product list, product detail, and stock unit list pages
 - Django admin
 
-The current custom UI is Django templates and CSS. React should be introduced only after a focused setup/API session.
+The Command Center is now React/Tailwind. Login, Django admin, and existing BIM Stock pages still use Django templates.
 
 ## Brand Direction
 

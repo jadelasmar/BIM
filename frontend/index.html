@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BIM Nexus</title>
+  </head>
+  <body>
+    <div id="bim-nexus-root"></div>
+    <script id="bim-nexus-initial-data" type="application/json">
+      {
+        "user": {
+          "username": "ahmad.alrashidi",
+          "displayName": "Ahmad Al-Rashidi",
+          "initials": "AA",
+          "isStaff": true
+        },
+        "csrfToken": "",
+        "logoutHref": "/accounts/logout/",
+        "navigation": {
+          "primary": [
+            {
+              "name": "Command Center",
+              "href": "/",
+              "active": true,
+              "icon": "layout-dashboard"
+            }
+          ],
+          "secondary": [
+            {
+              "name": "Settings",
+              "href": "/admin/",
+              "enabled": true,
+              "icon": "settings"
+            }
+          ]
+        },
+        "hero": {
+          "greeting": "Good evening, Ahmad Al-Rashidi",
+          "title": "BIM Nexus",
+          "subtitle": "Internal IT Operations Platform",
+          "tenant": "BIMPOS",
+          "searchPlaceholder": "Search assets, products, deliveries, suppliers, knowledge base..."
+        },
+        "kpis": [
+          {
+            "label": "Total Products",
+            "value": "2,847",
+            "detail": "catalogue items",
+            "trend": "+34 this week",
+            "tone": "neutral",
+            "icon": "database"
+          },
+          {
+            "label": "Available Stock",
+            "value": "1,923",
+            "detail": "ready for issue",
+            "trend": "-12 since yesterday",
+            "tone": "stock",
+            "icon": "layers"
+          },
+          {
+            "label": "Assets In Use",
+            "value": "3,612",
+            "detail": "deployed devices",
+            "trend": "+5 this week",
+            "tone": "neutral",
+            "icon": "cpu"
+          },
+          {
+            "label": "Low Stock Alerts",
+            "value": "23",
+            "detail": "require reorder",
+            "trend": "+4 since yesterday",
+            "tone": "warning",
+            "icon": "triangle-alert"
+          }
+        ],
+        "overview": [
+          {"label": "Sites", "value": "6", "detail": "active location", "tone": "blue"},
+          {"label": "Suppliers", "value": "34", "detail": "registered vendor", "tone": "purple"},
+          {"label": "Total Assets", "value": "3,847", "detail": "registered device", "tone": "green"},
+          {"label": "Knowledge Docs", "value": "148", "detail": "articles & guides", "tone": "yellow"},
+          {"label": "Product Categories", "value": "42", "detail": "catalogue sections", "tone": "orange"},
+          {"label": "Active Users", "value": "18", "detail": "BIMPOS staff", "tone": "blue"}
+        ],
+        "modules": [
+          {
+            "name": "BIM Stock",
+            "description": "Products, stock levels, categories",
+            "href": "/stock/",
+            "enabled": true,
+            "count": 2847,
+            "meta": "products",
+            "icon": "database",
+            "tone": "blue"
+          },
+          {
+            "name": "Operations",
+            "description": "Receiving, deliveries, movements",
+            "href": null,
+            "enabled": false,
+            "count": 49,
+            "meta": "events this month",
+            "icon": "trending-up",
+            "tone": "green"
+          },
+          {
+            "name": "Assets",
+            "description": "Hardware, devices, peripherals",
+            "href": null,
+            "enabled": false,
+            "count": 3847,
+            "meta": "registered",
+            "icon": "cpu",
+            "tone": "purple"
+          },
+          {
+            "name": "Knowledge Base",
+            "description": "Procedures, guides, documentation",
+            "href": null,
+            "enabled": false,
+            "count": 148,
+            "meta": "articles",
+            "icon": "book-open",
+            "tone": "yellow"
+          },
+          {
+            "name": "Reports",
+            "description": "Analytics, exports, summaries",
+            "href": null,
+            "enabled": false,
+            "count": null,
+            "meta": "Last run: today",
+            "icon": "bar-chart-3",
+            "tone": "orange"
+          }
+        ],
+        "quickActions": [
+          {
+            "label": "Add Product",
+            "href": "/admin/bim_stock/product/add/",
+            "enabled": true,
+            "description": "Register new item to catalogue",
+            "icon": "plus"
+          },
+          {
+            "label": "Receive Stock",
+            "href": "/admin/bim_stock/productunit/add/",
+            "enabled": true,
+            "description": "Record incoming stock receipt",
+            "icon": "download"
+          },
+          {
+            "label": "Create Delivery",
+            "href": null,
+            "enabled": false,
+            "description": "Initiate outbound delivery order",
+            "icon": "upload"
+          }
+        ],
+        "recentActivity": []
+      }
+    </script>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

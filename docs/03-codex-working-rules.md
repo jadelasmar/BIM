@@ -25,14 +25,20 @@ Do not explain every change unless asked.
 ## Project Rules
 
 - Product name: BIM Nexus.
+- Internal Django project package: `bim`.
+- Do not rename `bim` only for branding; user-facing naming should say BIM Nexus.
 - Active module: BIM Stock.
+- Business workflows should be added as separate Django apps/modules when they have their own data and process.
 - Keep BIM modular.
 - Work one session/task at a time.
-- Django is the source of truth.
+- Django is the backend, source of truth, auth layer, admin, and API provider.
 - Django admin must remain usable.
 - Use Django auth, groups, and permissions.
 - Do not build custom insecure authentication.
+- Do not add public sign-up; internal users are created by staff/admin users.
+- Keep internal user emails unique because email login maps one address to one account.
 - Do not remove Django admin.
+- Do not introduce a Node.js backend; Node.js is frontend build tooling only.
 - Preserve SKU logic unless explicitly asked.
 - Preserve current naming unless there is a clear migration reason.
 - Avoid unnecessary migrations.
@@ -78,6 +84,8 @@ After template/view/admin changes:
 - Current UI is Django templates and CSS.
 - No React app exists yet.
 - React should be introduced only in a dedicated setup session.
+- Tailwind CSS should be introduced with the React frontend setup, not as an incidental change.
+- Node/Vite frontend tooling should not change Django's role as backend/source of truth.
 - Figma UI should be inspected before implementation when a Figma URL or usable design asset is provided.
 - Match BIM Nexus branding: black, white, orange accent.
 - Build modern enterprise SaaS/admin screens.
