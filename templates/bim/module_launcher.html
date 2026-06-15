@@ -1,23 +1,26 @@
+{% load static %}
 <!doctype html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>BIM Nexus Command Center</title>
+    <script src="{% static 'bim/theme-init.js' %}"></script>
+    <link rel="stylesheet" href="{% static 'bim/theme.css' %}">
     <style>
         :root {
-            --accent: #f97316;
+            --accent: var(--bim-orange);
             --accent-soft: #fff7ed;
             --black: #111111;
-            --ink: #1f2937;
-            --muted: #6b7280;
-            --line: #e5e7eb;
-            --line-dark: #262626;
-            --page: #f4f5f7;
-            --surface: #ffffff;
-            --green: #15803d;
-            --red: #b91c1c;
-            --blue: #1d4ed8;
+            --ink: var(--bim-text);
+            --muted: var(--bim-muted);
+            --line: var(--bim-border);
+            --line-dark: var(--bim-border);
+            --page: var(--bim-page);
+            --surface: var(--bim-panel);
+            --green: var(--bim-green);
+            --red: var(--bim-red);
+            --blue: var(--bim-blue);
         }
 
         * {
@@ -29,7 +32,7 @@
             margin: 0;
             color: var(--ink);
             background: var(--page);
-            font-family: Arial, sans-serif;
+            font-family: var(--bim-font-family);
         }
 
         a {
@@ -431,12 +434,6 @@
             border-color: #bfdbfe;
             color: var(--blue);
             background: #eff6ff;
-        }
-
-        .badge.status-damaged {
-            border-color: #fecaca;
-            color: var(--red);
-            background: #fef2f2;
         }
 
         .badge.status-reserved {

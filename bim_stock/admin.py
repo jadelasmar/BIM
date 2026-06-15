@@ -2,7 +2,17 @@ from django.contrib import admin
 from django import forms
 from django.db.models import Count, Q
 from django.utils import timezone
-from .models import Product, Type, Category, Brand, ProductModel, Supplier, ProductUnit
+from .models import (
+    Brand,
+    Category,
+    DeliveryItem,
+    DeliveryRecord,
+    Product,
+    ProductModel,
+    ProductUnit,
+    Supplier,
+    Type,
+)
 
 
 # Type is created first in the product setup flow.
@@ -33,8 +43,10 @@ class ProductAdmin(admin.ModelAdmin):
         "available_quantity",
         "reserved_quantity",
         "sold_quantity",
-        "damaged_quantity",
         "returned_quantity",
+        "minimum_stock_level",
+        "reorder_stock_level",
+        "stock_alert",
         "product_type",
         "category",
         "brand",
@@ -55,6 +67,8 @@ class ProductAdmin(admin.ModelAdmin):
         "model",
         "sku",
         "barcode",
+        "minimum_stock_level",
+        "reorder_stock_level",
         "image",
         "crdate",
         "isactive",
@@ -85,13 +99,6 @@ class ProductAdmin(admin.ModelAdmin):
                 "units",
                 filter=Q(
                     units__status=ProductUnit.STATUS_SOLD,
-                    units__isactive=True,
-                ),
-            ),
-            damaged_unit_count=Count(
-                "units",
-                filter=Q(
-                    units__status=ProductUnit.STATUS_DAMAGED,
                     units__isactive=True,
                 ),
             ),
@@ -126,13 +133,17 @@ class ProductAdmin(admin.ModelAdmin):
     def sold_quantity(self, obj):
         return self.stock_quantity(obj, "sold_unit_count", "sold_units")
 
-    @admin.display(description="Damaged Qty", ordering="damaged_unit_count")
-    def damaged_quantity(self, obj):
-        return self.stock_quantity(obj, "damaged_unit_count", "damaged_units")
-
     @admin.display(description="Returned Qty", ordering="returned_unit_count")
     def returned_quantity(self, obj):
         return self.stock_quantity(obj, "returned_unit_count", "returned_units")
+
+    @admin.display(description="Stock Alert")
+    def stock_alert(self, obj):
+        if obj.is_critical_stock:
+            return "Critical"
+        if obj.is_low_stock:
+            return "Low"
+        return "-"
 
     @admin.display(description="Type", ordering="category__type__name")
     def product_type(self, obj):
@@ -254,3 +265,69 @@ class ProductUnitAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
+
+
+class DeliveryItemInline(admin.TabularInline):
+    model = DeliveryItem
+    extra = 0
+    autocomplete_fields = ("product_unit",)
+    readonly_fields = ("product", "crdate")
+    fields = ("product_unit", "product", "notes", "isactive", "crdate")
+
+
+@admin.register(DeliveryRecord)
+class DeliveryRecordAdmin(admin.ModelAdmin):
+    inlines = (DeliveryItemInline,)
+    list_display = (
+        "delivery_number",
+        "customer_name",
+        "receiver_name",
+        "delivery_date",
+        "status",
+        "unit_count",
+        "created_by",
+        "isactive",
+        "crdate",
+    )
+    search_fields = (
+        "delivery_number",
+        "customer_name",
+        "receiver_name",
+        "items__product_unit__serial_number",
+        "items__product__descript",
+        "items__product__sku",
+    )
+    list_filter = ("status", "delivery_date", "isactive")
+    readonly_fields = ("delivery_number", "crdate")
+    autocomplete_fields = ("created_by",)
+    ordering = ("-delivery_date", "-delivery_number")
+
+    fieldsets = (
+        (
+            "Delivery record",
+            {
+                "fields": (
+                    "delivery_number",
+                    "customer_name",
+                    "receiver_name",
+                    "delivery_date",
+                    "status",
+                    "created_by",
+                    "isactive",
+                )
+            },
+        ),
+        (
+            "Notes",
+            {
+                "fields": (
+                    "notes",
+                    "crdate",
+                )
+            },
+        ),
+    )
+
+    @admin.display(description="Units")
+    def unit_count(self, obj):
+        return obj.total_units

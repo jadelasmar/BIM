@@ -5,6 +5,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>BIM Nexus Command Center</title>
+    <script src="{% static 'bim/theme-init.js' %}"></script>
+    <link rel="stylesheet" href="{% static 'bim/theme.css' %}">
 </head>
 <body>
     <div id="bim-nexus-root"></div>
@@ -17,5 +19,6 @@
         <link rel="stylesheet" href="{% static 'frontend/assets/main.css' %}">
         <script type="module" src="{% static 'frontend/assets/index.js' %}"></script>
     {% endif %}
+    <script src="{% static 'bim/theme.js' %}"></script>
 </body>
 </html>

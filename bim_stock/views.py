@@ -20,8 +20,9 @@ def require_any_stock_view_permission(user):
 @login_required
 def dashboard(request):
     require_any_stock_view_permission(request.user)
+    active_products = Product.objects.filter(isactive=True)
     context = {
-        "total_products": Product.objects.filter(isactive=True).count(),
+        "total_products": active_products.count(),
         "available_units": ProductUnit.objects.filter(
             status=ProductUnit.STATUS_AVAILABLE,
             isactive=True,
@@ -30,10 +31,7 @@ def dashboard(request):
             status=ProductUnit.STATUS_SOLD,
             isactive=True,
         ).count(),
-        "damaged_units": ProductUnit.objects.filter(
-            status=ProductUnit.STATUS_DAMAGED,
-            isactive=True,
-        ).count(),
+        "low_stock_products": sum(1 for product in active_products if product.is_low_stock),
     }
 
     return render(request, "bim_stock/dashboard.html", context)

@@ -1,4 +1,5 @@
 from django.db import models
+from django.conf import settings
 from django.utils import timezone
 
 
@@ -75,6 +76,8 @@ class Product(models.Model):
     barcode = models.CharField(max_length=100, blank=True, null=True)
 
     image = models.ImageField(upload_to="products_images/", blank=True, null=True)
+    minimum_stock_level = models.PositiveIntegerField(default=0)
+    reorder_stock_level = models.PositiveIntegerField(default=0)
 
     crdate = models.DateTimeField(auto_now_add=True)
     isactive = models.BooleanField(default=True)
@@ -127,12 +130,24 @@ class Product(models.Model):
         return self.active_unit_count(ProductUnit.STATUS_SOLD)
 
     @property
-    def damaged_units(self):
-        return self.active_unit_count(ProductUnit.STATUS_DAMAGED)
-
-    @property
     def returned_units(self):
         return self.active_unit_count(ProductUnit.STATUS_RETURNED)
+
+    @property
+    def is_low_stock(self):
+        return self.reorder_stock_level > 0 and self.available_units <= self.reorder_stock_level
+
+    @property
+    def is_critical_stock(self):
+        return self.minimum_stock_level > 0 and self.available_units <= self.minimum_stock_level
+
+    @property
+    def stock_alert_tone(self):
+        if self.is_critical_stock:
+            return "critical"
+        if self.is_low_stock:
+            return "warning"
+        return "normal"
 
 
 # Supplier stores the company or person that stock units are bought from.
@@ -149,7 +164,6 @@ class ProductUnit(models.Model):
     STATUS_AVAILABLE = "available"
     STATUS_RESERVED = "reserved"
     STATUS_SOLD = "sold"
-    STATUS_DAMAGED = "damaged"
     STATUS_RETURNED = "returned"
     STATUS_INACTIVE = "inactive"
 
@@ -157,7 +171,6 @@ class ProductUnit(models.Model):
         (STATUS_AVAILABLE, "Available"),
         (STATUS_RESERVED, "Reserved"),
         (STATUS_SOLD, "Sold"),
-        (STATUS_DAMAGED, "Damaged"),
         (STATUS_RETURNED, "Returned"),
         (STATUS_INACTIVE, "Inactive"),
     ]
@@ -192,7 +205,6 @@ class ProductUnit(models.Model):
         elif self.status in (
             self.STATUS_AVAILABLE,
             self.STATUS_RESERVED,
-            self.STATUS_DAMAGED,
             self.STATUS_INACTIVE,
         ):
             self.sold_date = None
@@ -203,3 +215,96 @@ class ProductUnit(models.Model):
 
     def __str__(self):
         return f"{self.product} - {self.serial_number}"
+
+
+class DeliveryRecord(models.Model):
+    STATUS_DRAFT = "draft"
+    STATUS_COMPLETED = "completed"
+    STATUS_CANCELLED = "cancelled"
+
+    STATUS_CHOICES = [
+        (STATUS_DRAFT, "Draft"),
+        (STATUS_COMPLETED, "Completed"),
+        (STATUS_CANCELLED, "Cancelled"),
+    ]
+
+    delivery_number = models.CharField(
+        max_length=32,
+        unique=True,
+        blank=True,
+        editable=False,
+    )
+    customer_name = models.CharField(max_length=150)
+    receiver_name = models.CharField(max_length=150, blank=True)
+    delivery_date = models.DateField(default=timezone.localdate)
+    notes = models.TextField(blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_COMPLETED,
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="stock_delivery_records",
+    )
+    crdate = models.DateTimeField(auto_now_add=True)
+    isactive = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("-delivery_date", "-delivery_number")
+
+    def save(self, *args, **kwargs):
+        if not self.delivery_number:
+            year = (self.delivery_date or timezone.localdate()).year
+            prefix = f"DLV-{year}-"
+            latest = (
+                DeliveryRecord.objects.filter(delivery_number__startswith=prefix)
+                .order_by("-delivery_number")
+                .first()
+            )
+            next_number = 1
+            if latest:
+                try:
+                    next_number = int(latest.delivery_number.rsplit("-", 1)[1]) + 1
+                except (IndexError, ValueError):
+                    next_number = latest.pk + 1
+            self.delivery_number = f"{prefix}{next_number:04d}"
+        super().save(*args, **kwargs)
+
+    @property
+    def total_units(self):
+        return self.items.filter(isactive=True).count()
+
+    def __str__(self):
+        return self.delivery_number or "Delivery"
+
+
+class DeliveryItem(models.Model):
+    delivery = models.ForeignKey(
+        DeliveryRecord,
+        on_delete=models.CASCADE,
+        related_name="items",
+    )
+    product_unit = models.OneToOneField(
+        ProductUnit,
+        on_delete=models.PROTECT,
+        related_name="delivery_item",
+    )
+    product = models.ForeignKey(Product, on_delete=models.PROTECT)
+    notes = models.TextField(blank=True)
+    crdate = models.DateTimeField(auto_now_add=True)
+    isactive = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("product__descript", "product_unit__serial_number")
+
+    def save(self, *args, **kwargs):
+        if self.product_unit_id and not self.product_id:
+            self.product = self.product_unit.product
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.delivery} - {self.product_unit.serial_number}"

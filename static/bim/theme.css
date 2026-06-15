@@ -1,0 +1,42 @@
+:root {
+    --bim-font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --bim-orange: #f59e0b;
+    --bim-orange-hover: #ff9f1a;
+    --bim-green: #00c896;
+    --bim-red: #ff3b4f;
+    --bim-blue: #38a3ff;
+    --bim-purple: #8b5cf6;
+    --bim-page: #070707;
+    --bim-panel: #161616;
+    --bim-panel-2: #1f1f1f;
+    --bim-border: #2a2a2a;
+    --bim-border-soft: #222222;
+    --bim-text: #f4f4f5;
+    --bim-muted: #a1a1aa;
+    color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+    --bim-page: #f3f4f6;
+    --bim-panel: #ffffff;
+    --bim-panel-2: #f8fafc;
+    --bim-border: #dde3ea;
+    --bim-border-soft: #e5e7eb;
+    --bim-text: #111827;
+    --bim-text-secondary: #4b5563;
+    --bim-muted: #6b7280;
+    --bim-sidebar: #ffffff;
+    --bim-hover-surface: #f9fafb;
+    --bim-table-header: #f8fafc;
+    --bim-card-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px rgba(15, 23, 42, 0.04);
+    color-scheme: light;
+}
+
+html,
+body,
+input,
+button,
+select,
+textarea {
+    font-family: var(--bim-font-family);
+}

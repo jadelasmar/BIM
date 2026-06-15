@@ -112,7 +112,6 @@ class UsernameAndPasswordSetupForm(SetPasswordForm):
     def __init__(self, user, *args, **kwargs):
         super().__init__(user, *args, **kwargs)
         setup_username = make_setup_username(user)
-        self.fields["username"].initial = setup_username
         self.fields["first_name"].initial = user.first_name
         self.fields["last_name"].initial = user.last_name
 

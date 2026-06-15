@@ -34,7 +34,7 @@ SECRET_KEY = 'django-insecure-*85%i(ofy9ff93u84@&*-6)w$wy0b)9cr7ft^^rya@s=blcwao
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ["192.168.10.218", "localhost", "127.0.0.1"]
+ALLOWED_HOSTS = ["192.168.1.101", "localhost", "127.0.0.1"]
 
 
 # Application definition
@@ -46,6 +46,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+
+    'rest_framework',
 
     'bim_accounts',
     'bim_stock',
@@ -157,3 +159,12 @@ BIM_VITE_DEV_SERVER = os.environ.get(
     "BIM_VITE_DEV_SERVER",
     "",
 )
+
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.SessionAuthentication",
+    ],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "rest_framework.permissions.IsAuthenticated",
+    ],
+}

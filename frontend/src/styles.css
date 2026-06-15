@@ -3,11 +3,16 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: dark;
   font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    var(--bim-font-family),
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
     sans-serif;
-  background: #070707;
+  background: var(--bim-page);
 }
 
 * {
@@ -18,7 +23,85 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background: #070707;
+  background: var(--bim-page);
+}
+
+.bim-sidebar-logo-light {
+  display: none;
+}
+
+[data-theme="light"] .bim-sidebar-logo-dark {
+  display: none;
+}
+
+[data-theme="light"] .bim-sidebar-logo-light {
+  display: block;
+}
+
+[data-theme="light"] .bg-black,
+[data-theme="light"] .bg-black\/30 {
+  background-color: var(--bim-panel);
+}
+
+[data-theme="light"] .bg-black\/95 {
+  background-color: var(--bim-sidebar);
+}
+
+[data-theme="light"] .bg-zinc-800,
+[data-theme="light"] .bg-zinc-800\/80 {
+  background-color: var(--bim-table-header);
+}
+
+[data-theme="light"] .bg-zinc-900\/70 {
+  background-color: var(--bim-hover-surface);
+}
+
+[data-theme="light"] .bg-nexus-panel2 {
+  background-color: var(--bim-panel-2);
+}
+
+[data-theme="light"] .text-white,
+[data-theme="light"] .text-zinc-100,
+[data-theme="light"] .text-zinc-200,
+[data-theme="light"] .text-zinc-300 {
+  color: var(--bim-text);
+}
+
+[data-theme="light"] .text-zinc-400 {
+  color: var(--bim-text-secondary);
+}
+
+[data-theme="light"] .text-zinc-500,
+[data-theme="light"] .text-zinc-600 {
+  color: var(--bim-muted);
+}
+
+[data-theme="light"] .divide-nexus-line > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--bim-border);
+}
+
+[data-theme="light"] .shadow-panel {
+  box-shadow: var(--bim-card-shadow);
+}
+
+[data-theme="light"] .bg-nexus-panel.border,
+[data-theme="light"] .bg-nexus-panel.border-nexus-line {
+  box-shadow: var(--bim-card-shadow);
+}
+
+[data-theme="light"] table tbody tr {
+  border-color: var(--bim-border-soft);
+}
+
+[data-theme="light"] .hover\:text-white:hover,
+[data-theme="light"] .hover\:text-zinc-200:hover {
+  color: var(--bim-text);
+}
+
+[data-theme="light"] .hover\:bg-nexus-panel:hover,
+[data-theme="light"] .hover\:bg-nexus-panel2:hover,
+[data-theme="light"] .hover\:bg-zinc-900\/70:hover {
+  background-color: var(--bim-hover-surface);
 }
 
 summary::-webkit-details-marker {

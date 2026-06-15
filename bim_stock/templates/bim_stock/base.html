@@ -1,3 +1,4 @@
+{% load static %}
 <!doctype html>
 <html lang="en">
 <head>
@@ -5,25 +6,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     {# Child templates can replace the browser tab title. #}
     <title>{% block title %}BIM Stock{% endblock %}</title>
+    <script src="{% static 'bim/theme-init.js' %}"></script>
+    <link rel="stylesheet" href="{% static 'bim/theme.css' %}">
     <style>
         /* Shared page styles for all custom BIM Stock pages. */
         :root {
-            --border: #d9e2ec;
-            --border-soft: #e4e7eb;
-            --text: #1f2933;
-            --muted: #52606d;
-            --blue: #005ea8;
-            --blue-dark: #004b85;
-            --green: #168a4a;
-            --amber: #b7791f;
-            --red: #c53030;
-            --surface: #ffffff;
-            --page: #f5f7fa;
+            --border: var(--bim-border);
+            --border-soft: var(--bim-border-soft);
+            --text: var(--bim-text);
+            --muted: var(--bim-muted);
+            --blue: var(--bim-blue);
+            --blue-dark: #1d7fcc;
+            --green: var(--bim-green);
+            --amber: var(--bim-orange);
+            --red: var(--bim-red);
+            --surface: var(--bim-panel);
+            --surface-2: var(--bim-panel-2);
+            --page: var(--bim-page);
         }
 
         body {
             margin: 0;
-            font-family: Arial, sans-serif;
+            font-family: var(--bim-font-family);
             color: var(--text);
             background: var(--page);
         }
@@ -75,7 +79,7 @@
             border-left: 0;
             border-right: 0;
             border-top: 0;
-            color: #334e68;
+            color: var(--muted);
             background: transparent;
             font-size: 14px;
             font-weight: 700;
@@ -156,7 +160,7 @@
 
         .button-secondary {
             color: var(--blue);
-            background: #ffffff;
+            background: var(--surface);
         }
 
         .button-secondary:hover {
@@ -191,7 +195,7 @@
             border-top-color: var(--amber);
         }
 
-        .metric.is-damaged {
+        .metric.is-low-stock {
             border-top-color: var(--red);
         }
 
@@ -317,7 +321,7 @@
             border: 1px solid var(--border);
             border-radius: 999px;
             color: var(--muted);
-            background: #ffffff;
+            background: var(--surface);
             font-size: 13px;
             font-weight: 700;
             white-space: nowrap;
@@ -326,26 +330,20 @@
         .status-available {
             border-color: #b7e4c7;
             color: var(--green);
-            background: #f0fff4;
+            background: var(--surface-2);
         }
 
         .status-reserved {
             border-color: #fbd38d;
             color: var(--amber);
-            background: #fffaf0;
+            background: var(--surface-2);
         }
 
         .status-sold,
         .status-returned {
             border-color: #bee3f8;
             color: var(--blue);
-            background: #ebf8ff;
-        }
-
-        .status-damaged {
-            border-color: #feb2b2;
-            color: var(--red);
-            background: #fff5f5;
+            background: var(--surface-2);
         }
 
         .detail-grid {

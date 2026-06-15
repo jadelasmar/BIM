@@ -4,6 +4,9 @@ asgiref==3.11.1
 # Main web framework for this project.
 Django==6.0.4
 
+# JSON API layer for React operational screens.
+djangorestframework==3.17.1
+
 # Required by Django ImageField for product images.
 pillow==12.2.0
 

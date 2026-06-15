@@ -24,6 +24,13 @@ from . import views
 
 urlpatterns = [
     path('', views.module_launcher, name='module_launcher'),
+    path('operations/', views.module_launcher, name='operations'),
+    path('inventory/', views.module_launcher, name='inventory'),
+    path('inventory/products/new/', views.module_launcher, name='inventory_add_product'),
+    path('inventory/products/<int:pk>/', views.module_launcher, name='inventory_product_detail'),
+    path('inventory/receiving/new/', views.module_launcher, name='inventory_receive_stock'),
+    path('inventory/deliveries/new/', views.module_launcher, name='inventory_create_delivery'),
+    path('settings/', views.module_launcher, name='settings'),
     path(
         'accounts/login/',
         LoginView.as_view(
@@ -35,5 +42,6 @@ urlpatterns = [
     path('accounts/', include('bim_accounts.urls')),
     path('accounts/', include('django.contrib.auth.urls')),
     path('admin/', admin.site.urls),
+    path('api/stock/', include('bim_stock.api_urls')),
     path('stock/', include('bim_stock.urls')),
 ]
