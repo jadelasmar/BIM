@@ -1,8 +1,11 @@
 import {
   BarChart3,
+  ArrowRightLeft,
   BookOpen,
   Box,
+  CheckCircle2,
   ClipboardList,
+  Clock3,
   Cpu,
   Database,
   Download,
@@ -11,22 +14,30 @@ import {
   Layers,
   MoreHorizontal,
   Package,
+  PackageCheck,
+  PackagePlus,
+  PackageX,
   Plus,
   RotateCcw,
   Save,
   Settings,
   ShieldAlert,
+  ShoppingBag,
   Truck,
   TrendingUp,
   TriangleAlert,
-  Upload
+  Upload,
+  UserCheck
 } from "lucide-react";
 
 export const iconComponents = {
+  "arrow-right-left": ArrowRightLeft,
   "bar-chart-3": BarChart3,
   "book-open": BookOpen,
   box: Box,
+  "check-circle-2": CheckCircle2,
   clipboard: ClipboardList,
+  "clock-3": Clock3,
   cpu: Cpu,
   database: Database,
   download: Download,
@@ -35,35 +46,75 @@ export const iconComponents = {
   layers: Layers,
   more: MoreHorizontal,
   package: Package,
+  "package-check": PackageCheck,
+  "package-plus": PackagePlus,
+  "package-x": PackageX,
   plus: Plus,
   receiving: Download,
   reset: RotateCcw,
   save: Save,
   settings: Settings,
   "shield-alert": ShieldAlert,
+  "shopping-bag": ShoppingBag,
   suppliers: Handshake,
   "trending-up": TrendingUp,
   "triangle-alert": TriangleAlert,
-  upload: Upload
+  upload: Upload,
+  "user-check": UserCheck
 };
 
 export const toneClasses = {
   blue: "bg-blue-500/10 text-nexus-blue",
+  cyan: "bg-cyan-500/10 text-cyan-400",
   danger: "bg-red-500/10 text-nexus-red",
   green: "bg-emerald-500/10 text-nexus-green",
+  gray: "bg-zinc-500/10 text-zinc-400",
+  indigo: "bg-indigo-500/10 text-indigo-400",
   neutral: "bg-zinc-700/60 text-zinc-300",
   orange: "bg-amber-500/10 text-nexus-orange",
   purple: "bg-violet-500/10 text-nexus-purple",
   red: "bg-red-500/10 text-nexus-red",
+  sky: "bg-sky-500/10 text-sky-400",
   stock: "bg-zinc-700/60 text-zinc-300",
   warning: "bg-amber-500/10 text-nexus-orange",
   yellow: "bg-yellow-500/10 text-yellow-400"
 };
 
 export const statusStyles = {
-  available: "bg-emerald-500/15 text-nexus-green",
-  inactive: "bg-red-500/20 text-red-300",
-  reserved: "bg-blue-500/15 text-nexus-blue",
-  returned: "bg-amber-500/15 text-nexus-orange",
-  sold: "bg-zinc-600/40 text-zinc-300"
+  available: "bg-green-500/15 text-green-400",
+  damaged: "bg-red-500/15 text-red-400",
+  delivered: "bg-blue-500/15 text-blue-400",
+  inactive: "bg-zinc-500/15 text-zinc-400",
+  issued: "bg-indigo-500/15 text-indigo-400",
+  low_stock: "bg-amber-500/15 text-amber-400",
+  out_of_stock: "bg-red-500/15 text-red-400",
+  received: "bg-emerald-500/15 text-emerald-400",
+  reserved: "bg-amber-500/15 text-amber-400",
+  returned: "bg-cyan-500/15 text-cyan-400",
+  sold: "bg-purple-500/15 text-purple-400",
+  transfer: "bg-sky-500/15 text-sky-400"
+};
+
+export const statusMeta = {
+  active: { icon: "check-circle-2", className: statusStyles.available },
+  available: { icon: "check-circle-2", className: statusStyles.available },
+  damaged: { icon: "package-x", className: statusStyles.damaged },
+  delivered: { icon: "package-check", className: statusStyles.delivered },
+  inactive: { icon: "package-x", className: statusStyles.inactive },
+  issued: { icon: "user-check", className: statusStyles.issued },
+  low_stock: { icon: "triangle-alert", className: statusStyles.low_stock },
+  out_of_stock: { icon: "package-x", className: statusStyles.out_of_stock },
+  received: { icon: "package-plus", className: statusStyles.received },
+  reserved: { icon: "clock-3", className: statusStyles.reserved },
+  returned: { icon: "reset", className: statusStyles.returned },
+  sold: { icon: "shopping-bag", className: statusStyles.sold },
+  transfer: { icon: "arrow-right-left", className: statusStyles.transfer }
+};
+
+export const workflowMeta = {
+  add_product: { icon: "plus", tone: "blue" },
+  receive_stock: { icon: "download", tone: "green" },
+  create_delivery: { icon: "delivery", tone: "indigo" },
+  add_supplier: { icon: "suppliers", tone: "purple" },
+  stock_movement: { icon: "trending-up", tone: "neutral" }
 };

@@ -5,7 +5,7 @@ UI_TOKENS = {
         "tone": "blue",
     },
     "inventory": {
-        "name": "Inventory",
+        "name": "BIM Stock",
         "icon": "database",
         "tone": "blue",
     },
@@ -19,6 +19,11 @@ UI_TOKENS = {
         "icon": "settings",
         "tone": "neutral",
     },
+    "administration": {
+        "name": "Administration",
+        "icon": "settings",
+        "tone": "neutral",
+    },
     "total_products": {
         "label": "Total Products",
         "icon": "database",
@@ -29,9 +34,9 @@ UI_TOKENS = {
         "icon": "layers",
         "tone": "green",
     },
-    "critical_stock": {
-        "label": "Critical Stock",
-        "icon": "shield-alert",
+    "out_of_stock": {
+        "label": "Out of Stock Products",
+        "icon": "package-x",
         "tone": "danger",
     },
     "low_stock": {
@@ -44,10 +49,10 @@ UI_TOKENS = {
         "icon": "suppliers",
         "tone": "purple",
     },
-    "sold_units": {
-        "label": "Sold Units",
+    "delivery_records": {
+        "label": "Delivery Records",
         "icon": "delivery",
-        "tone": "orange",
+        "tone": "indigo",
     },
     "new_stock_units": {
         "label": "New Stock Units",
@@ -84,7 +89,12 @@ UI_TOKENS = {
     "create_delivery": {
         "label": "Create Delivery",
         "icon": "delivery",
-        "tone": "orange",
+        "tone": "indigo",
+    },
+    "add_supplier": {
+        "label": "Add Supplier",
+        "icon": "suppliers",
+        "tone": "purple",
     },
     "stock_movement": {
         "label": "Stock Movement",

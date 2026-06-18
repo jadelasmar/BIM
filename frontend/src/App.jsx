@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   ChevronRight,
-  Download,
   Edit3,
   Eye,
   Filter,
   LayoutDashboard,
   MoreHorizontal,
+  Moon,
   Package,
   Plus,
   RefreshCw,
@@ -14,13 +14,13 @@ import {
   Save,
   Search,
   Settings,
-  Truck,
+  Sun,
   X
 } from "lucide-react";
 
 import logoPrimary from "./assets/brand/logo-primary.png";
 import logoWhite from "./assets/brand/logo-white.png";
-import { iconComponents, statusStyles, toneClasses } from "./uiRegistry";
+import { iconComponents, statusMeta, toneClasses, workflowMeta } from "./uiRegistry";
 
 function Icon({ name, className = "h-4 w-4" }) {
   const Component = iconComponents[name] || LayoutDashboard;
@@ -35,7 +35,40 @@ function formatCount(value) {
   return typeof value === "number" ? value.toLocaleString() : value;
 }
 
+function greetingPeriodForHour(hour) {
+  if (hour >= 5 && hour < 12) {
+    return "Good morning";
+  }
+  if (hour >= 12 && hour < 17) {
+    return "Good afternoon";
+  }
+  if (hour >= 17 && hour < 22) {
+    return "Good evening";
+  }
+  return "Good night";
+}
+
+function browserGreeting(name) {
+  return `${greetingPeriodForHour(new Date().getHours())}, ${name || "User"}`;
+}
+
+const DEFAULT_THEME_STORAGE_KEY = "bim-nexus-theme";
+
+function currentTheme() {
+  return document.documentElement.dataset.theme === "light" ? "light" : "dark";
+}
+
+function applyTheme(nextTheme, storageKey = DEFAULT_THEME_STORAGE_KEY) {
+  const normalizedTheme = nextTheme === "light" ? "light" : "dark";
+  document.documentElement.dataset.theme = normalizedTheme;
+  window.localStorage.setItem(storageKey, normalizedTheme);
+  document.dispatchEvent(new CustomEvent("bim-nexus-theme-change", { detail: normalizedTheme }));
+  return normalizedTheme;
+}
+
 function Shell({ data, children }) {
+  const secondaryNavigation = data.navigation.secondary || [];
+
   return (
     <div className="min-h-screen bg-nexus-page text-zinc-100 lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
       <aside className="border-b border-nexus-line bg-black/95 px-4 py-5 lg:min-h-screen lg:border-b-0 lg:border-r">
@@ -61,15 +94,15 @@ function Shell({ data, children }) {
               <a
                 key={item.name}
                 href={item.href}
-                className={`flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-semibold ${
+                className={`group flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-semibold ${
                   item.active
                     ? "border border-nexus-line bg-nexus-panel text-white"
-                    : "text-zinc-400 hover:bg-nexus-panel hover:text-white"
+                    : "text-zinc-400 hover:bg-nexus-panel hover:text-zinc-200"
                 }`}
               >
                 <Icon
                   name={item.icon}
-                  className={`h-4 w-4 ${item.active ? "text-nexus-orange" : "text-zinc-500"}`}
+                  className={`h-4 w-4 ${item.active ? "text-nexus-orange" : "text-zinc-500 group-hover:text-zinc-300"}`}
                 />
                 {item.name}
               </a>
@@ -77,61 +110,156 @@ function Shell({ data, children }) {
           )}
         </nav>
 
-        <div className="my-5 h-px bg-nexus-line" />
+        {secondaryNavigation.length ? (
+          <>
+            <div className="my-5 h-px bg-nexus-line" />
 
-        <nav className="space-y-2" aria-label="Settings navigation">
-          {data.navigation.secondary.map((item) =>
-            item.enabled && item.href ? (
-              <a
-                key={item.name}
-                href={item.href}
-                className={`flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm font-semibold ${
-                  item.active
-                    ? "border border-nexus-line bg-nexus-panel text-white"
-                    : "text-zinc-300 hover:bg-nexus-panel"
-                }`}
-              >
-                <Icon
-                  name={item.icon}
-                  className={`h-4 w-4 ${item.active ? "text-nexus-orange" : "text-zinc-500"}`}
-                />
-                {item.name}
-              </a>
-            ) : (
-              <span
-                key={item.name}
-                className="flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm font-semibold text-zinc-600"
-              >
-                <Icon name={item.icon} className="h-4 w-4" />
-                {item.name}
-              </span>
-            )
-          )}
-        </nav>
+            <nav className="space-y-2" aria-label="Secondary navigation">
+              {secondaryNavigation.map((item) =>
+                item.enabled && item.href ? (
+                  <a
+                    key={item.name}
+                    href={item.href}
+                    className={`group flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm font-semibold ${
+                      item.active
+                        ? "border border-nexus-line bg-nexus-panel text-white"
+                        : "text-zinc-400 hover:bg-nexus-panel hover:text-zinc-200"
+                    }`}
+                  >
+                    <Icon
+                      name={item.icon}
+                      className={`h-4 w-4 ${item.active ? "text-nexus-orange" : "text-zinc-500 group-hover:text-zinc-300"}`}
+                    />
+                    {item.name}
+                  </a>
+                ) : (
+                  <span
+                    key={item.name}
+                    className="flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm font-semibold text-zinc-600"
+                    title={item.detail || undefined}
+                  >
+                    <Icon name={item.icon} className="h-4 w-4" />
+                    {item.name}
+                  </span>
+                )
+              )}
+            </nav>
+          </>
+        ) : null}
       </aside>
 
-      <main className="min-w-0 px-4 py-5 sm:px-6 lg:px-7">{children}</main>
+      <main className="min-w-0 px-4 py-5 sm:px-6 lg:px-7">
+        <Topbar data={data} />
+        {children}
+      </main>
     </div>
   );
 }
 
-function CommandCenter({ data }) {
+function Topbar({ data }) {
   return (
-    <Shell data={data}>
-      <Header data={data} />
-      <KpiGrid items={data.kpis} />
-      <Overview items={data.overview} />
-      <Modules modules={data.modules} />
+    <div className="mb-5 flex flex-wrap items-center justify-end gap-3 border-b border-nexus-line pb-4 text-xs">
+      <ThemeToggle storageKey={data.theme?.storageKey} />
+      <QuickAddMenu actions={data.quickActions || []} />
+      <div className="hidden items-center gap-2 rounded-md border border-nexus-line px-2 py-1.5 sm:inline-flex">
+        <span className="grid h-6 w-6 place-items-center rounded-md bg-nexus-orange/10 text-xs font-bold text-nexus-orange">
+          {data.user?.initials || "U"}
+        </span>
+        <span className="max-w-36 truncate text-xs font-semibold text-zinc-300">
+          {data.user?.displayName || data.user?.username || "User"}
+        </span>
+      </div>
+      <LogoutForm data={data} />
+    </div>
+  );
+}
+
+function ThemeToggle({ storageKey = DEFAULT_THEME_STORAGE_KEY }) {
+  const [theme, setThemeState] = useState(() => currentTheme());
+
+  useEffect(() => {
+    function handleThemeChange(event) {
+      setThemeState(event.detail === "light" ? "light" : "dark");
+    }
+
+    document.addEventListener("bim-nexus-theme-change", handleThemeChange);
+    return () => document.removeEventListener("bim-nexus-theme-change", handleThemeChange);
+  }, []);
+
+  const isLight = theme === "light";
+
+  return (
+    <button
+      type="button"
+      onClick={() => setThemeState(applyTheme(isLight ? "dark" : "light", storageKey))}
+      className="inline-flex h-9 items-center gap-2 rounded-md border border-nexus-line px-3 font-semibold text-zinc-200 hover:bg-nexus-panel"
+      aria-label="Toggle dark and light mode"
+      title="Toggle dark and light mode"
+    >
+      {isLight ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
+      {isLight ? "Light" : "Dark"}
+    </button>
+  );
+}
+
+function CommandCenter({ data }) {
+  const [dashboardData, setDashboardData] = useState(data);
+  const commandCenterEndpoint = data.api?.commandCenter;
+  const pollIntervalMs = Number(data.pollIntervalMs) || 60000;
+
+  useEffect(() => {
+    if (!commandCenterEndpoint) {
+      return undefined;
+    }
+
+    let isActive = true;
+
+    async function refreshDashboardData() {
+      if (document.hidden) {
+        return;
+      }
+
+      try {
+        const response = await fetch(commandCenterEndpoint, {
+          headers: { Accept: "application/json" }
+        });
+
+        if (!response.ok) {
+          return;
+        }
+
+        const nextData = await response.json();
+        if (isActive) {
+          setDashboardData(nextData);
+        }
+      } catch {
+        // Keep the current dashboard data if a background refresh fails.
+      }
+    }
+
+    const intervalId = window.setInterval(refreshDashboardData, pollIntervalMs);
+    return () => {
+      isActive = false;
+      window.clearInterval(intervalId);
+    };
+  }, [commandCenterEndpoint, pollIntervalMs]);
+
+  return (
+    <Shell data={dashboardData}>
+      <Header data={dashboardData} />
+      <KpiGrid items={dashboardData.kpis} />
+      <Overview items={dashboardData.overview} />
+      <Modules modules={dashboardData.modules} />
 
       <section className="mt-4 grid gap-4 xl:grid-cols-[260px_minmax(0,1fr)]">
-        <QuickActions actions={data.quickActions} />
-        <RecentActivity items={data.recentActivity} />
+        <QuickActions actions={dashboardData.quickActions} />
+        <RecentActivity items={dashboardData.recentActivity} />
       </section>
 
       <section className="mt-4 grid gap-4 xl:grid-cols-3">
-        <LowStockPanel />
-        <RecentDeliveries />
-        <RecentReceiving />
+        <LowStockPanel items={dashboardData.lowStockAlerts} />
+        <RecentDeliveries items={dashboardData.recentDeliveries} />
+        <RecentReceiving items={dashboardData.recentReceiving} />
       </section>
     </Shell>
   );
@@ -139,15 +267,19 @@ function CommandCenter({ data }) {
 
 function SettingsPage({ data }) {
   const storageKey = data.theme?.storageKey || "bim-nexus-theme";
-  const [theme, setThemeState] = useState(() =>
-    document.documentElement.dataset.theme === "light" ? "light" : "dark"
-  );
+  const [theme, setThemeState] = useState(() => currentTheme());
+
+  useEffect(() => {
+    function handleThemeChange(event) {
+      setThemeState(event.detail === "light" ? "light" : "dark");
+    }
+
+    document.addEventListener("bim-nexus-theme-change", handleThemeChange);
+    return () => document.removeEventListener("bim-nexus-theme-change", handleThemeChange);
+  }, []);
 
   function setTheme(nextTheme) {
-    const normalizedTheme = nextTheme === "light" ? "light" : "dark";
-    document.documentElement.dataset.theme = normalizedTheme;
-    window.localStorage.setItem(storageKey, normalizedTheme);
-    setThemeState(normalizedTheme);
+    setThemeState(applyTheme(nextTheme, storageKey));
   }
 
   return (
@@ -189,7 +321,7 @@ function SettingsPage({ data }) {
           ))}
         </div>
 
-        {data.user?.isStaff ? (
+        {data.user?.canAccessAdmin ? (
           <a
             href="/admin/"
             className="mt-5 inline-flex h-10 items-center rounded-md border border-nexus-line px-4 text-sm font-semibold text-zinc-200 hover:bg-nexus-panel2"
@@ -209,24 +341,24 @@ function OperationsPage({ data }) {
       detail: "Register incoming inventory units.",
       href: data.routes.receiveStock,
       enabled: data.quickActions.some((action) => action.label === "Receive Stock" && action.enabled),
-      icon: "download",
-      tone: "green"
+      icon: workflowMeta.receive_stock.icon,
+      tone: workflowMeta.receive_stock.tone
     },
     {
       title: "Create Delivery",
       detail: "Dispatch available stock units.",
       href: data.routes.createDelivery,
       enabled: data.quickActions.some((action) => action.label === "Create Delivery" && action.enabled),
-      icon: "delivery",
-      tone: "orange"
+      icon: workflowMeta.create_delivery.icon,
+      tone: workflowMeta.create_delivery.tone
     },
     {
       title: "Stock Movement",
       detail: "Manual adjustments and exceptions.",
       href: null,
       enabled: false,
-      icon: "trending-up",
-      tone: "neutral"
+      icon: workflowMeta.stock_movement.icon,
+      tone: workflowMeta.stock_movement.tone
     }
   ];
 
@@ -274,12 +406,24 @@ function OperationsPage({ data }) {
 }
 
 function Header({ data }) {
+  const [greeting, setGreeting] = useState(() => browserGreeting(data.hero.greetingName));
+
+  useEffect(() => {
+    function updateGreeting() {
+      setGreeting(browserGreeting(data.hero.greetingName));
+    }
+
+    updateGreeting();
+    const intervalId = window.setInterval(updateGreeting, 60000);
+    return () => window.clearInterval(intervalId);
+  }, [data.hero.greetingName]);
+
   return (
-    <header className="flex flex-col gap-4 pb-5 xl:flex-row xl:items-start xl:justify-between">
+    <header className="pb-5">
       <div className="min-w-0">
         <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">
           <span className="h-2 w-2 rounded-full border border-nexus-blue" />
-          {data.hero.greeting}
+          {greeting}
         </p>
         <h1 className="mt-2 text-2xl font-bold tracking-tight text-white">{data.hero.title}</h1>
         <p className="mt-1 text-sm text-zinc-400">
@@ -294,15 +438,6 @@ function Header({ data }) {
             placeholder={data.hero.searchPlaceholder}
           />
         </label>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3 text-xs">
-        <button className="inline-flex h-9 items-center gap-2 rounded-md px-2 font-semibold text-zinc-200 hover:bg-nexus-panel">
-          <RefreshCw className="h-4 w-4" aria-hidden="true" />
-          Refresh
-        </button>
-        <QuickAddMenu actions={data.quickActions} />
-        <LogoutForm data={data} />
       </div>
     </header>
   );
@@ -341,7 +476,7 @@ function InventoryPage({ data }) {
           ]);
 
         if (!productsResponse.ok || !summaryResponse.ok) {
-          throw new Error("Inventory API request failed.");
+          throw new Error("BIM Stock API request failed.");
         }
 
         const productData = await productsResponse.json();
@@ -371,6 +506,7 @@ function InventoryPage({ data }) {
     [products, selectedId]
   );
   const lowStockCount = products.filter((product) => product.is_low_stock || product.is_critical_stock).length;
+  const outOfStockCount = products.filter((product) => product.available_units === 0).length;
   const inactiveCount = products.filter((product) => !product.isactive || product.available_units === 0).length;
 
   return (
@@ -383,12 +519,11 @@ function InventoryPage({ data }) {
             <InventoryMetric label="Available Stock" value={summary?.available_units ?? 0} detail="units ready to use" icon="layers" />
             <InventoryMetric label="Reserved Stock" value={summary?.reserved_units ?? 0} detail="pending allocation" icon="box" />
             <InventoryMetric
-              label="Low Stock Alerts"
-              value={summary?.low_stock_products ?? 0}
-              detail="products below threshold"
-              icon="triangle-alert"
-              alert={(summary?.critical_stock_products ?? 0) > 0}
-              warning={(summary?.low_stock_products ?? 0) > 0}
+              label="Out of Stock"
+              value={outOfStockCount}
+              detail="products with no available units"
+              icon="package-x"
+              alert={outOfStockCount > 0}
             />
           </section>
 
@@ -451,12 +586,12 @@ function InventoryHeader({ actions }) {
   return (
     <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
       <div>
-        <h1 className="text-2xl font-bold text-white">Inventory</h1>
+        <h1 className="text-2xl font-bold text-white">BIM Stock</h1>
         <p className="mt-1 text-sm text-zinc-400">Manage products and stock availability.</p>
       </div>
       <div className="flex items-center gap-3 text-sm">
         <button className="inline-flex h-9 items-center gap-2 rounded-md px-3 font-semibold text-zinc-200 hover:bg-nexus-panel">
-          <Download className="h-4 w-4" />
+          <Icon name="upload" className="h-4 w-4" />
           Export
         </button>
         {addProduct?.enabled && addProduct.href ? (
@@ -520,7 +655,7 @@ function InventoryTable({ products, selectedId, onSelect, loading, error }) {
           </thead>
           <tbody>
             {loading ? (
-              <TableMessage message="Loading inventory..." />
+              <TableMessage message="Loading BIM Stock..." />
             ) : error ? (
               <TableMessage message={error} />
             ) : products.length ? (
@@ -588,16 +723,16 @@ function StockBar({ product }) {
   const total = Math.max(product.total_units, 1);
   const percent = Math.min(100, Math.round((product.available_units / total) * 100));
   const low = product.is_low_stock;
-  const critical = product.is_critical_stock;
+  const outOfStock = product.available_units === 0;
   return (
     <div className="w-28">
       <p className="text-xs font-semibold text-white">
-        <span className={critical ? "text-nexus-red" : low ? "text-nexus-orange" : "text-white"}>{product.available_units}</span>
+        <span className={outOfStock ? "text-nexus-red" : low ? "text-nexus-orange" : "text-white"}>{product.available_units}</span>
         <span className="text-zinc-500"> / {product.total_units}</span>
       </p>
       <div className="mt-2 h-1 rounded-full bg-zinc-800">
         <div
-          className={`h-1 rounded-full ${critical ? "bg-nexus-red" : low ? "bg-nexus-orange" : "bg-nexus-green"}`}
+          className={`h-1 rounded-full ${outOfStock ? "bg-nexus-red" : low ? "bg-nexus-orange" : "bg-nexus-green"}`}
           style={{ width: `${percent}%` }}
         />
       </div>
@@ -607,18 +742,24 @@ function StockBar({ product }) {
 
 function ProductStatus({ product }) {
   let label = "Active";
-  let className = statusStyles.available;
-  if (!product.isactive || product.available_units === 0) {
+  let statusKey = "active";
+  if (!product.isactive) {
     label = "Inactive";
-    className = statusStyles.inactive;
-  } else if (product.is_critical_stock) {
-    label = "Critical Stock";
-    className = statusStyles.inactive;
-  } else if (product.is_low_stock) {
+    statusKey = "inactive";
+  } else if (product.available_units === 0) {
+    label = "Out of Stock";
+    statusKey = "out_of_stock";
+  } else if (product.is_low_stock || product.is_critical_stock) {
     label = "Low Stock";
-    className = statusStyles.returned;
+    statusKey = "low_stock";
   }
-  return <span className={`rounded-md px-2 py-1 text-xs font-bold ${className}`}>{label}</span>;
+  const meta = statusMeta[statusKey] || statusMeta.active;
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-bold ${meta.className}`}>
+      <Icon name={meta.icon} className="h-3.5 w-3.5" />
+      {label}
+    </span>
+  );
 }
 
 function ProductDetail({ product }) {
@@ -797,7 +938,7 @@ function ProductDetailsPage({ data }) {
     <Shell data={data}>
       <header className="mb-5">
         <div className="text-sm text-zinc-500">
-          <a className="hover:text-zinc-200" href="/inventory/">Inventory</a>
+          <a className="hover:text-zinc-200" href="/inventory/">BIM Stock</a>
           <span className="mx-2">›</span>
           <span>Products</span>
           <span className="mx-2">›</span>
@@ -827,11 +968,11 @@ function ProductDetailsPage({ data }) {
               Edit Product
             </a>
             <a href="/inventory/receiving/new/" className="inline-flex h-9 items-center gap-2 rounded-md px-3 font-semibold text-zinc-200 hover:bg-nexus-panel">
-              <Download className="h-4 w-4" />
+              <Icon name={workflowMeta.receive_stock.icon} className="h-4 w-4" />
               Receive Stock
             </a>
             <a href="/inventory/deliveries/new/" className="inline-flex h-9 items-center gap-2 rounded-md px-3 font-semibold text-zinc-200 hover:bg-nexus-panel">
-              <Truck className="h-4 w-4" />
+              <Icon name={workflowMeta.create_delivery.icon} className="h-4 w-4" />
               Create Delivery
             </a>
             <a href="/inventory/receiving/new/" className="inline-flex h-9 items-center gap-2 rounded-md bg-nexus-orange px-4 font-semibold text-black">
@@ -851,8 +992,8 @@ function ProductDetailsPage({ data }) {
           label="Available"
           value={product.available_units}
           detail={`${stockPercent}% in stock`}
-          warning={product.is_low_stock}
-          danger={product.is_critical_stock}
+          warning={product.is_low_stock || product.is_critical_stock}
+          danger={product.available_units === 0}
         />
         <ProductDetailMetric label="Reserved" value={product.reserved_units} detail="pending allocation" />
         <ProductDetailMetric label="Minimum Level" value={product.minimum_stock_level} detail="critical threshold" />
@@ -1184,7 +1325,7 @@ function AddProductPage({ data }) {
             </button>
             <div className="flex flex-wrap gap-3">
               <button disabled type="button" className="inline-flex h-10 items-center gap-2 rounded-md bg-zinc-700 px-4 text-sm font-semibold text-zinc-500">
-                <Download className="h-4 w-4" />
+                <Icon name={workflowMeta.receive_stock.icon} className="h-4 w-4" />
                 Save & Receive Stock
               </button>
               <button disabled={saving} onClick={() => saveProduct(true)} type="button" className="inline-flex h-10 items-center gap-2 rounded-md px-4 text-sm font-semibold text-white hover:bg-nexus-panel">
@@ -1635,7 +1776,7 @@ function CreateDeliveryPage({ data }) {
                 Save Draft
               </button>
               <button disabled={saving} onClick={completeDelivery} type="button" className="inline-flex h-9 items-center gap-2 rounded-md bg-nexus-orange px-4 font-semibold text-black">
-                <Truck className="h-4 w-4" />
+                <Icon name={workflowMeta.create_delivery.icon} className="h-4 w-4" />
                 Complete Delivery
               </button>
             </div>
@@ -1771,7 +1912,7 @@ function AddProductHeader({ saving, onReset, onSave, onSaveAnother }) {
       <div className="mb-4 text-sm text-zinc-400">
         <a className="hover:text-zinc-200" href="/">BIM Nexus</a>
         <span className="mx-2">/</span>
-        <a className="hover:text-zinc-200" href="/inventory/">Application</a>
+        <a className="hover:text-zinc-200" href="/inventory/">BIM Stock</a>
         <span className="mx-2">/</span>
         <span className="font-mono text-white">05</span>
         <span className="mx-1">-</span>
@@ -2017,7 +2158,7 @@ function QuickAddMenu({ actions }) {
         {actions.map((action) =>
           action.enabled && action.href ? (
             <a key={action.label} href={action.href} className="flex items-start gap-3 border-b border-nexus-line px-3 py-3 last:border-b-0 hover:bg-nexus-panel2">
-              <ActionIcon name={action.icon} />
+              <ActionIcon name={action.icon} tone={action.tone} />
               <span>
                 <span className="block text-sm font-semibold text-white">{action.label}</span>
                 <span className="block text-xs text-zinc-500">{action.description}</span>
@@ -2025,7 +2166,7 @@ function QuickAddMenu({ actions }) {
             </a>
           ) : (
             <span key={action.label} className="flex items-start gap-3 border-b border-nexus-line px-3 py-3 opacity-50 last:border-b-0">
-              <ActionIcon name={action.icon} />
+              <ActionIcon name={action.icon} tone={action.tone} />
               <span>
                 <span className="block text-sm font-semibold text-white">{action.label}</span>
                 <span className="block text-xs text-zinc-500">{action.description}</span>
@@ -2168,7 +2309,7 @@ function QuickActions({ actions }) {
           } ${isEnabled ? "hover:bg-nexus-panel2" : "cursor-not-allowed opacity-45 grayscale"}`;
           const inner = (
             <>
-              <ActionIcon name={action.icon} />
+              <ActionIcon name={action.icon} tone={action.tone} />
               <span className="min-w-0 flex-1">
                 <span className={`block text-sm font-bold ${isEnabled ? "text-white" : "text-zinc-500"}`}>
                   {action.label}
@@ -2202,10 +2343,11 @@ function RecentActivity({ items }) {
         <table className="min-w-full text-left text-sm">
           <thead className="bg-zinc-800/80 text-zinc-400">
             <tr>
-              <th className="px-4 py-3 font-medium">Ref</th>
+              <th className="px-4 py-3 font-medium">Reference</th>
               <th className="px-4 py-3 font-medium">Activity</th>
+              <th className="px-4 py-3 font-medium">Product / Record</th>
               <th className="px-4 py-3 font-medium">Performed by</th>
-              <th className="px-4 py-3 font-medium">When</th>
+              <th className="px-4 py-3 font-medium">Date</th>
               <th className="px-4 py-3 font-medium">Status</th>
             </tr>
           </thead>
@@ -2215,6 +2357,7 @@ function RecentActivity({ items }) {
                 <tr key={`${item.reference}-${item.type}`} className="border-t border-nexus-line">
                   <td className="px-4 py-4 font-mono text-xs text-nexus-orange">{item.reference || "-"}</td>
                   <td className="px-4 py-4 font-semibold text-white">{item.type || "-"}</td>
+                  <td className="px-4 py-4 text-zinc-400">{item.related || "-"}</td>
                   <td className="px-4 py-4 text-zinc-400">{item.user || "-"}</td>
                   <td className="px-4 py-4 text-zinc-400">{item.date ? String(item.date) : "-"}</td>
                   <td className="px-4 py-4">
@@ -2224,7 +2367,7 @@ function RecentActivity({ items }) {
               ))
             ) : (
               <tr className="border-t border-nexus-line">
-                <td className="px-4 py-8 text-center text-sm text-zinc-500" colSpan="5">
+                <td className="px-4 py-8 text-center text-sm text-zinc-500" colSpan="6">
                   No activity recorded yet.
                 </td>
               </tr>
@@ -2236,48 +2379,130 @@ function RecentActivity({ items }) {
   );
 }
 
-function LowStockPanel() {
+function LowStockPanel({ items = [] }) {
   return (
     <section className="rounded-lg border border-nexus-line bg-nexus-panel">
-      <PanelHeader title="Low Stock Alerts" />
-      <EmptyPanel message="Low stock thresholds are not configured yet." />
+      <PanelHeader title="Low Stock Alerts" badge={items.length || null} />
+      {items.length ? (
+        <div className="border-t border-nexus-line">
+          {items.map((item) => (
+            <a
+              key={item.href || item.name}
+              className="flex items-center gap-3 border-b border-nexus-line px-4 py-3 last:border-b-0 hover:bg-nexus-panel2"
+              href={item.href}
+            >
+              <span className="h-2 w-2 rounded-full bg-nexus-orange" />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold text-white">{item.productName}</span>
+                <span className="block truncate text-xs text-zinc-500">{item.category || "Uncategorized"}</span>
+              </span>
+              <span className="shrink-0 text-right text-xs">
+                <span className="block text-zinc-500">Available: <strong className="text-nexus-orange">{item.availableQuantity}</strong></span>
+                <span className="block text-zinc-500">Threshold: <strong className="text-zinc-300">{item.reorderThreshold}</strong></span>
+              </span>
+            </a>
+          ))}
+        </div>
+      ) : (
+        <EmptyPanel title="No low stock alerts." detail="Stock thresholds can be configured later." />
+      )}
     </section>
   );
 }
 
-function RecentDeliveries() {
+function RecentDeliveries({ items = [] }) {
   return (
     <section className="rounded-lg border border-nexus-line bg-nexus-panel">
       <PanelHeader title="Recent Deliveries" />
-      <EmptyPanel message="Delivery records are not configured yet." />
+      <RecordPanel
+        items={items}
+        emptyTitle="No delivery records yet."
+        emptyDetail="Create your first delivery once stock is available."
+      />
     </section>
   );
 }
 
-function RecentReceiving() {
+function RecentReceiving({ items = [] }) {
   return (
     <section className="rounded-lg border border-nexus-line bg-nexus-panel">
       <PanelHeader title="Recent Receiving" />
-      <EmptyPanel message="Receiving records are not configured yet." />
+      <RecordPanel
+        items={items}
+        emptyTitle="No receiving records yet."
+        emptyDetail="Receive stock to begin tracking inventory."
+      />
     </section>
   );
 }
 
-function EmptyPanel({ message }) {
+function RecordPanel({ items = [], emptyTitle, emptyDetail }) {
+  if (!items.length) {
+    return <EmptyPanel title={emptyTitle} detail={emptyDetail} />;
+  }
+
   return (
-    <div className="grid min-h-40 place-items-center border-t border-nexus-line px-4 py-8 text-center text-sm text-zinc-500">
-      {message}
+    <div className="border-t border-nexus-line">
+      {items.map((item) => {
+        const className = `flex items-start gap-3 border-b border-nexus-line px-4 py-3 last:border-b-0 ${
+          item.href ? "hover:bg-nexus-panel2" : ""
+        }`;
+        const content = (
+          <>
+          <StatusIcon statusClass={item.status_class} />
+          <span className="min-w-0 flex-1">
+            <span className="block font-mono text-xs text-nexus-orange">{item.reference}</span>
+            <span className="mt-1 block truncate text-sm font-semibold text-white">{item.title || "-"}</span>
+            <span className="block truncate text-xs text-zinc-500">{item.detail || "-"}</span>
+          </span>
+          <span className="shrink-0 text-right text-xs text-zinc-500">{item.date ? String(item.date) : "-"}</span>
+          </>
+        );
+
+        return item.href ? (
+          <a key={item.reference} href={item.href} className={className}>
+            {content}
+          </a>
+        ) : (
+          <div key={item.reference} className={className} data-future-href={item.futureHref || undefined}>
+            {content}
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-function Status({ status, statusClass }) {
-  const className =
-    statusClass === "reserved"
-        ? "text-nexus-orange"
-        : "text-nexus-green";
+function EmptyPanel({ title, detail }) {
+  return (
+    <div className="grid min-h-40 place-items-center border-t border-nexus-line px-4 py-8 text-center">
+      <div>
+        <p className="text-sm font-semibold text-zinc-300">{title}</p>
+        <p className="mt-1 text-xs text-zinc-500">{detail}</p>
+      </div>
+    </div>
+  );
+}
 
-  return <span className={`text-xs font-semibold ${className}`}>{status}</span>;
+function StatusIcon({ statusClass }) {
+  const meta = statusMeta[statusClass] || statusMeta.available;
+
+  return (
+    <span className={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-md ${meta.className}`}>
+      <Icon name={meta.icon} className="h-4 w-4" />
+    </span>
+  );
+}
+
+function Status({ status, statusClass }) {
+  const meta = statusMeta[statusClass] || statusMeta.available;
+
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold ${meta.className}`}>
+      <Icon name={meta.icon} className="h-3.5 w-3.5" />
+      {status}
+    </span>
+  );
 }
 
 function PanelHeader({ title, action, badge }) {
@@ -2294,9 +2519,9 @@ function SectionTitle({ title }) {
   return <h2 className="mb-3 text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">{title}</h2>;
 }
 
-function ActionIcon({ name }) {
+function ActionIcon({ name, tone = "neutral" }) {
   return (
-    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-zinc-800 text-nexus-orange">
+    <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${toneClasses[tone] || toneClasses.neutral}`}>
       <Icon name={name} className="h-5 w-5" />
     </span>
   );

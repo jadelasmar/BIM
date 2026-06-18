@@ -89,7 +89,8 @@ Not implemented yet:
 - `/accounts/logout/` Django auth logout, POST-only
 - `/accounts/setup/<uid>/<token>/` secure username/password setup/reset link
 - `/` protected BIM Nexus Command Center, rendered by React/Tailwind through Django auth
-- `/settings/` protected React/Tailwind Settings page with the shared dark/light appearance toggle
+- `/api/command-center/` protected JSON payload used by the Command Center 60-second auto-refresh
+- `/settings/` protected React/Tailwind Settings page with the shared dark/light appearance toggle; route exists but theme is now controlled from the global topbar
 - `/inventory/` protected React/Tailwind Inventory page
 - `/inventory/products/new/` protected React/Tailwind Add Product page
 - `/inventory/products/<id>/` protected React/Tailwind Product Details page
@@ -250,7 +251,8 @@ The React Receive Stock page creates available `ProductUnit` records through the
 ## Shared Theme
 
 BIM Nexus uses the shared `bim-nexus-theme` localStorage key for dark/light mode.
-The Settings page at `/settings/` is the main place to change theme.
+The global React topbar exposes the dark/light toggle to all authenticated users. Administration is hidden from normal users and links admin-capable users to Django admin.
+The Command Center refreshes dashboard data every 60 seconds with `/api/command-center/` instead of a manual refresh button.
 React pages, login/setup pages, and custom BIM Stock Django templates load the shared theme/font assets from `static/bim/`.
 The shared font stack is defined by `--bim-font-family` and should be used by future pages.
 

@@ -24,6 +24,7 @@ from . import views
 
 urlpatterns = [
     path('', views.module_launcher, name='module_launcher'),
+    path('api/command-center/', views.command_center_data, name='command_center_data'),
     path('operations/', views.module_launcher, name='operations'),
     path('inventory/', views.module_launcher, name='inventory'),
     path('inventory/products/new/', views.module_launcher, name='inventory_add_product'),

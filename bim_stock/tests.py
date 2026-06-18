@@ -8,6 +8,7 @@ from django.test import RequestFactory, SimpleTestCase, TestCase, override_setti
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from django.utils import timezone
+from pathlib import Path
 from unittest.mock import patch
 
 from bim.ui_registry import UI_TOKENS, ui_item
@@ -93,7 +94,7 @@ class UIRegistryTests(SimpleTestCase):
             "operations",
             "total_products",
             "available_stock",
-            "critical_stock",
+            "out_of_stock",
             "low_stock",
             "receive_stock",
             "create_delivery",
@@ -105,12 +106,35 @@ class UIRegistryTests(SimpleTestCase):
             self.assertTrue(token.get("name") or token.get("label"))
 
     def test_ui_item_allows_local_overrides(self):
-        item = ui_item("inventory", name="BIM Stock", enabled=True)
+        item = ui_item("inventory", enabled=True)
 
         self.assertEqual(item["name"], "BIM Stock")
         self.assertEqual(item["icon"], "database")
         self.assertEqual(item["tone"], "blue")
         self.assertTrue(item["enabled"])
+
+    def test_delivery_ui_tokens_use_same_icon_and_tone(self):
+        delivery_records = UI_TOKENS["delivery_records"]
+        create_delivery = UI_TOKENS["create_delivery"]
+
+        self.assertEqual(create_delivery["icon"], delivery_records["icon"])
+        self.assertEqual(create_delivery["tone"], delivery_records["tone"])
+        self.assertEqual(create_delivery["icon"], "delivery")
+        self.assertEqual(create_delivery["tone"], "indigo")
+
+    def test_frontend_uses_registry_for_workflow_icons(self):
+        app_source = Path("frontend/src/App.jsx").read_text(encoding="utf-8")
+
+        self.assertNotIn("<Download", app_source)
+        self.assertNotIn("<Truck", app_source)
+        self.assertIn("workflowMeta", Path("frontend/src/uiRegistry.js").read_text(encoding="utf-8"))
+
+    def test_frontend_greeting_uses_browser_hour(self):
+        app_source = Path("frontend/src/App.jsx").read_text(encoding="utf-8")
+
+        self.assertIn("function greetingPeriodForHour(hour)", app_source)
+        self.assertIn("new Date().getHours()", app_source)
+        self.assertIn("data.hero.greetingName", app_source)
 
 
 # Tests the available stock count shown in Product admin.
@@ -947,6 +971,58 @@ class BIMPOSAccessTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response.url, "/accounts/login/?next=/")
 
+    def test_app_routes_require_login(self):
+        protected_routes = (
+            "/",
+            "/api/command-center/",
+            "/operations/",
+            "/inventory/",
+            "/inventory/products/new/",
+            "/inventory/receiving/new/",
+            "/inventory/deliveries/new/",
+        )
+
+        for route in protected_routes:
+            with self.subTest(route=route):
+                response = self.client.get(route)
+
+                self.assertEqual(response.status_code, 302)
+                self.assertEqual(response.url, f"/accounts/login/?next={route}")
+
+    def test_command_center_data_api_returns_refreshable_dashboard_payload(self):
+        user = User.objects.create_user(username="viewer", password="test-pass")
+        user.user_permissions.add(Permission.objects.get(codename="view_product"))
+        product_type = Type.objects.create(name="Printer")
+        category = Category.objects.create(type=product_type, name="Laser")
+        brand = Brand.objects.create(brandname="Canon")
+        model = ProductModel.objects.create(brand=brand, modelname="L100")
+        product = Product.objects.create(
+            descript="Canon laser printer",
+            printed="Canon L100",
+            category=category,
+            model=model,
+        )
+        unit = ProductUnit.objects.create(
+            product=product,
+            serial_number="AUTO-REFRESH-UNIT",
+            status=ProductUnit.STATUS_AVAILABLE,
+            isactive=True,
+        )
+        self.client.force_login(user)
+
+        response = self.client.get("/api/command-center/")
+        data = response.json()
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(data["currentPath"], "/")
+        self.assertEqual(data["api"]["commandCenter"], "/api/command-center/")
+        self.assertEqual(data["pollIntervalMs"], 60000)
+        self.assertEqual(data["recentReceiving"][0]["title"], "Canon L100")
+        self.assertEqual(
+            data["recentReceiving"][0]["reference"],
+            f"RCV-{timezone.localdate().year}-{unit.pk:04d}",
+        )
+
     def test_command_center_shows_inventory_module_by_permission(self):
         user = User.objects.create_user(username="viewer", password="test-pass")
         user.user_permissions.add(Permission.objects.get(codename="view_product"))
@@ -976,10 +1052,14 @@ class BIMPOSAccessTests(TestCase):
 
         overview = response.context["initial_data"]["overview"]
         self.assertNotIn("Sites", {item["label"] for item in overview})
+        self.assertNotIn("Sold Units", {item["label"] for item in overview})
+        self.assertIn("Delivery Records", {item["label"] for item in overview})
         self.assertTrue(all(item.get("icon") for item in overview))
         overview_by_label = {item["label"]: item for item in overview}
+        self.assertEqual(overview_by_label["Delivery Records"]["tone"], "indigo")
         self.assertFalse(overview_by_label["Total Assets"]["enabled"])
         self.assertFalse(overview_by_label["Knowledge Docs"]["enabled"])
+        self.assertEqual(overview_by_label["Total Assets"]["detail"], "Coming later")
         self.assertEqual(overview_by_label["New Stock Units"]["tone"], "green")
 
     def test_command_center_pending_modules_and_actions_are_disabled(self):
@@ -1055,14 +1135,163 @@ class BIMPOSAccessTests(TestCase):
         ):
             self.assertNotIn(demo_value, initial_data)
 
-    def test_command_center_stock_alert_kpis_use_product_thresholds(self):
+    def test_command_center_recent_activity_labels_sold_units_as_delivered(self):
         user = User.objects.create_user(username="viewer", password="test-pass")
         user.user_permissions.add(Permission.objects.get(codename="view_product"))
         product_type = Type.objects.create(name="Printer")
         category = Category.objects.create(type=product_type, name="Laser")
         brand = Brand.objects.create(brandname="Canon")
         model = ProductModel.objects.create(brand=brand, modelname="L100")
-        critical_product = Product.objects.create(
+        product = Product.objects.create(
+            descript="Canon laser printer",
+            printed="Canon L100",
+            category=category,
+            model=model,
+        )
+        unit = ProductUnit.objects.create(
+            product=product,
+            serial_number="DELIVERED-ACTIVITY",
+            status=ProductUnit.STATUS_SOLD,
+            isactive=True,
+        )
+        self.client.force_login(user)
+
+        response = self.client.get("/")
+        activity = response.context["initial_data"]["recentActivity"][0]
+
+        self.assertEqual(activity["type"], "Delivery")
+        self.assertEqual(
+            activity["reference"],
+            f"DLV-{timezone.localdate().year}-{unit.pk:04d}",
+        )
+        self.assertEqual(activity["related"], "Canon L100")
+        self.assertEqual(activity["status"], "Delivered")
+        self.assertEqual(activity["status_class"], "delivered")
+
+    def test_command_center_recent_activity_uses_receiving_reference_fallback(self):
+        user = User.objects.create_user(username="viewer", password="test-pass")
+        user.user_permissions.add(Permission.objects.get(codename="view_product"))
+        product_type = Type.objects.create(name="Printer")
+        category = Category.objects.create(type=product_type, name="Laser")
+        brand = Brand.objects.create(brandname="Canon")
+        model = ProductModel.objects.create(brand=brand, modelname="L100")
+        product = Product.objects.create(
+            descript="Canon laser printer",
+            printed="Canon L100",
+            category=category,
+            model=model,
+        )
+        unit = ProductUnit.objects.create(
+            product=product,
+            serial_number="RECEIVING-ACTIVITY",
+            status=ProductUnit.STATUS_AVAILABLE,
+            isactive=True,
+        )
+        self.client.force_login(user)
+
+        response = self.client.get("/")
+        activity = response.context["initial_data"]["recentActivity"][0]
+
+        self.assertEqual(activity["type"], "Receiving")
+        self.assertEqual(
+            activity["reference"],
+            f"RCV-{timezone.localdate().year}-{unit.pk:04d}",
+        )
+        self.assertEqual(activity["related"], "Canon L100")
+        self.assertEqual(activity["status"], "Received")
+        self.assertEqual(activity["status_class"], "received")
+        receiving_panel = response.context["initial_data"]["recentReceiving"][0]
+        self.assertEqual(
+            receiving_panel["reference"],
+            f"RCV-{timezone.localdate().year}-{unit.pk:04d}",
+        )
+        self.assertEqual(receiving_panel["title"], "Canon L100")
+        self.assertEqual(receiving_panel["detail"], "Laser")
+        self.assertEqual(
+            receiving_panel["href"],
+            f"/inventory/products/{product.pk}/",
+        )
+        self.assertNotIn(unit.serial_number, str(receiving_panel))
+        self.assertEqual(receiving_panel["status"], "Received")
+        self.assertEqual(receiving_panel["status_class"], "received")
+
+    def test_command_center_recent_deliveries_panel_uses_delivery_records(self):
+        user = User.objects.create_user(username="viewer", password="test-pass")
+        user.user_permissions.add(Permission.objects.get(codename="view_product"))
+        product_type = Type.objects.create(name="Printer")
+        category = Category.objects.create(type=product_type, name="Laser")
+        brand = Brand.objects.create(brandname="Canon")
+        model = ProductModel.objects.create(brand=brand, modelname="L100")
+        product = Product.objects.create(
+            descript="Canon laser printer",
+            printed="Canon L100",
+            category=category,
+            model=model,
+        )
+        unit = ProductUnit.objects.create(
+            product=product,
+            serial_number="DELIVERY-PANEL",
+            status=ProductUnit.STATUS_SOLD,
+            isactive=True,
+        )
+        delivery = DeliveryRecord.objects.create(customer_name="IT Department")
+        delivery.items.create(product=product, product_unit=unit)
+        self.client.force_login(user)
+
+        response = self.client.get("/")
+        delivery_panel = response.context["initial_data"]["recentDeliveries"][0]
+
+        self.assertEqual(delivery_panel["reference"], delivery.delivery_number)
+        self.assertEqual(delivery_panel["title"], "IT Department")
+        self.assertEqual(delivery_panel["detail"], "1 Canon L100")
+        self.assertIsNone(delivery_panel["href"])
+        self.assertEqual(
+            delivery_panel["futureHref"],
+            f"/inventory/deliveries/{delivery.pk}/",
+        )
+        self.assertEqual(delivery_panel["status"], "Delivered")
+        self.assertEqual(delivery_panel["status_class"], "delivered")
+
+    def test_command_center_quick_actions_are_current_workflows_only(self):
+        user = User.objects.create_user(username="operator", password="test-pass")
+        user.user_permissions.add(
+            Permission.objects.get(codename="add_product"),
+            Permission.objects.get(codename="add_productunit"),
+            Permission.objects.get(codename="change_productunit"),
+            Permission.objects.get(codename="view_product"),
+        )
+        self.client.force_login(user)
+
+        response = self.client.get("/")
+        actions = response.context["initial_data"]["quickActions"]
+        actions_by_label = {action["label"]: action for action in actions}
+
+        self.assertEqual(
+            set(actions_by_label),
+            {"Add Product", "Receive Stock", "Create Delivery", "Add Supplier"},
+        )
+        self.assertEqual(actions_by_label["Add Product"]["href"], "/inventory/products/new/")
+        self.assertEqual(actions_by_label["Receive Stock"]["href"], "/inventory/receiving/new/")
+        self.assertEqual(
+            actions_by_label["Create Delivery"]["href"],
+            "/inventory/deliveries/new/",
+        )
+        self.assertTrue(actions_by_label["Add Product"]["enabled"])
+        self.assertTrue(actions_by_label["Receive Stock"]["enabled"])
+        self.assertTrue(actions_by_label["Create Delivery"]["enabled"])
+        self.assertEqual(actions_by_label["Create Delivery"]["icon"], "delivery")
+        self.assertEqual(actions_by_label["Create Delivery"]["tone"], "indigo")
+        self.assertFalse(actions_by_label["Add Supplier"]["enabled"])
+        self.assertIsNone(actions_by_label["Add Supplier"]["href"])
+
+    def test_command_center_stock_alert_kpis_use_inventory_counts(self):
+        user = User.objects.create_user(username="viewer", password="test-pass")
+        user.user_permissions.add(Permission.objects.get(codename="view_product"))
+        product_type = Type.objects.create(name="Printer")
+        category = Category.objects.create(type=product_type, name="Laser")
+        brand = Brand.objects.create(brandname="Canon")
+        model = ProductModel.objects.create(brand=brand, modelname="L100")
+        out_product = Product.objects.create(
             descript="Canon laser printer",
             printed="Canon L100",
             category=category,
@@ -1080,11 +1309,6 @@ class BIMPOSAccessTests(TestCase):
             minimum_stock_level=1,
         )
         ProductUnit.objects.create(
-            product=critical_product,
-            serial_number="CRITICAL-STOCK-1",
-            status=ProductUnit.STATUS_AVAILABLE,
-        )
-        ProductUnit.objects.create(
             product=low_product,
             serial_number="LOW-STOCK-1",
             status=ProductUnit.STATUS_AVAILABLE,
@@ -1097,10 +1321,10 @@ class BIMPOSAccessTests(TestCase):
         self.client.force_login(user)
 
         response = self.client.get("/")
-        critical_stock_kpi = next(
+        out_of_stock_kpi = next(
             item
             for item in response.context["initial_data"]["kpis"]
-            if item["label"] == "Critical Stock"
+            if item["label"] == "Out of Stock Products"
         )
         low_stock_kpi = next(
             item
@@ -1108,10 +1332,127 @@ class BIMPOSAccessTests(TestCase):
             if item["label"] == "Low Stock Alerts"
         )
 
-        self.assertEqual(critical_stock_kpi["value"], "1")
-        self.assertEqual(critical_stock_kpi["tone"], "danger")
+        self.assertEqual(out_of_stock_kpi["value"], "1")
+        self.assertEqual(out_of_stock_kpi["tone"], "danger")
+        self.assertEqual(out_of_stock_kpi["detail"], "1 product out of stock")
         self.assertEqual(low_stock_kpi["value"], "1")
         self.assertEqual(low_stock_kpi["tone"], "warning")
+        self.assertEqual(low_stock_kpi["detail"], "1 product with low stock")
+        low_stock_alert = response.context["initial_data"]["lowStockAlerts"][0]
+        self.assertEqual(low_stock_alert["productName"], "Canon L200")
+        self.assertEqual(low_stock_alert["category"], "Laser")
+        self.assertEqual(low_stock_alert["availableQuantity"], 2)
+        self.assertEqual(low_stock_alert["reorderThreshold"], 3)
+        self.assertEqual(
+            low_stock_alert["href"],
+            f"/inventory/products/{low_product.pk}/",
+        )
+        self.assertEqual(low_stock_alert["status"], "Low Stock")
+        self.assertEqual(low_stock_alert["status_class"], "low_stock")
+
+    def test_command_center_quick_add_includes_disabled_supplier_action(self):
+        user = User.objects.create_user(username="operator", password="test-pass")
+        user.user_permissions.add(
+            Permission.objects.get(codename="add_product"),
+            Permission.objects.get(codename="add_productunit"),
+            Permission.objects.get(codename="change_productunit"),
+            Permission.objects.get(codename="view_product"),
+        )
+        self.client.force_login(user)
+
+        response = self.client.get("/")
+        actions = response.context["initial_data"]["quickActions"]
+        actions_by_label = {action["label"]: action for action in actions}
+
+        self.assertEqual(
+            set(actions_by_label),
+            {"Add Product", "Receive Stock", "Create Delivery", "Add Supplier"},
+        )
+        self.assertFalse(actions_by_label["Add Supplier"]["enabled"])
+        self.assertIsNone(actions_by_label["Add Supplier"]["href"])
+        self.assertEqual(actions_by_label["Add Supplier"]["description"], "Coming later")
+
+    def test_command_center_uses_final_sidebar_and_search_labels(self):
+        user = User.objects.create_user(username="viewer", password="test-pass")
+        user.user_permissions.add(Permission.objects.get(codename="view_product"))
+        self.client.force_login(user)
+
+        response = self.client.get("/")
+        secondary_nav = response.context["initial_data"]["navigation"]["secondary"]
+
+        self.assertEqual(secondary_nav, [])
+        self.assertFalse(response.context["initial_data"]["user"]["canAccessAdmin"])
+        self.assertEqual(
+            response.context["initial_data"]["hero"]["searchPlaceholder"],
+            "Search products, stock units, deliveries, suppliers, companies...",
+        )
+        self.assertEqual(
+            response.context["initial_data"]["hero"]["greetingName"],
+            "viewer",
+        )
+        self.assertEqual(
+            response.context["initial_data"]["theme"]["storageKey"],
+            "bim-nexus-theme",
+        )
+        self.assertEqual(response.context["initial_data"]["theme"]["default"], "dark")
+
+    def test_command_center_shows_administration_for_admin_users(self):
+        user = User.objects.create_superuser(
+            username="admin",
+            email="admin@bimpos.com",
+            password="test-pass",
+        )
+        self.client.force_login(user)
+
+        response = self.client.get("/")
+        secondary_nav = response.context["initial_data"]["navigation"]["secondary"]
+
+        self.assertTrue(response.context["initial_data"]["user"]["canAccessAdmin"])
+        self.assertEqual(len(secondary_nav), 1)
+        self.assertEqual(secondary_nav[0]["name"], "Administration")
+        self.assertTrue(secondary_nav[0]["enabled"])
+        self.assertEqual(secondary_nav[0]["href"], "/admin/")
+        self.assertEqual(secondary_nav[0]["detail"], "Django admin")
+
+    def test_command_center_low_stock_kpi_pluralizes_product_detail(self):
+        user = User.objects.create_user(username="viewer", password="test-pass")
+        user.user_permissions.add(Permission.objects.get(codename="view_product"))
+        product_type = Type.objects.create(name="Printer")
+        category = Category.objects.create(type=product_type, name="Laser")
+        brand = Brand.objects.create(brandname="Canon")
+
+        for index in range(2):
+            model = ProductModel.objects.create(brand=brand, modelname=f"L{index}")
+            product = Product.objects.create(
+                descript=f"Canon laser printer {index}",
+                printed=f"Canon L{index}",
+                category=category,
+                model=model,
+                reorder_stock_level=3,
+                minimum_stock_level=1,
+            )
+            ProductUnit.objects.create(
+                product=product,
+                serial_number=f"LOW-STOCK-PLURAL-{index}",
+                status=ProductUnit.STATUS_AVAILABLE,
+            )
+            ProductUnit.objects.create(
+                product=product,
+                serial_number=f"LOW-STOCK-PLURAL-B-{index}",
+                status=ProductUnit.STATUS_AVAILABLE,
+            )
+
+        self.client.force_login(user)
+
+        response = self.client.get("/")
+        low_stock_kpi = next(
+            item
+            for item in response.context["initial_data"]["kpis"]
+            if item["label"] == "Low Stock Alerts"
+        )
+
+        self.assertEqual(low_stock_kpi["value"], "2")
+        self.assertEqual(low_stock_kpi["detail"], "2 products with low stock")
 
     def test_inventory_react_page_uses_inventory_navigation(self):
         user = User.objects.create_user(username="viewer", password="test-pass")
@@ -1126,7 +1467,7 @@ class BIMPOSAccessTests(TestCase):
         inventory_nav = next(
             item
             for item in response.context["initial_data"]["navigation"]["primary"]
-            if item["name"] == "Inventory"
+            if item["name"] == "BIM Stock"
         )
         self.assertTrue(inventory_nav["active"])
         self.assertEqual(
@@ -1244,10 +1585,9 @@ class BIMPOSAccessTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "bim/react_app.html")
         self.assertEqual(response.context["initial_data"]["currentPath"], "/settings/")
-        settings_nav = response.context["initial_data"]["navigation"]["secondary"][0]
-        self.assertEqual(settings_nav["href"], "/settings/")
-        self.assertTrue(settings_nav["enabled"])
+        self.assertEqual(response.context["initial_data"]["navigation"]["secondary"], [])
         self.assertEqual(response.context["initial_data"]["theme"]["storageKey"], "bim-nexus-theme")
+        self.assertEqual(response.context["initial_data"]["theme"]["default"], "dark")
 
     def test_command_center_disables_inventory_without_permission(self):
         user = User.objects.create_user(username="viewer", password="test-pass")

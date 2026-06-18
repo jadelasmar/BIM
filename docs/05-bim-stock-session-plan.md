@@ -331,9 +331,12 @@ Implemented so far:
 - React/Vite/Tailwind frontend scaffold under `frontend/`.
 - Django serves the protected `/` Command Center through `templates/bim/react_app.html`.
 - Built frontend assets output to `static/frontend/`.
-- Command Center sidebar currently includes Command Center, divider, and Settings.
+- Command Center sidebar currently includes Command Center, BIM Stock, and Operations for normal users.
+- Administration is hidden from normal users and links admin-capable users to Django admin.
+- Global React topbar includes theme toggle, Quick Add, and logout/user controls.
+- Command Center data auto-refreshes every 60 seconds through `/api/command-center/`.
 - Command Center dashboard follows the provided dark BIM Nexus reference image.
-- Quick Add currently exposes Add Product, Receive Stock, and a disabled Create Delivery placeholder.
+- Quick Add exposes Add Product, Receive Stock, Create Delivery, and disabled Add Supplier.
 - React Inventory page is available at `/inventory/`.
 - Inventory page uses real BIM Stock APIs for product rows, filters, stock counts, and the product detail panel.
 - React Add Product page is available at `/inventory/products/new/`.
@@ -343,5 +346,5 @@ Implemented so far:
 - React Receive Stock page is available at `/inventory/receiving/new/`.
 - Receive Stock creates available ProductUnit records through the BIM Stock ProductUnit API.
 - Shared BIM Nexus theme/font assets are available under `static/bim/`.
-- Settings page is available at `/settings/` with dark/light appearance toggle.
+- Settings page remains available at `/settings/`, but the global topbar is the primary theme toggle surface.
 - React pages, login/setup pages, and custom BIM Stock templates use the shared `bim-nexus-theme` key.

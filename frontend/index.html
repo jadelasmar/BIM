@@ -10,13 +10,19 @@
     <script id="bim-nexus-initial-data" type="application/json">
       {
         "user": {
-          "username": "ahmad.alrashidi",
-          "displayName": "Ahmad Al-Rashidi",
-          "initials": "AA",
-          "isStaff": true
+          "username": "preview",
+          "displayName": "Preview User",
+          "initials": "PU",
+          "isStaff": false,
+          "canAccessAdmin": false
         },
         "csrfToken": "",
         "logoutHref": "/accounts/logout/",
+        "currentPath": "/",
+        "api": {
+          "commandCenter": "/api/command-center/"
+        },
+        "pollIntervalMs": 60000,
         "navigation": {
           "primary": [
             {
@@ -26,92 +32,85 @@
               "icon": "layout-dashboard"
             }
           ],
-          "secondary": [
-            {
-              "name": "Settings",
-              "href": "/admin/",
-              "enabled": true,
-              "icon": "settings"
-            }
-          ]
+          "secondary": []
         },
         "hero": {
-          "greeting": "Good evening, Ahmad Al-Rashidi",
+          "greeting": "Good evening, Preview User",
+          "greetingName": "Preview User",
           "title": "BIM Nexus",
           "subtitle": "Internal IT Operations Platform",
           "tenant": "BIMPOS",
-          "searchPlaceholder": "Search assets, products, deliveries, suppliers, knowledge base..."
+          "searchPlaceholder": "Search products, stock units, deliveries, suppliers, companies..."
         },
         "kpis": [
           {
             "label": "Total Products",
-            "value": "2,847",
-            "detail": "catalogue items",
-            "trend": "+34 this week",
-            "tone": "neutral",
+            "value": "0",
+            "detail": "0 products in BIM Stock",
+            "trend": "",
+            "tone": "blue",
             "icon": "database"
           },
           {
             "label": "Available Stock",
-            "value": "1,923",
-            "detail": "ready for issue",
-            "trend": "-12 since yesterday",
-            "tone": "stock",
+            "value": "0",
+            "detail": "0 units ready for issue",
+            "trend": "",
+            "tone": "green",
             "icon": "layers"
           },
           {
-            "label": "Assets In Use",
-            "value": "3,612",
-            "detail": "deployed devices",
-            "trend": "+5 this week",
+            "label": "Out of Stock Products",
+            "value": "0",
+            "detail": "0 products out of stock",
+            "trend": "",
             "tone": "neutral",
-            "icon": "cpu"
+            "icon": "package-x"
           },
           {
             "label": "Low Stock Alerts",
-            "value": "23",
-            "detail": "require reorder",
-            "trend": "+4 since yesterday",
-            "tone": "warning",
+            "value": "0",
+            "detail": "0 products with low stock",
+            "trend": "",
+            "tone": "neutral",
             "icon": "triangle-alert"
           }
         ],
         "overview": [
-          {"label": "Sites", "value": "6", "detail": "active location", "tone": "blue"},
-          {"label": "Suppliers", "value": "34", "detail": "registered vendor", "tone": "purple"},
-          {"label": "Total Assets", "value": "3,847", "detail": "registered device", "tone": "green"},
-          {"label": "Knowledge Docs", "value": "148", "detail": "articles & guides", "tone": "yellow"},
-          {"label": "Product Categories", "value": "42", "detail": "catalogue sections", "tone": "orange"},
-          {"label": "Active Users", "value": "18", "detail": "BIMPOS staff", "tone": "blue"}
+          {"label": "Suppliers", "value": "0", "detail": "registered vendor", "tone": "purple", "icon": "suppliers"},
+          {"label": "Delivery Records", "value": "0", "detail": "operational dispatches", "tone": "indigo", "icon": "delivery"},
+          {"label": "New Stock Units", "value": "0", "detail": "created this month", "tone": "green", "icon": "receiving"},
+          {"label": "Total Assets", "value": "-", "detail": "Coming later", "tone": "neutral", "icon": "cpu", "enabled": false},
+          {"label": "Knowledge Docs", "value": "-", "detail": "Coming later", "tone": "neutral", "icon": "book-open", "enabled": false}
         ],
         "modules": [
           {
             "name": "BIM Stock",
-            "description": "Products, stock levels, categories",
-            "href": "/stock/",
+            "description": "Products, stock units, availability",
+            "href": "/inventory/",
             "enabled": true,
-            "count": 2847,
+            "count": 0,
             "meta": "products",
             "icon": "database",
             "tone": "blue"
           },
           {
             "name": "Operations",
-            "description": "Receiving, deliveries, movements",
-            "href": null,
-            "enabled": false,
-            "count": 49,
-            "meta": "events this month",
+            "description": "Receiving records, delivery records, stock history",
+            "href": "/operations/",
+            "enabled": true,
+            "count": 2,
+            "meta": "active workflows",
             "icon": "trending-up",
             "tone": "green"
           },
           {
             "name": "Assets",
-            "description": "Hardware, devices, peripherals",
+            "description": "Company-owned equipment",
             "href": null,
             "enabled": false,
-            "count": 3847,
-            "meta": "registered",
+            "count": null,
+            "meta": "Coming later",
             "icon": "cpu",
             "tone": "purple"
           },
@@ -120,18 +119,18 @@
             "description": "Procedures, guides, documentation",
             "href": null,
             "enabled": false,
-            "count": 148,
-            "meta": "articles",
+            "count": null,
+            "meta": "Coming later",
             "icon": "book-open",
             "tone": "yellow"
           },
           {
             "name": "Reports",
-            "description": "Analytics, exports, summaries",
+            "description": "Stock and operations summaries",
             "href": null,
             "enabled": false,
             "count": null,
-            "meta": "Last run: today",
+            "meta": "Coming later",
             "icon": "bar-chart-3",
             "tone": "orange"
           }
@@ -139,27 +138,41 @@
         "quickActions": [
           {
             "label": "Add Product",
-            "href": "/admin/bim_stock/product/add/",
+            "href": "/inventory/products/new/",
             "enabled": true,
             "description": "Register new item to catalogue",
-            "icon": "plus"
+            "icon": "plus",
+            "tone": "blue"
           },
           {
             "label": "Receive Stock",
-            "href": "/admin/bim_stock/productunit/add/",
+            "href": "/inventory/receiving/new/",
             "enabled": true,
             "description": "Record incoming stock receipt",
-            "icon": "download"
+            "icon": "download",
+            "tone": "green"
           },
           {
             "label": "Create Delivery",
+            "href": "/inventory/deliveries/new/",
+            "enabled": true,
+            "description": "Initiate outbound delivery order",
+            "icon": "delivery",
+            "tone": "indigo"
+          },
+          {
+            "label": "Add Supplier",
             "href": null,
             "enabled": false,
-            "description": "Initiate outbound delivery order",
-            "icon": "upload"
+            "description": "Coming later",
+            "icon": "suppliers",
+            "tone": "purple"
           }
         ],
-        "recentActivity": []
+        "recentActivity": [],
+        "lowStockAlerts": [],
+        "recentDeliveries": [],
+        "recentReceiving": []
       }
     </script>
     <script type="module" src="/src/main.jsx"></script>
