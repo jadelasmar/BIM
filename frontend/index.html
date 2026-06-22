@@ -22,6 +22,21 @@
         "api": {
           "commandCenter": "/api/command-center/"
         },
+        "routes": {
+          "inventory": "/inventory/",
+          "availableStock": "/inventory/?status=available",
+          "outOfStock": "/inventory/?stock=out",
+          "lowStock": "/inventory/?stock=low",
+          "addProduct": "/inventory/products/new/",
+          "receiveStock": "/inventory/receiving/new/",
+          "createDelivery": "/inventory/deliveries/new/",
+          "suppliers": "/suppliers/",
+          "receivingRecords": "/operations/receiving/",
+          "deliveryRecords": "/operations/deliveries/",
+          "clients": "/clients/",
+          "assets": "/assets/",
+          "knowledgeBase": "/knowledge-base/"
+        },
         "pollIntervalMs": 60000,
         "navigation": {
           "primary": [
@@ -40,7 +55,7 @@
           "title": "BIM Nexus",
           "subtitle": "Internal IT Operations Platform",
           "tenant": "BIMPOS",
-          "searchPlaceholder": "Search products, stock units, deliveries, suppliers, companies..."
+          "searchPlaceholder": "Search products, stock units, deliveries, suppliers, clients..."
         },
         "kpis": [
           {
@@ -49,7 +64,8 @@
             "detail": "0 products in BIM Stock",
             "trend": "",
             "tone": "blue",
-            "icon": "database"
+            "icon": "database",
+            "href": "/inventory/"
           },
           {
             "label": "Available Stock",
@@ -57,7 +73,8 @@
             "detail": "0 units ready for issue",
             "trend": "",
             "tone": "green",
-            "icon": "layers"
+            "icon": "layers",
+            "href": "/inventory/?status=available"
           },
           {
             "label": "Out of Stock Products",
@@ -65,7 +82,8 @@
             "detail": "0 products out of stock",
             "trend": "",
             "tone": "neutral",
-            "icon": "package-x"
+            "icon": "package-x",
+            "href": "/inventory/?stock=out"
           },
           {
             "label": "Low Stock Alerts",
@@ -73,15 +91,17 @@
             "detail": "0 products with low stock",
             "trend": "",
             "tone": "neutral",
-            "icon": "triangle-alert"
+            "icon": "triangle-alert",
+            "href": "/inventory/?stock=low"
           }
         ],
         "overview": [
-          {"label": "Suppliers", "value": "0", "detail": "registered vendor", "tone": "purple", "icon": "suppliers"},
-          {"label": "Delivery Records", "value": "0", "detail": "operational dispatches", "tone": "indigo", "icon": "delivery"},
-          {"label": "New Stock Units", "value": "0", "detail": "created this month", "tone": "green", "icon": "receiving"},
-          {"label": "Total Assets", "value": "-", "detail": "Coming later", "tone": "neutral", "icon": "cpu", "enabled": false},
-          {"label": "Knowledge Docs", "value": "-", "detail": "Coming later", "tone": "neutral", "icon": "book-open", "enabled": false}
+          {"label": "Suppliers", "value": "0", "detail": "registered vendor", "tone": "purple", "icon": "suppliers", "href": "/suppliers/"},
+          {"label": "Receiving Records", "value": "0", "detail": "stock entry records", "tone": "green", "icon": "receiving", "href": "/operations/receiving/"},
+          {"label": "Delivery Records", "value": "0", "detail": "stock exit records", "tone": "indigo", "icon": "delivery", "href": "/operations/deliveries/"},
+          {"label": "Clients", "value": "-", "detail": "Coming later", "tone": "blue", "icon": "suppliers", "href": "/clients/", "enabled": true},
+          {"label": "Total Assets", "value": "-", "detail": "Coming later", "tone": "neutral", "icon": "cpu", "href": "/assets/", "enabled": false},
+          {"label": "Knowledge Docs", "value": "-", "detail": "Coming later", "tone": "neutral", "icon": "book-open", "href": "/knowledge-base/", "enabled": false}
         ],
         "modules": [
           {
@@ -167,6 +187,14 @@
             "description": "Coming later",
             "icon": "suppliers",
             "tone": "purple"
+          },
+          {
+            "label": "Add Client",
+            "href": null,
+            "enabled": false,
+            "description": "Coming later",
+            "icon": "suppliers",
+            "tone": "blue"
           }
         ],
         "recentActivity": [],

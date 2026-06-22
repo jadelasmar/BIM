@@ -11,6 +11,10 @@ Command Center is complete for Phase 1.
 - DeliveryRecord powers delivery activity and delivery-record counts where available.
 - Receiving activity still uses ProductUnit fallback data until ReceivingRecord is implemented.
 - `/api/command-center/` returns the protected dashboard payload used for 60-second Command Center auto-refresh.
+- Command Center KPI and System Overview payloads include `href` destinations so cards act as navigation shortcuts.
+- Missing destination modules use protected React placeholder routes until their real workflows are implemented.
+- Command Center layout is compact for Phase 1: Search, KPI cards, System Overview, compact Modules roadmap, Recent Activity, Recent Deliveries, and Recent Receiving.
+- Quick Add remains in the topbar; the old large Quick Actions panel is no longer rendered.
 - Dashboard references use operational formats only: `RCV-YYYY-0001`, `DLV-YYYY-0001`, `PRD-YYYY-0001`, and `ADJ-YYYY-0001`.
 - No accounting, invoicing, payment, or support-ticket logic is part of BIM Nexus.
 
@@ -21,6 +25,8 @@ Command Center is complete for Phase 1.
   - `bim/ui_registry.py`
   - `frontend/src/uiRegistry.js`
 - Related workflow actions and summaries should use the same registry icon and tone. Example: Delivery Records and Create Delivery both use `delivery` with the indigo tone.
+- Product Details renders product metrics, supplier/stock information, active stock units, and permission-aware workflow actions from existing BIM Stock APIs.
+- Use `Clients` terminology in Command Center navigation. Do not reintroduce Sites for this phase.
 
 ## Verification Baseline
 
@@ -31,4 +37,4 @@ Command Center is complete for Phase 1.
 
 ## Next Development Focus
 
-06 - Product Details.
+07 - Receiving Records.

@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ChevronRight,
   Edit3,
   Eye,
   Filter,
   LayoutDashboard,
-  MoreHorizontal,
   Moon,
   Package,
   Plus,
@@ -66,7 +65,7 @@ function applyTheme(nextTheme, storageKey = DEFAULT_THEME_STORAGE_KEY) {
   return normalizedTheme;
 }
 
-function Shell({ data, children }) {
+function Shell({ data, children, onRefresh }) {
   const secondaryNavigation = data.navigation.secondary || [];
 
   return (
@@ -149,17 +148,25 @@ function Shell({ data, children }) {
       </aside>
 
       <main className="min-w-0 px-4 py-5 sm:px-6 lg:px-7">
-        <Topbar data={data} />
+        <Topbar data={data} onRefresh={onRefresh} />
         {children}
       </main>
     </div>
   );
 }
 
-function Topbar({ data }) {
+function Topbar({ data, onRefresh }) {
   return (
     <div className="mb-5 flex flex-wrap items-center justify-end gap-3 border-b border-nexus-line pb-4 text-xs">
       <ThemeToggle storageKey={data.theme?.storageKey} />
+      <button
+        type="button"
+        onClick={onRefresh || (() => window.location.reload())}
+        className="inline-flex h-9 items-center gap-2 rounded-md border border-nexus-line px-3 font-semibold text-zinc-200 hover:bg-nexus-panel"
+      >
+        <RefreshCw className="h-4 w-4" aria-hidden="true" />
+        Refresh
+      </button>
       <QuickAddMenu actions={data.quickActions || []} />
       <div className="hidden items-center gap-2 rounded-md border border-nexus-line px-2 py-1.5 sm:inline-flex">
         <span className="grid h-6 w-6 place-items-center rounded-md bg-nexus-orange/10 text-xs font-bold text-nexus-orange">
@@ -207,64 +214,57 @@ function CommandCenter({ data }) {
   const commandCenterEndpoint = data.api?.commandCenter;
   const pollIntervalMs = Number(data.pollIntervalMs) || 60000;
 
+  const refreshDashboardData = useCallback(async () => {
+    if (!commandCenterEndpoint) {
+      return;
+    }
+
+    try {
+      const response = await fetch(commandCenterEndpoint, {
+        headers: { Accept: "application/json" }
+      });
+
+      if (!response.ok) {
+        return;
+      }
+
+      setDashboardData(await response.json());
+    } catch {
+      // Keep the current dashboard data if a background refresh fails.
+    }
+  }, [commandCenterEndpoint]);
+
   useEffect(() => {
     if (!commandCenterEndpoint) {
       return undefined;
     }
 
-    let isActive = true;
-
-    async function refreshDashboardData() {
-      if (document.hidden) {
-        return;
+    const intervalId = window.setInterval(() => {
+      if (!document.hidden) {
+        refreshDashboardData();
       }
-
-      try {
-        const response = await fetch(commandCenterEndpoint, {
-          headers: { Accept: "application/json" }
-        });
-
-        if (!response.ok) {
-          return;
-        }
-
-        const nextData = await response.json();
-        if (isActive) {
-          setDashboardData(nextData);
-        }
-      } catch {
-        // Keep the current dashboard data if a background refresh fails.
-      }
-    }
-
-    const intervalId = window.setInterval(refreshDashboardData, pollIntervalMs);
-    return () => {
-      isActive = false;
-      window.clearInterval(intervalId);
-    };
-  }, [commandCenterEndpoint, pollIntervalMs]);
+    }, pollIntervalMs);
+    return () => window.clearInterval(intervalId);
+  }, [commandCenterEndpoint, pollIntervalMs, refreshDashboardData]);
 
   return (
-    <Shell data={dashboardData}>
+    <Shell data={dashboardData} onRefresh={refreshDashboardData}>
       <Header data={dashboardData} />
       <KpiGrid items={dashboardData.kpis} />
       <Overview items={dashboardData.overview} />
       <Modules modules={dashboardData.modules} />
 
-      <section className="mt-4 grid gap-4 xl:grid-cols-[260px_minmax(0,1fr)]">
-        <QuickActions actions={dashboardData.quickActions} />
+      <section className="mt-4">
         <RecentActivity items={dashboardData.recentActivity} />
       </section>
 
-      <section className="mt-4 grid gap-4 xl:grid-cols-3">
-        <LowStockPanel items={dashboardData.lowStockAlerts} />
+      <section className="mt-4 grid gap-4 xl:grid-cols-2">
         <RecentDeliveries items={dashboardData.recentDeliveries} />
         <RecentReceiving items={dashboardData.recentReceiving} />
       </section>
     </Shell>
   );
 }
-
 function SettingsPage({ data }) {
   const storageKey = data.theme?.storageKey || "bim-nexus-theme";
   const [theme, setThemeState] = useState(() => currentTheme());
@@ -329,6 +329,25 @@ function SettingsPage({ data }) {
             Open Django Admin
           </a>
         ) : null}
+      </section>
+    </Shell>
+  );
+}
+
+function PlaceholderPage({ data, title }) {
+  return (
+    <Shell data={data}>
+      <header className="mb-5">
+        <div className="text-sm text-zinc-500">
+          <a className="hover:text-zinc-200" href="/">BIM Nexus</a>
+          <span className="mx-2">/</span>
+          <span>{title}</span>
+        </div>
+        <h1 className="mt-3 text-2xl font-bold text-white">{title}</h1>
+      </header>
+
+      <section className="rounded-lg border border-nexus-line bg-nexus-panel p-6">
+        <p className="text-sm text-zinc-400">This module will be implemented in a later phase.</p>
       </section>
     </Shell>
   );
@@ -444,13 +463,15 @@ function Header({ data }) {
 }
 
 function InventoryPage({ data }) {
+  const initialInventoryParams = new URLSearchParams(window.location.search);
   const [products, setProducts] = useState([]);
   const [summary, setSummary] = useState(null);
   const [refs, setRefs] = useState({ categories: [], brands: [] });
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("");
   const [brand, setBrand] = useState("");
-  const [status, setStatus] = useState("");
+  const [status, setStatus] = useState(() => initialInventoryParams.get("status") || "");
+  const [stockFilter, setStockFilter] = useState(() => initialInventoryParams.get("stock") || "");
   const [selectedId, setSelectedId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -501,13 +522,23 @@ function InventoryPage({ data }) {
     return () => controller.abort();
   }, [brand, category, data.api.brands, data.api.categories, data.api.products, data.api.summary, query, status]);
 
+  const visibleProducts = useMemo(() => {
+    if (stockFilter === "out") {
+      return products.filter((product) => product.available_units === 0);
+    }
+    if (stockFilter === "low") {
+      return products.filter((product) => product.available_units > 0 && (product.is_low_stock || product.is_critical_stock));
+    }
+    return products;
+  }, [products, stockFilter]);
+
   const selectedProduct = useMemo(
-    () => products.find((product) => product.id === selectedId) || products[0] || null,
-    [products, selectedId]
+    () => visibleProducts.find((product) => product.id === selectedId) || visibleProducts[0] || null,
+    [visibleProducts, selectedId]
   );
-  const lowStockCount = products.filter((product) => product.is_low_stock || product.is_critical_stock).length;
-  const outOfStockCount = products.filter((product) => product.available_units === 0).length;
-  const inactiveCount = products.filter((product) => !product.isactive || product.available_units === 0).length;
+  const lowStockCount = visibleProducts.filter((product) => product.is_low_stock || product.is_critical_stock).length;
+  const outOfStockCount = visibleProducts.filter((product) => product.available_units === 0).length;
+  const inactiveCount = visibleProducts.filter((product) => !product.isactive || product.available_units === 0).length;
 
   return (
     <Shell data={data}>
@@ -546,7 +577,10 @@ function InventoryPage({ data }) {
               <Select value={brand} onChange={setBrand} options={refs.brands.map((item) => [item.id, item.brandname])} label="Brand" />
               <Select
                 value={status}
-                onChange={setStatus}
+                onChange={(value) => {
+                  setStatus(value);
+                  setStockFilter("");
+                }}
                 options={[
                   ["available", "Available"],
                   ["reserved", "Reserved"],
@@ -556,21 +590,33 @@ function InventoryPage({ data }) {
                 ]}
                 label="Status"
               />
+              <Select
+                value={stockFilter}
+                onChange={(value) => {
+                  setStockFilter(value);
+                  if (value) setStatus("");
+                }}
+                options={[
+                  ["low", "Low Stock"],
+                  ["out", "Out of Stock"]
+                ]}
+                label="Stock"
+              />
               <span className="text-right text-xs text-zinc-500 xl:ml-auto">
-                {products.length} products
+                {visibleProducts.length} products
               </span>
             </div>
           </section>
 
           <InventoryTable
-            products={products}
+            products={visibleProducts}
             selectedId={selectedProduct?.id}
             onSelect={setSelectedId}
             loading={loading}
             error={error}
           />
           <div className="mt-2 flex items-center justify-between text-xs text-zinc-500">
-            <span>Showing {products.length} products</span>
+            <span>Showing {visibleProducts.length} products</span>
             <span>{lowStockCount} low stock - {inactiveCount} inactive</span>
           </div>
         </div>
@@ -864,6 +910,7 @@ function ProductDetailsPage({ data }) {
   const productId = data.currentPath?.match(/\/inventory\/products\/(\d+)\//)?.[1];
   const [product, setProduct] = useState(null);
   const [units, setUnits] = useState([]);
+  const [unitsAccessDenied, setUnitsAccessDenied] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -889,6 +936,7 @@ function ProductDetailsPage({ data }) {
 
         setProduct(await productResponse.json());
         setUnits(unitsResponse.ok ? await unitsResponse.json() : []);
+        setUnitsAccessDenied(unitsResponse.status === 401 || unitsResponse.status === 403);
       } catch (loadError) {
         if (loadError.name !== "AbortError") {
           setError(loadError.message);
@@ -927,6 +975,11 @@ function ProductDetailsPage({ data }) {
   const stockPercent = product.total_units
     ? Math.round((product.available_units / product.total_units) * 100)
     : 0;
+  const receiveStockAction = data.quickActions.find((action) => action.label === "Receive Stock");
+  const createDeliveryAction = data.quickActions.find((action) => action.label === "Create Delivery");
+  const detailActions = [receiveStockAction, createDeliveryAction].filter(
+    (action) => action?.enabled && action.href
+  );
   const recentActivity = units.slice(0, 6).map((unit) => ({
     title: activityTitle(unit),
     detail: activityDetail(unit),
@@ -963,25 +1016,19 @@ function ProductDetailsPage({ data }) {
           </div>
 
           <div className="flex flex-wrap items-center gap-3 text-sm">
-            <a href={`/admin/bim_stock/product/${product.id}/change/`} className="inline-flex h-9 items-center gap-2 rounded-md px-3 font-semibold text-zinc-200 hover:bg-nexus-panel">
-              <Edit3 className="h-4 w-4" />
-              Edit Product
-            </a>
-            <a href="/inventory/receiving/new/" className="inline-flex h-9 items-center gap-2 rounded-md px-3 font-semibold text-zinc-200 hover:bg-nexus-panel">
-              <Icon name={workflowMeta.receive_stock.icon} className="h-4 w-4" />
-              Receive Stock
-            </a>
-            <a href="/inventory/deliveries/new/" className="inline-flex h-9 items-center gap-2 rounded-md px-3 font-semibold text-zinc-200 hover:bg-nexus-panel">
-              <Icon name={workflowMeta.create_delivery.icon} className="h-4 w-4" />
-              Create Delivery
-            </a>
-            <a href="/inventory/receiving/new/" className="inline-flex h-9 items-center gap-2 rounded-md bg-nexus-orange px-4 font-semibold text-black">
-              <Plus className="h-4 w-4" />
-              Add Unit
-            </a>
-            <button className="inline-flex h-9 items-center rounded-md px-2 text-zinc-400 hover:bg-nexus-panel">
-              <MoreHorizontal className="h-5 w-5" />
-            </button>
+            {data.user?.canAccessAdmin ? (
+              <a href={`/admin/bim_stock/product/${product.id}/change/`} className="inline-flex h-9 items-center gap-2 rounded-md px-3 font-semibold text-zinc-200 hover:bg-nexus-panel">
+                <Edit3 className="h-4 w-4" />
+                Edit Product
+              </a>
+            ) : null}
+            {detailActions.map((action) => (
+              <ProductDetailActionLink
+                key={action.label}
+                action={action}
+                primary={action.label === "Receive Stock"}
+              />
+            ))}
           </div>
         </div>
       </header>
@@ -1019,53 +1066,60 @@ function ProductDetailsPage({ data }) {
       </nav>
 
       <div className="mt-4 grid gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
-        <div className="grid gap-5 xl:grid-cols-2">
-          <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
-            <SectionTitle title="Product Information" />
-            <dl className="mt-4 divide-y divide-nexus-line">
-              <DetailRow label="Product Name" value={product.descript} />
-              <DetailRow label="Printed Name" value={product.printed || "-"} />
-              <DetailRow label="SKU" value={product.sku} />
-              <DetailRow label="Barcode" value={product.barcode || "-"} />
-              <DetailRow label="Type" value={product.type_name} />
-              <DetailRow label="Category" value={product.category_name} />
-              <DetailRow label="Brand" value={product.brand_name} />
-              <DetailRow label="Model" value={product.model_name} />
-              <DetailRow label="Unit of Measure" value="Each" />
-            </dl>
-          </section>
-
-          <div className="space-y-5">
+        <div className="space-y-5">
+          <div className="grid gap-5 xl:grid-cols-2">
             <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
-              <SectionTitle title="Supplier Information" />
+              <SectionTitle title="Product Information" />
               <dl className="mt-4 divide-y divide-nexus-line">
-                <DetailRow label="Default Supplier" value={supplierUnit?.supplier_name || "-"} />
-                <DetailRow label="Supplier Code" value={supplierUnit ? `${product.model_name}-OEM` : "-"} />
-                <DetailRow label="Last Purchase" value={formatDate(supplierUnit?.purchase_date || supplierUnit?.crdate)} />
-                <DetailRow label="Last Cost" value={lastCostUnit ? `$${Number(lastCostUnit.cost).toFixed(2)}` : "-"} />
+                <DetailRow label="Product Name" value={product.descript} />
+                <DetailRow label="Printed Name" value={product.printed || "-"} />
+                <DetailRow label="SKU" value={product.sku} />
+                <DetailRow label="Barcode" value={product.barcode || "-"} />
+                <DetailRow label="Type" value={product.type_name} />
+                <DetailRow label="Category" value={product.category_name} />
+                <DetailRow label="Brand" value={product.brand_name} />
+                <DetailRow label="Model" value={product.model_name} />
+                <DetailRow label="Unit of Measure" value="Each" />
               </dl>
             </section>
 
-            <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
-              <SectionTitle title="Stock Availability" />
-              <div className="mt-4">
-                <div className="flex justify-between text-sm">
-                  <span className="text-zinc-400">In-stock rate</span>
-                  <span className="font-bold text-nexus-orange">{stockPercent}%</span>
+            <div className="space-y-5">
+              <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
+                <SectionTitle title="Supplier Information" />
+                <dl className="mt-4 divide-y divide-nexus-line">
+                  <DetailRow label="Default Supplier" value={supplierUnit?.supplier_name || "-"} />
+                  <DetailRow label="Last Purchase" value={formatDate(supplierUnit?.purchase_date || supplierUnit?.crdate)} />
+                  <DetailRow label="Last Cost" value={formatCurrency(lastCostUnit?.cost)} />
+                </dl>
+              </section>
+
+              <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
+                <SectionTitle title="Stock Availability" />
+                <div className="mt-4">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-zinc-400">In-stock rate</span>
+                    <span className="font-bold text-nexus-orange">{stockPercent}%</span>
+                  </div>
+                  <div className="mt-2 h-1.5 rounded-full bg-zinc-800">
+                    <div className="h-1.5 rounded-full bg-nexus-orange" style={{ width: `${stockPercent}%` }} />
+                  </div>
                 </div>
-                <div className="mt-2 h-1.5 rounded-full bg-zinc-800">
-                  <div className="h-1.5 rounded-full bg-nexus-orange" style={{ width: `${stockPercent}%` }} />
-                </div>
-              </div>
-              <dl className="mt-4 divide-y divide-nexus-line">
-                <DetailRow label="Available" value={product.available_units} highlight />
-                <DetailRow label="Reserved" value={product.reserved_units} />
-                <DetailRow label="Total" value={product.total_units} strong />
-                <DetailRow label="Minimum Level" value={product.minimum_stock_level} />
-                <DetailRow label="Reorder Level" value={product.reorder_stock_level} />
-              </dl>
-            </section>
+                <dl className="mt-4 divide-y divide-nexus-line">
+                  <DetailRow label="Available" value={product.available_units} highlight />
+                  <DetailRow label="Reserved" value={product.reserved_units} />
+                  <DetailRow label="Total" value={product.total_units} strong />
+                  <DetailRow label="Minimum Level" value={product.minimum_stock_level} />
+                  <DetailRow label="Reorder Level" value={product.reorder_stock_level} />
+                </dl>
+              </section>
+            </div>
           </div>
+
+          <ProductUnitRegister
+            product={product}
+            units={units}
+            accessDenied={unitsAccessDenied}
+          />
         </div>
 
         <aside className="rounded-lg border border-nexus-line bg-nexus-panel">
@@ -1089,6 +1143,75 @@ function ProductDetailsPage({ data }) {
         </aside>
       </div>
     </Shell>
+  );
+}
+
+function ProductDetailActionLink({ action, primary = false }) {
+  const className = primary
+    ? "inline-flex h-9 items-center gap-2 rounded-md bg-nexus-orange px-4 font-semibold text-black"
+    : "inline-flex h-9 items-center gap-2 rounded-md px-3 font-semibold text-zinc-200 hover:bg-nexus-panel";
+
+  return (
+    <a href={action.href} className={className}>
+      <Icon name={action.icon} className="h-4 w-4" />
+      {action.label}
+    </a>
+  );
+}
+
+function ProductUnitRegister({ product, units, accessDenied }) {
+  const visibleUnits = units.slice(0, 10);
+  const unitLabel = product.total_units === 1 ? "unit" : "units";
+
+  return (
+    <section className="overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel" aria-label="Stock unit register">
+      <PanelHeader title="Stock Unit Register" badge={`${formatCount(product.total_units)} ${unitLabel}`} />
+      {accessDenied ? (
+        <p className="border-t border-nexus-line px-4 py-5 text-sm text-zinc-500">
+          Stock-unit details require stock-unit access.
+        </p>
+      ) : visibleUnits.length ? (
+        <>
+          <div className="overflow-x-auto border-t border-nexus-line">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-zinc-800/80 text-zinc-400">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Serial Number</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 font-medium">Supplier</th>
+                  <th className="px-4 py-3 font-medium">Cost</th>
+                  <th className="px-4 py-3 font-medium">Purchased</th>
+                  <th className="px-4 py-3 font-medium">Sold</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleUnits.map((unit) => (
+                  <tr key={unit.id} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
+                    <td className="px-4 py-3 font-mono text-xs text-nexus-orange">{unit.serial_number}</td>
+                    <td className="px-4 py-3">
+                      <Status status={unit.status_label || unit.status} statusClass={unit.status} />
+                    </td>
+                    <td className="px-4 py-3 text-zinc-400">{unit.supplier_name || "-"}</td>
+                    <td className="px-4 py-3 text-zinc-400">{formatCurrency(unit.cost)}</td>
+                    <td className="px-4 py-3 text-zinc-400">{formatDate(unit.purchase_date)}</td>
+                    <td className="px-4 py-3 text-zinc-400">{formatDate(unit.sold_date)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {units.length > visibleUnits.length ? (
+            <p className="border-t border-nexus-line px-4 py-3 text-xs text-zinc-500">
+              Showing {visibleUnits.length} of {units.length} active stock units.
+            </p>
+          ) : null}
+        </>
+      ) : (
+        <p className="border-t border-nexus-line px-4 py-5 text-sm text-zinc-500">
+          No stock units are registered for this product yet.
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -1126,6 +1249,11 @@ function formatDate(value) {
     month: "short",
     year: "numeric"
   }).format(date);
+}
+
+function formatCurrency(value) {
+  const number = Number(value);
+  return Number.isFinite(number) && number > 0 ? `$${number.toFixed(2)}` : "-";
 }
 
 function AddProductPage({ data }) {
@@ -2182,42 +2310,55 @@ function QuickAddMenu({ actions }) {
 function KpiGrid({ items }) {
   return (
     <section className="grid gap-3 md:grid-cols-2 2xl:grid-cols-4" aria-label="Key metrics">
-      {items.map((item) => (
-        <article
-          key={item.label}
-          className={`min-h-32 rounded-lg border bg-nexus-panel p-4 shadow-panel ${
+      {items.map((item) => {
+        const className = `group block min-h-32 rounded-lg border bg-nexus-panel p-4 shadow-panel ${
             item.tone === "danger"
               ? "border-nexus-red/70"
               : item.tone === "warning"
                 ? "border-nexus-orange/70"
                 : "border-nexus-line"
-          }`}
-        >
-          <div className="flex items-start justify-between gap-3">
-            <p className="text-sm text-zinc-400">{item.label}</p>
-            <span className={`rounded-md p-2 ${toneClasses[item.tone] || toneClasses.neutral}`}>
-              <Icon name={item.icon} />
-            </span>
-          </div>
-          <p
-            className={`mt-6 text-3xl font-bold ${
-              item.tone === "danger"
-                ? "text-nexus-red"
-                : item.tone === "warning"
-                  ? "text-nexus-orange"
-                  : "text-white"
-            }`}
-          >
-            {item.value}
-          </p>
-          <p className="mt-1 text-sm text-zinc-400">{item.detail}</p>
-          {item.trend ? (
-            <p className={`mt-2 text-xs font-semibold ${item.tone === "stock" ? "text-nexus-red" : "text-nexus-green"}`}>
-              {item.trend}
+          } ${item.href ? "cursor-pointer hover:border-nexus-orange/80 focus:outline-none focus:ring-2 focus:ring-nexus-orange/50" : ""}`;
+        const content = (
+          <>
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm text-zinc-400">{item.label}</p>
+              <span className={`rounded-md p-2 ${toneClasses[item.tone] || toneClasses.neutral}`}>
+                <Icon name={item.icon} />
+              </span>
+            </div>
+            <p
+              className={`mt-6 text-3xl font-bold ${
+                item.tone === "danger"
+                  ? "text-nexus-red"
+                  : item.tone === "warning"
+                    ? "text-nexus-orange"
+                    : "text-white"
+              }`}
+            >
+              {item.value}
             </p>
-          ) : null}
-        </article>
-      ))}
+            <div className="mt-1 flex items-center justify-between gap-3 text-sm text-zinc-400">
+              <span>{item.detail}</span>
+              {item.href ? <ChevronRight className="h-4 w-4 shrink-0 text-zinc-600 group-hover:text-nexus-orange" /> : null}
+            </div>
+            {item.trend ? (
+              <p className={`mt-2 text-xs font-semibold ${item.tone === "stock" ? "text-nexus-red" : "text-nexus-green"}`}>
+                {item.trend}
+              </p>
+            ) : null}
+          </>
+        );
+
+        return item.href ? (
+          <a key={item.label} href={item.href} className={className} title={item.todo || undefined}>
+            {content}
+          </a>
+        ) : (
+          <article key={item.label} className={className}>
+            {content}
+          </article>
+        );
+      })}
     </section>
   );
 }
@@ -2228,23 +2369,30 @@ function Overview({ items }) {
       <SectionTitle title="System Overview" />
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
         {items.map((item) => {
-          const isEnabled = item.enabled !== false;
-          return (
-            <article
-              key={item.label}
-              aria-disabled={!isEnabled}
-              className={`flex items-center gap-3 rounded-lg border border-nexus-line bg-nexus-panel p-4 ${
-                isEnabled ? "" : "cursor-not-allowed opacity-45 grayscale"
-              }`}
-            >
+          const isEnabled = item.enabled !== false && item.href;
+          const className = `group flex items-center gap-3 rounded-lg border border-nexus-line bg-nexus-panel p-4 ${
+            isEnabled ? "cursor-pointer hover:border-nexus-orange/80 focus:outline-none focus:ring-2 focus:ring-nexus-orange/50" : "cursor-not-allowed opacity-45 grayscale"
+          }`;
+          const content = (
+            <>
               <span className={`rounded-md p-2 ${toneClasses[item.tone] || toneClasses.neutral}`}>
                 <Icon name={item.icon} />
               </span>
-              <div>
+              <div className="min-w-0 flex-1">
                 <p className={`text-sm font-bold ${isEnabled ? "text-white" : "text-zinc-500"}`}>{item.value}</p>
                 <p className={`text-xs ${isEnabled ? "text-zinc-300" : "text-zinc-500"}`}>{item.label}</p>
                 <p className="text-xs text-zinc-500">{item.detail}</p>
               </div>
+              {isEnabled ? <ChevronRight className="h-4 w-4 shrink-0 text-zinc-600 group-hover:text-nexus-orange" /> : null}
+            </>
+          );
+          return isEnabled ? (
+            <a key={item.label} href={item.href} className={className}>
+              {content}
+            </a>
+          ) : (
+            <article key={item.label} aria-disabled="true" className={className} title={item.detail || undefined}>
+              {content}
             </article>
           );
         })}
@@ -2262,16 +2410,16 @@ function Modules({ modules }) {
           const isEnabled = module.enabled && module.href;
           const content = (
             <>
-              <span className={`inline-flex rounded-lg p-3 ${toneClasses[module.tone] || toneClasses.neutral}`}>
-                <Icon name={module.icon} className="h-5 w-5" />
+              <span className={`inline-flex rounded-lg p-2 ${toneClasses[module.tone] || toneClasses.neutral}`}>
+                <Icon name={module.icon} className="h-4 w-4" />
               </span>
-              <h2 className={`mt-4 text-sm font-bold ${isEnabled ? "text-white" : "text-zinc-500"}`}>
+              <h2 className={`mt-3 text-sm font-bold ${isEnabled ? "text-white" : "text-zinc-500"}`}>
                 {module.name}
               </h2>
-              <p className={`mt-1 min-h-10 text-sm ${isEnabled ? "text-zinc-400" : "text-zinc-600"}`}>
+              <p className={`mt-1 min-h-9 text-xs ${isEnabled ? "text-zinc-400" : "text-zinc-600"}`}>
                 {module.description}
               </p>
-              <div className="mt-4 flex items-center justify-between border-t border-nexus-line pt-3 text-xs">
+              <div className="mt-3 flex items-center justify-between border-t border-nexus-line pt-2 text-xs">
                 <span className="font-mono text-zinc-500">
                   {module.count !== null && module.count !== undefined ? `${formatCount(module.count)} ${module.meta}` : module.meta}
                 </span>
@@ -2283,55 +2431,17 @@ function Modules({ modules }) {
           );
 
           return isEnabled ? (
-            <a key={module.name} href={module.href} className="rounded-lg border border-nexus-line bg-nexus-panel p-4 hover:border-nexus-orange/80">
+            <a key={module.name} href={module.href} className="rounded-lg border border-nexus-line bg-nexus-panel p-3 hover:border-nexus-orange/80">
               {content}
             </a>
           ) : (
-            <article key={module.name} aria-disabled="true" className="rounded-lg border border-nexus-line bg-nexus-panel p-4 opacity-55 grayscale">
+            <article key={module.name} aria-disabled="true" className="rounded-lg border border-nexus-line bg-nexus-panel p-3 opacity-45 grayscale">
               {content}
             </article>
           );
         })}
       </div>
     </section>
-  );
-}
-
-function QuickActions({ actions }) {
-  return (
-    <aside className="rounded-lg border border-nexus-line bg-nexus-panel">
-      <PanelHeader title="Quick Actions" />
-      <div className="space-y-2 p-3">
-        {actions.map((action, index) => {
-          const isEnabled = action.enabled && action.href;
-          const className = `flex w-full items-center gap-3 rounded-lg border px-3 py-3 text-left ${
-            index === 0 && isEnabled ? "border-nexus-orange/60 bg-nexus-orange/10" : "border-transparent"
-          } ${isEnabled ? "hover:bg-nexus-panel2" : "cursor-not-allowed opacity-45 grayscale"}`;
-          const inner = (
-            <>
-              <ActionIcon name={action.icon} tone={action.tone} />
-              <span className="min-w-0 flex-1">
-                <span className={`block text-sm font-bold ${isEnabled ? "text-white" : "text-zinc-500"}`}>
-                  {action.label}
-                </span>
-                <span className="block text-xs text-zinc-500">{action.description}</span>
-              </span>
-              <ChevronRight className={`h-4 w-4 ${isEnabled ? "text-zinc-600" : "text-zinc-700"}`} aria-hidden="true" />
-            </>
-          );
-
-          return isEnabled ? (
-            <a key={action.label} href={action.href} className={className}>
-              {inner}
-            </a>
-          ) : (
-            <button key={action.label} type="button" disabled aria-disabled="true" className={className}>
-              {inner}
-            </button>
-          );
-        })}
-      </div>
-    </aside>
   );
 }
 
@@ -2353,18 +2463,43 @@ function RecentActivity({ items }) {
           </thead>
           <tbody>
             {items.length ? (
-              items.map((item) => (
-                <tr key={`${item.reference}-${item.type}`} className="border-t border-nexus-line">
-                  <td className="px-4 py-4 font-mono text-xs text-nexus-orange">{item.reference || "-"}</td>
-                  <td className="px-4 py-4 font-semibold text-white">{item.type || "-"}</td>
-                  <td className="px-4 py-4 text-zinc-400">{item.related || "-"}</td>
-                  <td className="px-4 py-4 text-zinc-400">{item.user || "-"}</td>
-                  <td className="px-4 py-4 text-zinc-400">{item.date ? String(item.date) : "-"}</td>
-                  <td className="px-4 py-4">
-                    <Status status={item.status || "-"} statusClass={item.status_class} />
-                  </td>
-                </tr>
-              ))
+              items.map((item) => {
+                const rowClass = `border-t border-nexus-line ${item.href ? "cursor-pointer hover:bg-nexus-panel2" : "hover:bg-nexus-panel2/60"}`;
+                const content = (
+                  <>
+                    <td className="px-4 py-4 font-mono text-xs text-nexus-orange">{item.reference || "-"}</td>
+                    <td className="px-4 py-4 font-semibold text-white">{item.type || "-"}</td>
+                    <td className="px-4 py-4 text-zinc-400">{item.related || "-"}</td>
+                    <td className="px-4 py-4 text-zinc-400">{item.user || "-"}</td>
+                    <td className="px-4 py-4 text-zinc-400">{item.date ? String(item.date) : "-"}</td>
+                    <td className="px-4 py-4">
+                      <span className="inline-flex items-center gap-2">
+                        <Status status={item.status || "-"} statusClass={item.status_class} />
+                        {item.href ? <ChevronRight className="h-4 w-4 text-zinc-600" /> : null}
+                      </span>
+                    </td>
+                  </>
+                );
+
+                return (
+                  <tr
+                    key={`${item.reference}-${item.type}`}
+                    className={rowClass}
+                    onClick={() => {
+                      if (item.href) window.location.assign(item.href);
+                    }}
+                    tabIndex={item.href ? 0 : undefined}
+                    onKeyDown={(event) => {
+                      if (item.href && (event.key === "Enter" || event.key === " ")) {
+                        event.preventDefault();
+                        window.location.assign(item.href);
+                      }
+                    }}
+                  >
+                    {content}
+                  </tr>
+                );
+              })
             ) : (
               <tr className="border-t border-nexus-line">
                 <td className="px-4 py-8 text-center text-sm text-zinc-500" colSpan="6">
@@ -2379,41 +2514,10 @@ function RecentActivity({ items }) {
   );
 }
 
-function LowStockPanel({ items = [] }) {
-  return (
-    <section className="rounded-lg border border-nexus-line bg-nexus-panel">
-      <PanelHeader title="Low Stock Alerts" badge={items.length || null} />
-      {items.length ? (
-        <div className="border-t border-nexus-line">
-          {items.map((item) => (
-            <a
-              key={item.href || item.name}
-              className="flex items-center gap-3 border-b border-nexus-line px-4 py-3 last:border-b-0 hover:bg-nexus-panel2"
-              href={item.href}
-            >
-              <span className="h-2 w-2 rounded-full bg-nexus-orange" />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-semibold text-white">{item.productName}</span>
-                <span className="block truncate text-xs text-zinc-500">{item.category || "Uncategorized"}</span>
-              </span>
-              <span className="shrink-0 text-right text-xs">
-                <span className="block text-zinc-500">Available: <strong className="text-nexus-orange">{item.availableQuantity}</strong></span>
-                <span className="block text-zinc-500">Threshold: <strong className="text-zinc-300">{item.reorderThreshold}</strong></span>
-              </span>
-            </a>
-          ))}
-        </div>
-      ) : (
-        <EmptyPanel title="No low stock alerts." detail="Stock thresholds can be configured later." />
-      )}
-    </section>
-  );
-}
-
 function RecentDeliveries({ items = [] }) {
   return (
     <section className="rounded-lg border border-nexus-line bg-nexus-panel">
-      <PanelHeader title="Recent Deliveries" />
+      <PanelHeader title="Recent Deliveries" action="View all" actionHref="/operations/deliveries/" />
       <RecordPanel
         items={items}
         emptyTitle="No delivery records yet."
@@ -2426,7 +2530,7 @@ function RecentDeliveries({ items = [] }) {
 function RecentReceiving({ items = [] }) {
   return (
     <section className="rounded-lg border border-nexus-line bg-nexus-panel">
-      <PanelHeader title="Recent Receiving" />
+      <PanelHeader title="Recent Receiving" action="View all" actionHref="/operations/receiving/" />
       <RecordPanel
         items={items}
         emptyTitle="No receiving records yet."
@@ -2505,12 +2609,19 @@ function Status({ status, statusClass }) {
   );
 }
 
-function PanelHeader({ title, action, badge }) {
+function PanelHeader({ title, action, actionHref, badge }) {
   return (
     <div className="flex items-center justify-between gap-3 px-4 py-3">
       <h2 className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">{title}</h2>
       {badge ? <span className="rounded-full bg-nexus-orange px-2 py-1 text-xs font-bold text-white">{badge}</span> : null}
-      {action ? <button className="text-xs font-semibold text-nexus-orange">{action}</button> : null}
+      {action && actionHref ? (
+        <a className="inline-flex items-center gap-1 text-xs font-semibold text-nexus-orange hover:text-orange-300" href={actionHref}>
+          {action}
+          <ChevronRight className="h-4 w-4" />
+        </a>
+      ) : action ? (
+        <button className="text-xs font-semibold text-nexus-orange">{action}</button>
+      ) : null}
     </div>
   );
 }
@@ -2551,6 +2662,30 @@ export default function App({ initialData }) {
 
   if (currentPath.startsWith("/settings")) {
     return <SettingsPage data={initialData} />;
+  }
+
+  if (currentPath.startsWith("/suppliers")) {
+    return <PlaceholderPage data={initialData} title="Suppliers" />;
+  }
+
+  if (currentPath.startsWith("/clients")) {
+    return <PlaceholderPage data={initialData} title="Clients" />;
+  }
+
+  if (currentPath.startsWith("/assets")) {
+    return <PlaceholderPage data={initialData} title="Assets" />;
+  }
+
+  if (currentPath.startsWith("/knowledge-base")) {
+    return <PlaceholderPage data={initialData} title="Knowledge Base" />;
+  }
+
+  if (currentPath.startsWith("/operations/receiving")) {
+    return <PlaceholderPage data={initialData} title="Receiving Records" />;
+  }
+
+  if (currentPath.startsWith("/operations/deliveries")) {
+    return <PlaceholderPage data={initialData} title="Delivery Records" />;
   }
 
   if (currentPath.startsWith("/operations")) {

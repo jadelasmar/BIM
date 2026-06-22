@@ -54,6 +54,7 @@ def _recent_stock_activity():
                 "date": delivery.delivery_date,
                 "status": "Delivered",
                 "status_class": "delivered",
+                "href": reverse("operations_delivery_detail", kwargs={"pk": delivery.pk}),
             }
         )
 
@@ -74,12 +75,14 @@ def _recent_stock_activity():
             reference = _operational_reference("DLV", activity_date, unit.pk)
             status_label = "Delivered"
             status_class = "delivered"
+            href = reverse("operations_delivery_detail", kwargs={"pk": unit.pk})
         else:
             activity_type = "Receiving"
             activity_date = unit.purchase_date or unit.crdate
             reference = _operational_reference("RCV", activity_date, unit.pk)
             status_label = "Received"
             status_class = "received"
+            href = reverse("operations_receiving_detail", kwargs={"pk": unit.pk})
 
         activity.append(
             {
@@ -90,6 +93,7 @@ def _recent_stock_activity():
                 "date": activity_date,
                 "status": status_label,
                 "status_class": status_class,
+                "href": href,
             }
         )
 
@@ -146,8 +150,7 @@ def _recent_deliveries(limit=4):
             "reference": delivery.delivery_number,
             "title": delivery.customer_name,
             "detail": _delivery_record_summary(delivery),
-            "href": None,
-            "futureHref": f"/inventory/deliveries/{delivery.pk}/",
+            "href": reverse("operations_delivery_detail", kwargs={"pk": delivery.pk}),
             "date": delivery.delivery_date,
             "status": "Delivered",
             "status_class": "delivered",
@@ -174,8 +177,7 @@ def _recent_receiving(limit=4):
             ),
             "title": str(unit.product),
             "detail": unit.product.category.name if unit.product.category_id else "",
-            "href": _product_detail_href(unit.product),
-            "futureHref": None,
+            "href": reverse("operations_receiving_detail", kwargs={"pk": unit.pk}),
             "date": unit.purchase_date or unit.crdate,
             "status": "Received",
             "status_class": "received",
@@ -291,9 +293,18 @@ def _command_center_initial_data(
         },
         "routes": {
             "inventory": reverse("inventory"),
+            "availableStock": f"{reverse('inventory')}?status={ProductUnit.STATUS_AVAILABLE}",
+            "outOfStock": f"{reverse('inventory')}?stock=out",
+            "lowStock": f"{reverse('inventory')}?stock=low",
             "addProduct": reverse("inventory_add_product"),
             "receiveStock": reverse("inventory_receive_stock"),
             "createDelivery": reverse("inventory_create_delivery"),
+            "suppliers": reverse("suppliers"),
+            "receivingRecords": reverse("operations_receiving"),
+            "deliveryRecords": reverse("operations_deliveries"),
+            "clients": reverse("clients"),
+            "assets": reverse("assets"),
+            "knowledgeBase": reverse("knowledge_base"),
         },
         "navigation": {
             "primary": [
@@ -331,31 +342,37 @@ def _command_center_initial_data(
             "title": "BIM Nexus",
             "subtitle": "Internal IT Operations Platform",
             "tenant": "BIMPOS",
-            "searchPlaceholder": "Search products, stock units, deliveries, suppliers, companies...",
+            "searchPlaceholder": "Search products, stock units, deliveries, suppliers, clients...",
         },
         "kpis": [
             {
                 "value": _format_count(total_products),
                 "detail": _product_count_detail(total_products, "in BIM Stock"),
                 "trend": "",
+                "href": reverse("inventory"),
                 **ui_item("total_products"),
             },
             {
                 "value": _format_count(available_stock),
                 "detail": f"{_format_count(available_stock)} {_plural(available_stock, 'unit')} ready for issue",
                 "trend": "",
+                "href": f"{reverse('inventory')}?status={ProductUnit.STATUS_AVAILABLE}",
                 **ui_item("available_stock"),
             },
             {
                 "value": _format_count(out_of_stock),
                 "detail": _product_count_detail(out_of_stock, "out of stock"),
                 "trend": "",
+                "href": f"{reverse('inventory')}?stock=out",
+                "todo": "Replace with backend out-of-stock filter when product stock filters move server-side.",
                 **ui_item("out_of_stock", tone=out_of_stock_tone),
             },
             {
                 "value": _format_count(low_stock),
                 "detail": _product_count_detail(low_stock, "with low stock"),
                 "trend": "",
+                "href": f"{reverse('inventory')}?stock=low",
+                "todo": "Replace with backend low-stock filter when product stock filters move server-side.",
                 **ui_item("low_stock", tone=low_stock_tone),
             },
         ],
@@ -363,27 +380,39 @@ def _command_center_initial_data(
             {
                 "value": _format_count(Supplier.objects.count()),
                 "detail": "registered vendor",
+                "href": reverse("suppliers"),
                 **ui_item("suppliers"),
             },
             {
+                "value": _format_count(recent_receiving),
+                "detail": "stock entry records",
+                "href": reverse("operations_receiving"),
+                **ui_item("receiving_records"),
+            },
+            {
                 "value": _format_count(recent_deliveries),
-                "detail": "operational dispatches",
+                "detail": "stock exit records",
+                "href": reverse("operations_deliveries"),
                 **ui_item("delivery_records"),
             },
             {
-                "value": _format_count(recent_receiving),
-                "detail": "created this month",
-                **ui_item("new_stock_units"),
+                "value": "-",
+                "detail": "Coming later",
+                "href": reverse("clients"),
+                "enabled": True,
+                **ui_item("clients"),
             },
             disabled_ui_item(
                 "assets",
                 value="-",
                 detail="Coming later",
+                href=reverse("assets"),
             ),
             disabled_ui_item(
                 "knowledge_base",
                 value="-",
                 detail="Coming later",
+                href=reverse("knowledge_base"),
             ),
         ],
         "modules": modules,
@@ -478,6 +507,12 @@ def _build_command_center_initial_data(request, current_path=None):
             "enabled": False,
             "description": "Coming later",
             **ui_item("add_supplier"),
+        },
+        {
+            "href": None,
+            "enabled": False,
+            "description": "Coming later",
+            **ui_item("add_client"),
         },
     ]
 

@@ -136,6 +136,34 @@ class UIRegistryTests(SimpleTestCase):
         self.assertIn("new Date().getHours()", app_source)
         self.assertIn("data.hero.greetingName", app_source)
 
+    def test_command_center_layout_removes_duplicate_panels_and_keeps_refresh(self):
+        app_source = Path("frontend/src/App.jsx").read_text(encoding="utf-8")
+
+        command_center_source = app_source[
+            app_source.index("function CommandCenter"):
+            app_source.index("function SettingsPage")
+        ]
+
+        self.assertNotIn("<QuickActions", command_center_source)
+        self.assertNotIn("<LowStockPanel", command_center_source)
+        self.assertIn("onRefresh", command_center_source)
+        self.assertIn("Refresh", app_source)
+
+    def test_product_details_page_renders_stock_units_and_permission_aware_actions(self):
+        app_source = Path("frontend/src/App.jsx").read_text(encoding="utf-8")
+        product_details_source = app_source[
+            app_source.index("function ProductDetailsPage"):
+            app_source.index("function ProductDetailMetric")
+        ]
+
+        self.assertIn("function ProductUnitRegister", app_source)
+        self.assertIn("<ProductUnitRegister", product_details_source)
+        self.assertIn("units={units}", product_details_source)
+        self.assertIn("data.quickActions.find", product_details_source)
+        self.assertNotIn("Supplier Code", product_details_source)
+        self.assertNotIn('href="/inventory/receiving/new/"', product_details_source)
+        self.assertNotIn('href="/inventory/deliveries/new/"', product_details_source)
+
 
 # Tests the available stock count shown in Product admin.
 class ProductAdminStockCountTests(TestCase):
@@ -976,10 +1004,18 @@ class BIMPOSAccessTests(TestCase):
             "/",
             "/api/command-center/",
             "/operations/",
+            "/operations/receiving/",
+            "/operations/receiving/1/",
+            "/operations/deliveries/",
+            "/operations/deliveries/1/",
             "/inventory/",
             "/inventory/products/new/",
             "/inventory/receiving/new/",
             "/inventory/deliveries/new/",
+            "/suppliers/",
+            "/clients/",
+            "/assets/",
+            "/knowledge-base/",
         )
 
         for route in protected_routes:
@@ -1046,21 +1082,55 @@ class BIMPOSAccessTests(TestCase):
     def test_command_center_system_overview_excludes_sites_and_has_icons(self):
         user = User.objects.create_user(username="viewer", password="test-pass")
         user.user_permissions.add(Permission.objects.get(codename="view_product"))
+        User.objects.create_user(username="inactive", password="test-pass", is_active=False)
         self.client.force_login(user)
 
         response = self.client.get("/")
 
         overview = response.context["initial_data"]["overview"]
-        self.assertNotIn("Sites", {item["label"] for item in overview})
-        self.assertNotIn("Sold Units", {item["label"] for item in overview})
-        self.assertIn("Delivery Records", {item["label"] for item in overview})
+        overview_labels = [item["label"] for item in overview]
+
+        self.assertEqual(
+            overview_labels,
+            [
+                "Suppliers",
+                "Receiving Records",
+                "Delivery Records",
+                "Clients",
+                "Total Assets",
+                "Knowledge Docs",
+            ],
+        )
         self.assertTrue(all(item.get("icon") for item in overview))
         overview_by_label = {item["label"]: item for item in overview}
+        self.assertEqual(overview_by_label["Suppliers"]["href"], "/suppliers/")
+        self.assertEqual(overview_by_label["Receiving Records"]["tone"], "green")
+        self.assertEqual(overview_by_label["Receiving Records"]["href"], "/operations/receiving/")
         self.assertEqual(overview_by_label["Delivery Records"]["tone"], "indigo")
+        self.assertEqual(overview_by_label["Delivery Records"]["href"], "/operations/deliveries/")
+        self.assertEqual(overview_by_label["Clients"]["href"], "/clients/")
+        self.assertTrue(overview_by_label["Clients"]["enabled"])
         self.assertFalse(overview_by_label["Total Assets"]["enabled"])
         self.assertFalse(overview_by_label["Knowledge Docs"]["enabled"])
-        self.assertEqual(overview_by_label["Total Assets"]["detail"], "Coming later")
-        self.assertEqual(overview_by_label["New Stock Units"]["tone"], "green")
+        self.assertNotIn("Sites", overview_labels)
+        self.assertNotIn("Sold Units", overview_labels)
+        self.assertNotIn("Product Categories", overview_labels)
+
+    def test_command_center_kpis_are_clickable_navigation_shortcuts(self):
+        user = User.objects.create_user(username="viewer", password="test-pass")
+        user.user_permissions.add(Permission.objects.get(codename="view_product"))
+        self.client.force_login(user)
+
+        response = self.client.get("/")
+        kpis_by_label = {
+            item["label"]: item
+            for item in response.context["initial_data"]["kpis"]
+        }
+
+        self.assertEqual(kpis_by_label["Total Products"]["href"], "/inventory/")
+        self.assertEqual(kpis_by_label["Available Stock"]["href"], "/inventory/?status=available")
+        self.assertEqual(kpis_by_label["Out of Stock Products"]["href"], "/inventory/?stock=out")
+        self.assertEqual(kpis_by_label["Low Stock Alerts"]["href"], "/inventory/?stock=low")
 
     def test_command_center_pending_modules_and_actions_are_disabled(self):
         user = User.objects.create_user(username="viewer", password="test-pass")
@@ -1200,6 +1270,7 @@ class BIMPOSAccessTests(TestCase):
         self.assertEqual(activity["related"], "Canon L100")
         self.assertEqual(activity["status"], "Received")
         self.assertEqual(activity["status_class"], "received")
+        self.assertEqual(activity["href"], f"/operations/receiving/{unit.pk}/")
         receiving_panel = response.context["initial_data"]["recentReceiving"][0]
         self.assertEqual(
             receiving_panel["reference"],
@@ -1209,7 +1280,7 @@ class BIMPOSAccessTests(TestCase):
         self.assertEqual(receiving_panel["detail"], "Laser")
         self.assertEqual(
             receiving_panel["href"],
-            f"/inventory/products/{product.pk}/",
+            f"/operations/receiving/{unit.pk}/",
         )
         self.assertNotIn(unit.serial_number, str(receiving_panel))
         self.assertEqual(receiving_panel["status"], "Received")
@@ -1244,10 +1315,9 @@ class BIMPOSAccessTests(TestCase):
         self.assertEqual(delivery_panel["reference"], delivery.delivery_number)
         self.assertEqual(delivery_panel["title"], "IT Department")
         self.assertEqual(delivery_panel["detail"], "1 Canon L100")
-        self.assertIsNone(delivery_panel["href"])
         self.assertEqual(
-            delivery_panel["futureHref"],
-            f"/inventory/deliveries/{delivery.pk}/",
+            delivery_panel["href"],
+            f"/operations/deliveries/{delivery.pk}/",
         )
         self.assertEqual(delivery_panel["status"], "Delivered")
         self.assertEqual(delivery_panel["status_class"], "delivered")
@@ -1268,7 +1338,7 @@ class BIMPOSAccessTests(TestCase):
 
         self.assertEqual(
             set(actions_by_label),
-            {"Add Product", "Receive Stock", "Create Delivery", "Add Supplier"},
+            {"Add Product", "Receive Stock", "Create Delivery", "Add Supplier", "Add Client"},
         )
         self.assertEqual(actions_by_label["Add Product"]["href"], "/inventory/products/new/")
         self.assertEqual(actions_by_label["Receive Stock"]["href"], "/inventory/receiving/new/")
@@ -1283,6 +1353,8 @@ class BIMPOSAccessTests(TestCase):
         self.assertEqual(actions_by_label["Create Delivery"]["tone"], "indigo")
         self.assertFalse(actions_by_label["Add Supplier"]["enabled"])
         self.assertIsNone(actions_by_label["Add Supplier"]["href"])
+        self.assertFalse(actions_by_label["Add Client"]["enabled"])
+        self.assertIsNone(actions_by_label["Add Client"]["href"])
 
     def test_command_center_stock_alert_kpis_use_inventory_counts(self):
         user = User.objects.create_user(username="viewer", password="test-pass")
@@ -1366,11 +1438,14 @@ class BIMPOSAccessTests(TestCase):
 
         self.assertEqual(
             set(actions_by_label),
-            {"Add Product", "Receive Stock", "Create Delivery", "Add Supplier"},
+            {"Add Product", "Receive Stock", "Create Delivery", "Add Supplier", "Add Client"},
         )
         self.assertFalse(actions_by_label["Add Supplier"]["enabled"])
         self.assertIsNone(actions_by_label["Add Supplier"]["href"])
         self.assertEqual(actions_by_label["Add Supplier"]["description"], "Coming later")
+        self.assertFalse(actions_by_label["Add Client"]["enabled"])
+        self.assertIsNone(actions_by_label["Add Client"]["href"])
+        self.assertEqual(actions_by_label["Add Client"]["description"], "Coming later")
 
     def test_command_center_uses_final_sidebar_and_search_labels(self):
         user = User.objects.create_user(username="viewer", password="test-pass")
@@ -1384,7 +1459,7 @@ class BIMPOSAccessTests(TestCase):
         self.assertFalse(response.context["initial_data"]["user"]["canAccessAdmin"])
         self.assertEqual(
             response.context["initial_data"]["hero"]["searchPlaceholder"],
-            "Search products, stock units, deliveries, suppliers, companies...",
+            "Search products, stock units, deliveries, suppliers, clients...",
         )
         self.assertEqual(
             response.context["initial_data"]["hero"]["greetingName"],

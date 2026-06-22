@@ -49,10 +49,30 @@ UI_TOKENS = {
         "icon": "suppliers",
         "tone": "purple",
     },
+    "product_categories": {
+        "label": "Product Categories",
+        "icon": "package",
+        "tone": "blue",
+    },
+    "receiving_records": {
+        "label": "Receiving Records",
+        "icon": "receiving",
+        "tone": "green",
+    },
     "delivery_records": {
         "label": "Delivery Records",
         "icon": "delivery",
         "tone": "indigo",
+    },
+    "clients": {
+        "label": "Clients",
+        "icon": "suppliers",
+        "tone": "blue",
+    },
+    "active_users": {
+        "label": "Active Users",
+        "icon": "user-check",
+        "tone": "neutral",
     },
     "new_stock_units": {
         "label": "New Stock Units",
@@ -95,6 +115,11 @@ UI_TOKENS = {
         "label": "Add Supplier",
         "icon": "suppliers",
         "tone": "purple",
+    },
+    "add_client": {
+        "label": "Add Client",
+        "icon": "suppliers",
+        "tone": "blue",
     },
     "stock_movement": {
         "label": "Stock Movement",
