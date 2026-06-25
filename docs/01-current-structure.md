@@ -14,6 +14,43 @@ This file describes the current implementation.
 
 Do not rename the Django package `bim` only for branding. User-facing UI should say BIM Nexus.
 
+## Installed Extensions And Packages
+
+Tracked backend packages in `requirements.txt`:
+- `Django`
+- `djangorestframework`
+- `pillow`
+- `asgiref`
+- `sqlparse`
+- `tzdata`
+
+Django apps enabled in `INSTALLED_APPS`:
+- Django built-ins: `admin`, `auth`, `contenttypes`, `sessions`, `messages`, `staticfiles`
+- Third-party: `rest_framework`
+- Project apps: `bim_accounts`, `bim_stock`
+
+Tracked frontend packages in `frontend/package.json`:
+- Runtime/build: `react`, `react-dom`, `vite`, `typescript`, `@vitejs/plugin-react`, `lucide-react`
+- Styling toolchain: `tailwindcss`, `postcss`, `autoprefixer`
+
+Developer workstation VS Code extensions currently used:
+- `Codex - OpenAI's coding agent`
+- `.NET Install Tool`
+- `Auto Rename Tag`
+- `Black Formatter`
+- `C#`
+- `C# Snippets`
+- `C# XML Documentation Comments`
+- `Path Intellisense`
+- `Pylance`
+- `Python`
+- `Python Debugger`
+- `Python Environments`
+- `Python Indent`
+- `SQLite Viewer`
+
+Developer tools such as the Codex/OpenAI VS Code extension or CLI are not project runtime dependencies and should not be added to `requirements.txt`.
+
 ## Backend Apps
 
 ### `bim`
@@ -47,7 +84,6 @@ Owns BIM Stock:
 ## Models
 
 Current `bim_stock` models:
-- `Type`
 - `Category`
 - `Brand`
 - `ProductModel`
@@ -59,10 +95,10 @@ Current `bim_stock` models:
 
 Important conventions:
 - `descript` is the internal product description/name field.
-- `printed` is the display/printed product name.
 - `crdate` is created date/time.
 - `isactive` is the soft-delete/active flag.
 - SKU is auto-generated from category, brand, and model.
+- `reorder_stock_level` is the single low-stock alert threshold.
 
 `Product` calculated stock properties use active ProductUnit records:
 - `total_units`
@@ -71,7 +107,6 @@ Important conventions:
 - `sold_units`
 - `returned_units`
 - `is_low_stock`
-- `is_critical_stock`
 - `stock_alert_tone`
 
 Current ProductUnit statuses:
@@ -114,14 +149,14 @@ Stock API routes:
 - `/api/stock/products/<id>/`
 - `/api/stock/product-units/`
 - `/api/stock/product-units/<id>/`
-- `/api/stock/types/`
 - `/api/stock/categories/`
 - `/api/stock/brands/`
 - `/api/stock/models/`
 - `/api/stock/suppliers/`
 - `/api/stock/deliveries/`
 
-Legacy Django stock template routes still exist under `/stock/`.
+Legacy Django stock template routes under `/stock/` were removed. Use React
+`/inventory/` routes and Django admin for stock workflows.
 
 ## Implemented Features
 
@@ -136,7 +171,7 @@ React UI:
 - Command Center
 - BIM Stock list
 - Product Details route/page with overview, stock-unit register, and workflow actions
-- Add Product
+- Add Product with inline Category/Brand creation and product image upload
 - Receive Stock
 - Create Delivery
 - Operations hub
@@ -158,7 +193,7 @@ BIM Stock APIs:
 - stock unit list/create/detail/update
 - delivery record list/create
 - summary counts
-- lookup endpoints
+- lookup endpoints, including Category/Brand create support for the Add Product UI
 
 ## Not Implemented Yet
 

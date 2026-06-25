@@ -31,5 +31,4 @@ urlpatterns = [
     path("brands/", api_views.BrandListAPIView.as_view(), name="brands"),
     path("models/", api_views.ProductModelListAPIView.as_view(), name="models"),
     path("categories/", api_views.CategoryListAPIView.as_view(), name="categories"),
-    path("types/", api_views.TypeListAPIView.as_view(), name="types"),
 ]

@@ -2,13 +2,17 @@ from django.contrib import admin
 from django.contrib.auth.models import Group, Permission, User
 from django.contrib.auth.tokens import default_token_generator
 from django.contrib.messages.storage.fallback import FallbackStorage
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core import mail
 from django.db import models
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from django.utils import timezone
+from io import BytesIO
 from pathlib import Path
+from PIL import Image
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from bim.ui_registry import UI_TOKENS, ui_item
@@ -38,7 +42,6 @@ from .models import (
     ProductModel,
     ProductUnit,
     Supplier,
-    Type,
 )
 
 
@@ -52,7 +55,6 @@ class ProductAdminTests(SimpleTestCase):
             self.product_admin.list_display,
             (
                 "descript",
-                "printed",
                 "sku",
                 "barcode",
                 "total_quantity",
@@ -60,10 +62,8 @@ class ProductAdminTests(SimpleTestCase):
                 "reserved_quantity",
                 "sold_quantity",
                 "returned_quantity",
-                "minimum_stock_level",
                 "reorder_stock_level",
                 "stock_alert",
-                "product_type",
                 "category",
                 "brand",
                 "model",
@@ -73,17 +73,17 @@ class ProductAdminTests(SimpleTestCase):
         )
         self.assertEqual(
             self.product_admin.search_fields,
-            ("descript", "printed", "sku", "barcode"),
+            ("descript", "sku", "barcode"),
         )
         self.assertEqual(
             self.product_admin.list_filter,
             ("category", "model__brand", "isactive"),
         )
         self.assertEqual(self.product_admin.readonly_fields, ("sku", "crdate"))
-        self.assertEqual(self.product_admin.ordering, ("descript", "printed", "sku"))
+        self.assertEqual(self.product_admin.ordering, ("descript", "sku"))
         self.assertEqual(
             self.product_admin.list_select_related,
-            ("category__type", "model__brand"),
+            ("category", "model__brand"),
         )
 
 
@@ -164,18 +164,94 @@ class UIRegistryTests(SimpleTestCase):
         self.assertNotIn('href="/inventory/receiving/new/"', product_details_source)
         self.assertNotIn('href="/inventory/deliveries/new/"', product_details_source)
 
+    def test_inventory_product_rows_select_inline_detail_without_navigation(self):
+        app_source = Path("frontend/src/App.jsx").read_text(encoding="utf-8")
+        inventory_table_source = app_source[
+            app_source.index("function InventoryTable"):
+            app_source.index("function TableMessage")
+        ]
+        inline_detail_source = app_source[
+            app_source.index("function ProductDetail"):
+            app_source.index("function ProductDetailsPage")
+        ]
+
+        self.assertIn("onSelect(product.id)", inventory_table_source)
+        self.assertNotIn("window.location.assign", inventory_table_source)
+        self.assertIn('href={`/inventory/products/${product.id}/`}', inline_detail_source)
+        self.assertIn("Full View", inline_detail_source)
+
+    def test_inventory_page_reuses_command_center_kpi_cards(self):
+        app_source = Path("frontend/src/App.jsx").read_text(encoding="utf-8")
+        inventory_page_source = app_source[
+            app_source.index("function InventoryPage"):
+            app_source.index("function InventoryHeader")
+        ]
+
+        self.assertIn("const inventoryKpis = [", inventory_page_source)
+        self.assertIn("<KpiGrid items={inventoryKpis}", inventory_page_source)
+        self.assertNotIn("<InventoryMetric", inventory_page_source)
+        self.assertNotIn("function InventoryMetric", app_source)
+
+    def test_add_product_page_can_create_catalogue_lookups_inline(self):
+        app_source = Path("frontend/src/App.jsx").read_text(encoding="utf-8")
+        add_product_source = app_source[
+            app_source.index("function AddProductPage"):
+            app_source.index("function ReceiveStockPage")
+        ]
+
+        self.assertIn("function LookupCreateControl", app_source)
+        self.assertIn('createLookup("category"', add_product_source)
+        self.assertIn('createLookup("brand"', add_product_source)
+        self.assertNotIn('createLookup("type"', add_product_source)
+        self.assertNotIn("data.api.types", add_product_source)
+        self.assertIn("reorderStockLevel", add_product_source)
+        self.assertIn('payload.append("reorder_stock_level", form.reorderStockLevel)', add_product_source)
+        self.assertNotIn('payload.append("printed"', add_product_source)
+        self.assertNotIn("minimum_stock_level", add_product_source)
+
+    def test_add_product_page_supports_click_drop_and_upload_for_product_images(self):
+        app_source = Path("frontend/src/App.jsx").read_text(encoding="utf-8")
+        add_product_source = app_source[
+            app_source.index("function AddProductPage"):
+            app_source.index("function ReceiveStockPage")
+        ]
+        save_product_start = add_product_source.index("async function saveProduct")
+        save_product_source = add_product_source[
+            save_product_start:
+            add_product_source.index("  return (", save_product_start)
+        ]
+
+        self.assertIn("const imageInputRef = useRef(null)", add_product_source)
+        self.assertIn('type="file"', add_product_source)
+        self.assertIn('accept="image/png,image/jpeg"', add_product_source)
+        self.assertIn("onClick={() => imageInputRef.current?.click()}", add_product_source)
+        self.assertIn("onDrop={handleImageDrop}", add_product_source)
+        self.assertIn("const payload = new FormData()", save_product_source)
+        self.assertIn('payload.append("image", form.imageFile)', save_product_source)
+        self.assertNotIn('"Content-Type": "application/json"', save_product_source)
+
+    def test_legacy_stock_template_routes_are_not_exposed(self):
+        app_source = Path("frontend/src/App.jsx").read_text(encoding="utf-8")
+        launcher_source = Path("templates/bim/module_launcher.html").read_text(
+            encoding="utf-8"
+        )
+
+        response = self.client.get("/stock/")
+
+        self.assertEqual(response.status_code, 404)
+        self.assertNotIn("/stock/", app_source)
+        self.assertNotIn("bim_stock:", launcher_source)
+
 
 # Tests the available stock count shown in Product admin.
 class ProductAdminStockCountTests(TestCase):
     def setUp(self):
         self.product_admin = ProductAdmin(Product, admin.site)
-        product_type = Type.objects.create(name="Printer")
-        category = Category.objects.create(type=product_type, name="Laser")
+        category = Category.objects.create(name="Laser")
         brand = Brand.objects.create(brandname="Canon")
         model = ProductModel.objects.create(brand=brand, modelname="L100")
         self.product = Product.objects.create(
             descript="Canon laser printer",
-            printed="Canon L100",
             category=category,
             model=model,
         )
@@ -228,7 +304,6 @@ class ProductAdminStockCountTests(TestCase):
 
     def test_product_stock_alert_uses_product_thresholds(self):
         self.product.reorder_stock_level = 3
-        self.product.minimum_stock_level = 0
         self.product.save()
         ProductUnit.objects.create(
             product=self.product,
@@ -238,7 +313,6 @@ class ProductAdminStockCountTests(TestCase):
         )
 
         self.assertTrue(self.product.is_low_stock)
-        self.assertFalse(self.product.is_critical_stock)
         self.assertEqual(self.product.stock_alert_tone, "warning")
         self.assertEqual(self.product_admin.stock_alert(self.product), "Low")
 
@@ -287,7 +361,6 @@ class ProductUnitAdminTests(SimpleTestCase):
             (
                 "serial_number",
                 "product__descript",
-                "product__printed",
                 "product__sku",
                 "product__barcode",
             ),
@@ -376,13 +449,11 @@ class ProductUnitPurchaseFormTests(SimpleTestCase):
 class ProductUnitSellingWorkflowTests(TestCase):
     def setUp(self):
         self.product_unit_admin = ProductUnitAdmin(ProductUnit, admin.site)
-        product_type = Type.objects.create(name="Printer")
-        category = Category.objects.create(type=product_type, name="Laser")
+        category = Category.objects.create(name="Laser")
         brand = Brand.objects.create(brandname="Canon")
         model = ProductModel.objects.create(brand=brand, modelname="L100")
         product = Product.objects.create(
             descript="Canon laser printer",
-            printed="Canon L100",
             category=category,
             model=model,
         )
@@ -407,219 +478,6 @@ class ProductUnitSellingWorkflowTests(TestCase):
         self.assertEqual(self.unit.status, ProductUnit.STATUS_SOLD)
         self.assertEqual(self.unit.selling_price, 250)
         self.assertEqual(self.unit.sold_date, timezone.localdate())
-
-
-# Tests the /stock/ dashboard page counts.
-class StockDashboardTests(TestCase):
-    def setUp(self):
-        self.user = User.objects.create_user(
-            username="stock-user",
-            password="test-pass",
-        )
-        self.user.user_permissions.add(
-            Permission.objects.get(codename="view_product"),
-            Permission.objects.get(codename="view_productunit"),
-        )
-        product_type = Type.objects.create(name="Printer")
-        category = Category.objects.create(type=product_type, name="Laser")
-        brand = Brand.objects.create(brandname="Canon")
-        model = ProductModel.objects.create(brand=brand, modelname="L100")
-        self.product = Product.objects.create(
-            descript="Canon laser printer",
-            printed="Canon L100",
-            category=category,
-            model=model,
-            barcode="BAR-CANON-L100",
-        )
-        Product.objects.create(
-            descript="Inactive printer",
-            printed="Inactive L100",
-            category=category,
-            model=ProductModel.objects.create(brand=brand, modelname="L200"),
-            isactive=False,
-        )
-
-    def test_stock_dashboard_shows_current_stock_counts(self):
-        self.client.force_login(self.user)
-        ProductUnit.objects.create(
-            product=self.product,
-            serial_number="AVAILABLE-1",
-            status=ProductUnit.STATUS_AVAILABLE,
-            isactive=True,
-        )
-        ProductUnit.objects.create(
-            product=self.product,
-            serial_number="AVAILABLE-INACTIVE",
-            status=ProductUnit.STATUS_AVAILABLE,
-            isactive=False,
-        )
-        ProductUnit.objects.create(
-            product=self.product,
-            serial_number="SOLD-1",
-            status=ProductUnit.STATUS_SOLD,
-            isactive=True,
-        )
-        self.product.reorder_stock_level = 2
-        self.product.save()
-
-        response = self.client.get("/stock/")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, "bim_stock/dashboard.html")
-        self.assertEqual(response.context["total_products"], 1)
-        self.assertEqual(response.context["available_units"], 1)
-        self.assertEqual(response.context["sold_units"], 1)
-        self.assertEqual(response.context["low_stock_products"], 1)
-
-    def test_stock_dashboard_requires_login(self):
-        response = self.client.get("/stock/")
-
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response.url, "/accounts/login/?next=/stock/")
-
-
-# Tests custom stock pages outside Django admin.
-class CustomStockPageTests(TestCase):
-    def setUp(self):
-        self.user = User.objects.create_user(
-            username="stock-user",
-            password="test-pass",
-        )
-        self.user.user_permissions.add(
-            Permission.objects.get(codename="view_product"),
-            Permission.objects.get(codename="view_productunit"),
-        )
-        product_type = Type.objects.create(name="Printer")
-        category = Category.objects.create(type=product_type, name="Laser")
-        brand = Brand.objects.create(brandname="Canon")
-        model = ProductModel.objects.create(brand=brand, modelname="L100")
-        inactive_model = ProductModel.objects.create(brand=brand, modelname="L200")
-        self.product = Product.objects.create(
-            descript="Canon laser printer",
-            printed="Canon L100",
-            category=category,
-            model=model,
-            barcode="BAR-CANON-L100",
-        )
-        self.inactive_product = Product.objects.create(
-            descript="Inactive printer",
-            printed="Inactive L200",
-            category=category,
-            model=inactive_model,
-            isactive=False,
-        )
-        self.available_unit = ProductUnit.objects.create(
-            product=self.product,
-            serial_number="AVAILABLE-DETAIL",
-            status=ProductUnit.STATUS_AVAILABLE,
-            isactive=True,
-        )
-        self.sold_unit = ProductUnit.objects.create(
-            product=self.product,
-            serial_number="SOLD-DETAIL",
-            status=ProductUnit.STATUS_SOLD,
-            isactive=True,
-        )
-        self.inactive_unit = ProductUnit.objects.create(
-            product=self.product,
-            serial_number="INACTIVE-DETAIL",
-            status=ProductUnit.STATUS_AVAILABLE,
-            isactive=False,
-        )
-
-    def test_product_list_shows_active_products_with_available_counts(self):
-        self.client.force_login(self.user)
-        response = self.client.get("/stock/products/")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, "bim_stock/product_list.html")
-        products = list(response.context["products"])
-        self.assertEqual(products, [self.product])
-        self.assertEqual(products[0].available_unit_count, 1)
-
-    def test_product_list_can_search_by_barcode(self):
-        self.client.force_login(self.user)
-        response = self.client.get("/stock/products/", {"q": "CANON-L100"})
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(list(response.context["products"]), [self.product])
-        self.assertEqual(response.context["query"], "CANON-L100")
-
-    def test_product_detail_shows_available_units_only(self):
-        self.client.force_login(self.user)
-        response = self.client.get(f"/stock/products/{self.product.pk}/")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, "bim_stock/product_detail.html")
-        self.assertEqual(response.context["product"], self.product)
-        self.assertEqual(response.context["available_unit_count"], 1)
-        self.assertContains(response, "BAR-CANON-L100")
-        self.assertEqual(
-            list(response.context["available_units"]),
-            [self.available_unit],
-        )
-
-    def test_product_detail_hides_unit_details_without_unit_permission(self):
-        user = User.objects.create_user(username="product-only", password="test-pass")
-        user.user_permissions.add(Permission.objects.get(codename="view_product"))
-        self.client.force_login(user)
-
-        response = self.client.get(f"/stock/products/{self.product.pk}/")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context["available_unit_count"], 1)
-        self.assertEqual(list(response.context["available_units"]), [])
-        self.assertContains(response, "Stock unit details require stock unit permission")
-        self.assertNotContains(response, "AVAILABLE-DETAIL")
-
-    def test_product_detail_does_not_show_inactive_products(self):
-        self.client.force_login(self.user)
-        response = self.client.get(f"/stock/products/{self.inactive_product.pk}/")
-
-        self.assertEqual(response.status_code, 404)
-
-    def test_stock_list_shows_active_units(self):
-        self.client.force_login(self.user)
-        response = self.client.get("/stock/units/")
-
-        self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, "bim_stock/stock_list.html")
-        self.assertEqual(
-            list(response.context["units"]),
-            [self.available_unit, self.sold_unit],
-        )
-
-    def test_stock_list_can_search_by_product_barcode(self):
-        self.client.force_login(self.user)
-        response = self.client.get("/stock/units/", {"q": "BAR-CANON-L100"})
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            list(response.context["units"]),
-            [self.available_unit, self.sold_unit],
-        )
-        self.assertEqual(response.context["query"], "BAR-CANON-L100")
-
-    def test_custom_stock_pages_show_staff_navigation_helpers(self):
-        self.client.force_login(self.user)
-        dashboard_response = self.client.get("/stock/")
-        product_response = self.client.get("/stock/products/", {"q": "CANON"})
-        stock_response = self.client.get("/stock/units/", {"q": "CANON"})
-
-        self.assertContains(dashboard_response, "Browse Products")
-        self.assertContains(dashboard_response, "Browse Stock Units")
-        self.assertContains(product_response, "Showing 1 product")
-        self.assertContains(product_response, "Clear Search")
-        self.assertContains(stock_response, "Showing 2 stock units")
-        self.assertContains(stock_response, "Clear Search")
-
-    def test_stock_pages_require_stock_permissions(self):
-        user = User.objects.create_user(username="viewer", password="test-pass")
-        self.client.force_login(user)
-
-        response = self.client.get("/stock/products/")
-
-        self.assertEqual(response.status_code, 403)
 
 
 # Tests BIM Nexus auth, role preparation, and Command Center behavior.
@@ -1028,13 +886,11 @@ class BIMPOSAccessTests(TestCase):
     def test_command_center_data_api_returns_refreshable_dashboard_payload(self):
         user = User.objects.create_user(username="viewer", password="test-pass")
         user.user_permissions.add(Permission.objects.get(codename="view_product"))
-        product_type = Type.objects.create(name="Printer")
-        category = Category.objects.create(type=product_type, name="Laser")
+        category = Category.objects.create(name="Laser")
         brand = Brand.objects.create(brandname="Canon")
         model = ProductModel.objects.create(brand=brand, modelname="L100")
         product = Product.objects.create(
             descript="Canon laser printer",
-            printed="Canon L100",
             category=category,
             model=model,
         )
@@ -1053,7 +909,7 @@ class BIMPOSAccessTests(TestCase):
         self.assertEqual(data["currentPath"], "/")
         self.assertEqual(data["api"]["commandCenter"], "/api/command-center/")
         self.assertEqual(data["pollIntervalMs"], 60000)
-        self.assertEqual(data["recentReceiving"][0]["title"], "Canon L100")
+        self.assertEqual(data["recentReceiving"][0]["title"], "Canon laser printer")
         self.assertEqual(
             data["recentReceiving"][0]["reference"],
             f"RCV-{timezone.localdate().year}-{unit.pk:04d}",
@@ -1208,13 +1064,11 @@ class BIMPOSAccessTests(TestCase):
     def test_command_center_recent_activity_labels_sold_units_as_delivered(self):
         user = User.objects.create_user(username="viewer", password="test-pass")
         user.user_permissions.add(Permission.objects.get(codename="view_product"))
-        product_type = Type.objects.create(name="Printer")
-        category = Category.objects.create(type=product_type, name="Laser")
+        category = Category.objects.create(name="Laser")
         brand = Brand.objects.create(brandname="Canon")
         model = ProductModel.objects.create(brand=brand, modelname="L100")
         product = Product.objects.create(
             descript="Canon laser printer",
-            printed="Canon L100",
             category=category,
             model=model,
         )
@@ -1234,20 +1088,18 @@ class BIMPOSAccessTests(TestCase):
             activity["reference"],
             f"DLV-{timezone.localdate().year}-{unit.pk:04d}",
         )
-        self.assertEqual(activity["related"], "Canon L100")
+        self.assertEqual(activity["related"], "Canon laser printer")
         self.assertEqual(activity["status"], "Delivered")
         self.assertEqual(activity["status_class"], "delivered")
 
     def test_command_center_recent_activity_uses_receiving_reference_fallback(self):
         user = User.objects.create_user(username="viewer", password="test-pass")
         user.user_permissions.add(Permission.objects.get(codename="view_product"))
-        product_type = Type.objects.create(name="Printer")
-        category = Category.objects.create(type=product_type, name="Laser")
+        category = Category.objects.create(name="Laser")
         brand = Brand.objects.create(brandname="Canon")
         model = ProductModel.objects.create(brand=brand, modelname="L100")
         product = Product.objects.create(
             descript="Canon laser printer",
-            printed="Canon L100",
             category=category,
             model=model,
         )
@@ -1267,7 +1119,7 @@ class BIMPOSAccessTests(TestCase):
             activity["reference"],
             f"RCV-{timezone.localdate().year}-{unit.pk:04d}",
         )
-        self.assertEqual(activity["related"], "Canon L100")
+        self.assertEqual(activity["related"], "Canon laser printer")
         self.assertEqual(activity["status"], "Received")
         self.assertEqual(activity["status_class"], "received")
         self.assertEqual(activity["href"], f"/operations/receiving/{unit.pk}/")
@@ -1276,7 +1128,7 @@ class BIMPOSAccessTests(TestCase):
             receiving_panel["reference"],
             f"RCV-{timezone.localdate().year}-{unit.pk:04d}",
         )
-        self.assertEqual(receiving_panel["title"], "Canon L100")
+        self.assertEqual(receiving_panel["title"], "Canon laser printer")
         self.assertEqual(receiving_panel["detail"], "Laser")
         self.assertEqual(
             receiving_panel["href"],
@@ -1289,13 +1141,11 @@ class BIMPOSAccessTests(TestCase):
     def test_command_center_recent_deliveries_panel_uses_delivery_records(self):
         user = User.objects.create_user(username="viewer", password="test-pass")
         user.user_permissions.add(Permission.objects.get(codename="view_product"))
-        product_type = Type.objects.create(name="Printer")
-        category = Category.objects.create(type=product_type, name="Laser")
+        category = Category.objects.create(name="Laser")
         brand = Brand.objects.create(brandname="Canon")
         model = ProductModel.objects.create(brand=brand, modelname="L100")
         product = Product.objects.create(
             descript="Canon laser printer",
-            printed="Canon L100",
             category=category,
             model=model,
         )
@@ -1314,7 +1164,7 @@ class BIMPOSAccessTests(TestCase):
 
         self.assertEqual(delivery_panel["reference"], delivery.delivery_number)
         self.assertEqual(delivery_panel["title"], "IT Department")
-        self.assertEqual(delivery_panel["detail"], "1 Canon L100")
+        self.assertEqual(delivery_panel["detail"], "1 Canon laser printer")
         self.assertEqual(
             delivery_panel["href"],
             f"/operations/deliveries/{delivery.pk}/",
@@ -1359,26 +1209,21 @@ class BIMPOSAccessTests(TestCase):
     def test_command_center_stock_alert_kpis_use_inventory_counts(self):
         user = User.objects.create_user(username="viewer", password="test-pass")
         user.user_permissions.add(Permission.objects.get(codename="view_product"))
-        product_type = Type.objects.create(name="Printer")
-        category = Category.objects.create(type=product_type, name="Laser")
+        category = Category.objects.create(name="Laser")
         brand = Brand.objects.create(brandname="Canon")
         model = ProductModel.objects.create(brand=brand, modelname="L100")
         out_product = Product.objects.create(
             descript="Canon laser printer",
-            printed="Canon L100",
             category=category,
             model=model,
             reorder_stock_level=2,
-            minimum_stock_level=1,
         )
         low_model = ProductModel.objects.create(brand=brand, modelname="L200")
         low_product = Product.objects.create(
             descript="Canon laser printer L200",
-            printed="Canon L200",
             category=category,
             model=low_model,
             reorder_stock_level=3,
-            minimum_stock_level=1,
         )
         ProductUnit.objects.create(
             product=low_product,
@@ -1411,7 +1256,7 @@ class BIMPOSAccessTests(TestCase):
         self.assertEqual(low_stock_kpi["tone"], "warning")
         self.assertEqual(low_stock_kpi["detail"], "1 product with low stock")
         low_stock_alert = response.context["initial_data"]["lowStockAlerts"][0]
-        self.assertEqual(low_stock_alert["productName"], "Canon L200")
+        self.assertEqual(low_stock_alert["productName"], "Canon laser printer L200")
         self.assertEqual(low_stock_alert["category"], "Laser")
         self.assertEqual(low_stock_alert["availableQuantity"], 2)
         self.assertEqual(low_stock_alert["reorderThreshold"], 3)
@@ -1492,19 +1337,16 @@ class BIMPOSAccessTests(TestCase):
     def test_command_center_low_stock_kpi_pluralizes_product_detail(self):
         user = User.objects.create_user(username="viewer", password="test-pass")
         user.user_permissions.add(Permission.objects.get(codename="view_product"))
-        product_type = Type.objects.create(name="Printer")
-        category = Category.objects.create(type=product_type, name="Laser")
+        category = Category.objects.create(name="Laser")
         brand = Brand.objects.create(brandname="Canon")
 
         for index in range(2):
             model = ProductModel.objects.create(brand=brand, modelname=f"L{index}")
             product = Product.objects.create(
                 descript=f"Canon laser printer {index}",
-                printed=f"Canon L{index}",
                 category=category,
                 model=model,
                 reorder_stock_level=3,
-                minimum_stock_level=1,
             )
             ProductUnit.objects.create(
                 product=product,
@@ -1576,13 +1418,11 @@ class BIMPOSAccessTests(TestCase):
     def test_product_detail_react_page_uses_product_detail_route(self):
         user = User.objects.create_user(username="viewer", password="test-pass")
         user.user_permissions.add(Permission.objects.get(codename="view_product"))
-        product_type = Type.objects.create(name="Printer")
-        category = Category.objects.create(type=product_type, name="Laser")
+        category = Category.objects.create(name="Laser")
         brand = Brand.objects.create(brandname="Canon")
         model = ProductModel.objects.create(brand=brand, modelname="L100")
         product = Product.objects.create(
             descript="Canon laser printer",
-            printed="Canon L100",
             category=category,
             model=model,
         )
@@ -1733,13 +1573,11 @@ class ProductUnitModelTests(SimpleTestCase):
 # Tests status/date consistency on direct ProductUnit saves.
 class ProductUnitStatusBehaviorTests(TestCase):
     def setUp(self):
-        product_type = Type.objects.create(name="Printer")
-        category = Category.objects.create(type=product_type, name="Laser")
+        category = Category.objects.create(name="Laser")
         brand = Brand.objects.create(brandname="Canon")
         model = ProductModel.objects.create(brand=brand, modelname="L100")
         self.product = Product.objects.create(
             descript="Canon laser printer",
-            printed="Canon L100",
             category=category,
             model=model,
         )
@@ -1781,18 +1619,15 @@ class ProductUnitStatusBehaviorTests(TestCase):
 
 class InventoryApiTests(TestCase):
     def setUp(self):
-        self.product_type = Type.objects.create(name="Printer")
-        self.category = Category.objects.create(type=self.product_type, name="Laser")
+        self.category = Category.objects.create(name="Laser")
         self.brand = Brand.objects.create(brandname="Canon")
         self.model = ProductModel.objects.create(brand=self.brand, modelname="L100")
         self.supplier = Supplier.objects.create(name="Gulf Networks LLC")
         self.product = Product.objects.create(
             descript="Canon laser printer",
-            printed="Canon L100",
             category=self.category,
             model=self.model,
             barcode="BAR-CANON-L100",
-            minimum_stock_level=1,
             reorder_stock_level=2,
         )
         ProductUnit.objects.create(
@@ -1848,11 +1683,10 @@ class InventoryApiTests(TestCase):
         self.assertEqual(product_data["total_units"], 2)
         self.assertEqual(product_data["available_units"], 1)
         self.assertEqual(product_data["reserved_units"], 1)
-        self.assertEqual(product_data["minimum_stock_level"], 1)
         self.assertEqual(product_data["reorder_stock_level"], 2)
         self.assertTrue(product_data["is_low_stock"])
-        self.assertTrue(product_data["is_critical_stock"])
-        self.assertEqual(product_data["stock_alert_tone"], "critical")
+        self.assertNotIn("is_critical_stock", product_data)
+        self.assertEqual(product_data["stock_alert_tone"], "warning")
 
     def test_product_api_requires_product_permission(self):
         user = User.objects.create_user(username="no-perm", password="test-pass")
@@ -1871,7 +1705,6 @@ class InventoryApiTests(TestCase):
             "/api/stock/products/",
             {
                 "descript": "Canon laser printer L200",
-                "printed": "Canon L200",
                 "category": self.category.pk,
                 "model": new_model.pk,
                 "barcode": "BAR-CANON-L200",
@@ -1879,7 +1712,7 @@ class InventoryApiTests(TestCase):
             content_type="application/json",
         )
 
-        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.status_code, 201, response.content)
         self.assertEqual(response.json()["sku"], "LAS-CAN-L200")
 
     def test_product_api_creates_product_with_new_model_name(self):
@@ -1890,7 +1723,6 @@ class InventoryApiTests(TestCase):
             "/api/stock/products/",
             {
                 "descript": "Canon laser printer L300",
-                "printed": "Canon L300",
                 "category": self.category.pk,
                 "brand": self.brand.pk,
                 "model_name_input": "L300",
@@ -1905,6 +1737,34 @@ class InventoryApiTests(TestCase):
         self.assertTrue(
             ProductModel.objects.filter(brand=self.brand, modelname="L300").exists()
         )
+
+    def test_product_api_creates_product_with_image_upload(self):
+        user = self._user_with_permissions("view_product", "add_product")
+        self.client.force_login(user)
+        image_file = BytesIO()
+        Image.new("RGB", (1, 1), color="white").save(image_file, format="PNG")
+        image = SimpleUploadedFile(
+            "printer.png",
+            image_file.getvalue(),
+            content_type="image/png",
+        )
+
+        with TemporaryDirectory() as media_root, override_settings(MEDIA_ROOT=media_root):
+            response = self.client.post(
+                "/api/stock/products/",
+                {
+                    "descript": "Canon laser printer L400",
+                    "category": self.category.pk,
+                    "brand": self.brand.pk,
+                    "model_name_input": "L400",
+                    "barcode": "BAR-CANON-L400",
+                    "image": image,
+                },
+            )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        product = Product.objects.get(pk=response.json()["id"])
+        self.assertTrue(product.image.name.startswith("products_images/printer"))
 
     def test_product_units_api_searches_serial_and_creates_unit(self):
         user = self._user_with_permissions("view_productunit", "add_productunit")
@@ -1941,7 +1801,6 @@ class InventoryApiTests(TestCase):
         self.client.force_login(user)
 
         responses = [
-            self.client.get("/api/stock/types/"),
             self.client.get("/api/stock/categories/"),
             self.client.get("/api/stock/brands/"),
             self.client.get("/api/stock/models/"),
@@ -1949,8 +1808,45 @@ class InventoryApiTests(TestCase):
         ]
 
         self.assertTrue(all(response.status_code == 200 for response in responses))
-        self.assertIn("Printer", {item["name"] for item in responses[0].json()})
-        self.assertIn("Gulf Networks LLC", {item["name"] for item in responses[4].json()})
+        self.assertIn("Laser", {item["name"] for item in responses[0].json()})
+        self.assertIn("Gulf Networks LLC", {item["name"] for item in responses[3].json()})
+
+    def test_reference_apis_create_catalogue_lookups(self):
+        user = self._user_with_permissions(
+            "view_product",
+            "add_category",
+            "add_brand",
+        )
+        self.client.force_login(user)
+
+        category_response = self.client.post(
+            "/api/stock/categories/",
+            {"name": "Barcode"},
+            content_type="application/json",
+        )
+        brand_response = self.client.post(
+            "/api/stock/brands/",
+            {"brandname": "Zebra"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(category_response.status_code, 201)
+        self.assertEqual(category_response.json()["name"], "Barcode")
+        self.assertEqual(brand_response.status_code, 201)
+        self.assertEqual(brand_response.json()["brandname"], "Zebra")
+
+    def test_reference_api_create_requires_lookup_permission(self):
+        user = self._user_with_permissions("view_product")
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/api/stock/brands/",
+            {"brandname": "Zebra"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(Brand.objects.filter(brandname="Zebra").exists())
 
     def test_summary_api_returns_inventory_counts(self):
         user = self._user_with_permissions("view_product")
@@ -1963,7 +1859,7 @@ class InventoryApiTests(TestCase):
         self.assertEqual(response.json()["available_units"], 1)
         self.assertEqual(response.json()["reserved_units"], 1)
         self.assertEqual(response.json()["low_stock_products"], 1)
-        self.assertEqual(response.json()["critical_stock_products"], 1)
+        self.assertNotIn("critical_stock_products", response.json())
 
     def test_delivery_api_creates_record_and_marks_units_sold(self):
         user = self._user_with_permissions(

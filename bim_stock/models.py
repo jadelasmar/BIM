@@ -3,34 +3,17 @@ from django.conf import settings
 from django.utils import timezone
 
 
-# Type is the broad product group.
-# Create this first.
-# Example: Hardware.
-class Type(models.Model):  # renamed from ProductType
-    name = models.CharField(max_length=100, unique=True)
-
-    def __str__(self):
-        return self.name
-
-
-# Category belongs to a Type and narrows the product group.
-# Create this after Type.
-# Example: Type = Hardware, Category = Barcode Printer.
+# Category groups products into a clear product family.
+# Create this before Product.
+# Example: Barcode Printer.
 class Category(models.Model):
-    type = models.ForeignKey(Type, on_delete=models.PROTECT, related_name="categories")
     name = models.CharField(max_length=100)
 
     class Meta:
         verbose_name_plural = "Categories"
-        constraints = [
-            models.UniqueConstraint(
-                fields=["type", "name"],
-                name="unique_category_per_type",
-            )
-        ]
 
     def __str__(self):
-        return f"{self.type} - {self.name}"
+        return self.name
 
 
 # Brand stores the manufacturer or brand name for product models.
@@ -63,11 +46,10 @@ class ProductModel(models.Model):
 
 
 # Product is the reusable product definition.
-# Create this after Type, Category, Brand, and ProductModel exist.
+# Create this after Category, Brand, and ProductModel exist.
 # It is not one physical stock item; physical stock is stored in ProductUnit.
 class Product(models.Model):
     descript = models.CharField(max_length=200)
-    printed = models.CharField(max_length=200, blank=True, null=True)
 
     category = models.ForeignKey(Category, on_delete=models.PROTECT)
     model = models.ForeignKey(ProductModel, on_delete=models.PROTECT)
@@ -76,7 +58,6 @@ class Product(models.Model):
     barcode = models.CharField(max_length=100, blank=True, null=True)
 
     image = models.ImageField(upload_to="products_images/", blank=True, null=True)
-    minimum_stock_level = models.PositiveIntegerField(default=0)
     reorder_stock_level = models.PositiveIntegerField(default=0)
 
     crdate = models.DateTimeField(auto_now_add=True)
@@ -104,7 +85,7 @@ class Product(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return self.printed or self.descript
+        return self.descript
 
     def active_unit_count(self, status=None):
         units = self.units.filter(isactive=True)
@@ -138,13 +119,7 @@ class Product(models.Model):
         return self.reorder_stock_level > 0 and self.available_units <= self.reorder_stock_level
 
     @property
-    def is_critical_stock(self):
-        return self.minimum_stock_level > 0 and self.available_units <= self.minimum_stock_level
-
-    @property
     def stock_alert_tone(self):
-        if self.is_critical_stock:
-            return "critical"
         if self.is_low_stock:
             return "warning"
         return "normal"

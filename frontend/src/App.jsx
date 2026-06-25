@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ChevronRight,
   Edit3,
@@ -527,7 +527,7 @@ function InventoryPage({ data }) {
       return products.filter((product) => product.available_units === 0);
     }
     if (stockFilter === "low") {
-      return products.filter((product) => product.available_units > 0 && (product.is_low_stock || product.is_critical_stock));
+      return products.filter((product) => product.available_units > 0 && product.is_low_stock);
     }
     return products;
   }, [products, stockFilter]);
@@ -536,27 +536,50 @@ function InventoryPage({ data }) {
     () => visibleProducts.find((product) => product.id === selectedId) || visibleProducts[0] || null,
     [visibleProducts, selectedId]
   );
-  const lowStockCount = visibleProducts.filter((product) => product.is_low_stock || product.is_critical_stock).length;
+  const lowStockCount = visibleProducts.filter((product) => product.is_low_stock).length;
   const outOfStockCount = visibleProducts.filter((product) => product.available_units === 0).length;
   const inactiveCount = visibleProducts.filter((product) => !product.isactive || product.available_units === 0).length;
+  const inventoryKpis = [
+    {
+      label: "Total Products",
+      value: formatCount(summary?.total_products ?? 0),
+      detail: "catalogue items",
+      icon: "database",
+      tone: "blue",
+      href: data.routes.inventory
+    },
+    {
+      label: "Available Stock",
+      value: formatCount(summary?.available_units ?? 0),
+      detail: "units ready to use",
+      icon: "layers",
+      tone: "green",
+      href: data.routes.availableStock
+    },
+    {
+      label: "Reserved Stock",
+      value: formatCount(summary?.reserved_units ?? 0),
+      detail: "pending allocation",
+      icon: "box",
+      tone: "warning",
+      href: `${data.routes.inventory}?status=reserved`
+    },
+    {
+      label: "Out of Stock",
+      value: formatCount(outOfStockCount),
+      detail: "products with no available units",
+      icon: "package-x",
+      tone: outOfStockCount > 0 ? "danger" : "neutral",
+      href: data.routes.outOfStock
+    }
+  ];
 
   return (
     <Shell data={data}>
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0">
           <InventoryHeader actions={data.quickActions} />
-          <section className="grid gap-3 md:grid-cols-2 2xl:grid-cols-4">
-            <InventoryMetric label="Total Products" value={summary?.total_products ?? 0} detail="catalogue items" icon="database" />
-            <InventoryMetric label="Available Stock" value={summary?.available_units ?? 0} detail="units ready to use" icon="layers" />
-            <InventoryMetric label="Reserved Stock" value={summary?.reserved_units ?? 0} detail="pending allocation" icon="box" />
-            <InventoryMetric
-              label="Out of Stock"
-              value={outOfStockCount}
-              detail="products with no available units"
-              icon="package-x"
-              alert={outOfStockCount > 0}
-            />
-          </section>
+          <KpiGrid items={inventoryKpis} />
 
           <section className="mt-4 rounded-lg border border-nexus-line bg-nexus-panel p-3">
             <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
@@ -651,21 +674,6 @@ function InventoryHeader({ actions }) {
   );
 }
 
-function InventoryMetric({ label, value, detail, icon, alert = false, warning = false }) {
-  return (
-    <article className={`min-h-28 rounded-lg border bg-nexus-panel p-4 ${alert ? "border-nexus-red/70" : warning ? "border-nexus-orange/70" : "border-nexus-line"}`}>
-      <div className="flex items-start justify-between gap-3">
-        <p className="text-sm text-zinc-400">{label}</p>
-        <span className={`rounded-md p-2 ${alert ? toneClasses.red : warning ? toneClasses.warning : toneClasses.neutral}`}>
-          <Icon name={icon} />
-        </span>
-      </div>
-      <p className={`mt-5 text-3xl font-bold ${alert ? "text-nexus-red" : warning ? "text-nexus-orange" : "text-zinc-100"}`}>{formatCount(value)}</p>
-      <p className="mt-1 text-sm text-zinc-400">{detail}</p>
-    </article>
-  );
-}
-
 function Select({ value, onChange, options, label }) {
   return (
     <select
@@ -711,7 +719,7 @@ function InventoryTable({ products, selectedId, onSelect, loading, error }) {
                   className={`cursor-pointer border-t border-nexus-line hover:bg-zinc-900/70 ${
                     selectedId === product.id ? "bg-amber-950/20 outline outline-1 outline-nexus-orange/50" : ""
                   }`}
-                  onClick={() => window.location.assign(`/inventory/products/${product.id}/`)}
+                  onClick={() => onSelect(product.id)}
                 >
                   <td className="px-4 py-4">
                     <div className="flex items-center gap-3">
@@ -795,7 +803,7 @@ function ProductStatus({ product }) {
   } else if (product.available_units === 0) {
     label = "Out of Stock";
     statusKey = "out_of_stock";
-  } else if (product.is_low_stock || product.is_critical_stock) {
+  } else if (product.is_low_stock) {
     label = "Low Stock";
     statusKey = "low_stock";
   }
@@ -860,8 +868,7 @@ function ProductDetail({ product }) {
           <DetailRow label="Reserved Stock" value={product.reserved_units} />
           <DetailRow label="Total Stock" value={product.total_units} strong />
           <DetailRow label="Sold Stock" value={product.sold_units} />
-          <DetailRow label="Minimum Level" value={product.minimum_stock_level} />
-          <DetailRow label="Reorder Level" value={product.reorder_stock_level} />
+          <DetailRow label="Low Stock Alert" value={product.reorder_stock_level} />
         </div>
 
         <a
@@ -1039,12 +1046,11 @@ function ProductDetailsPage({ data }) {
           label="Available"
           value={product.available_units}
           detail={`${stockPercent}% in stock`}
-          warning={product.is_low_stock || product.is_critical_stock}
+          warning={product.is_low_stock}
           danger={product.available_units === 0}
         />
         <ProductDetailMetric label="Reserved" value={product.reserved_units} detail="pending allocation" />
-        <ProductDetailMetric label="Minimum Level" value={product.minimum_stock_level} detail="critical threshold" />
-        <ProductDetailMetric label="Reorder Level" value={product.reorder_stock_level} detail="low-stock threshold" info />
+        <ProductDetailMetric label="Low Stock Alert" value={product.reorder_stock_level} detail="alert threshold" info />
       </section>
 
       <nav className="mt-5 flex gap-1 overflow-x-auto border-b border-nexus-line text-sm font-semibold">
@@ -1069,13 +1075,11 @@ function ProductDetailsPage({ data }) {
         <div className="space-y-5">
           <div className="grid gap-5 xl:grid-cols-2">
             <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
-              <SectionTitle title="Product Information" />
-              <dl className="mt-4 divide-y divide-nexus-line">
-                <DetailRow label="Product Name" value={product.descript} />
-                <DetailRow label="Printed Name" value={product.printed || "-"} />
-                <DetailRow label="SKU" value={product.sku} />
+                <SectionTitle title="Product Information" />
+                <dl className="mt-4 divide-y divide-nexus-line">
+                  <DetailRow label="Product Name" value={product.descript} />
+                  <DetailRow label="SKU" value={product.sku} />
                 <DetailRow label="Barcode" value={product.barcode || "-"} />
-                <DetailRow label="Type" value={product.type_name} />
                 <DetailRow label="Category" value={product.category_name} />
                 <DetailRow label="Brand" value={product.brand_name} />
                 <DetailRow label="Model" value={product.model_name} />
@@ -1108,8 +1112,7 @@ function ProductDetailsPage({ data }) {
                   <DetailRow label="Available" value={product.available_units} highlight />
                   <DetailRow label="Reserved" value={product.reserved_units} />
                   <DetailRow label="Total" value={product.total_units} strong />
-                  <DetailRow label="Minimum Level" value={product.minimum_stock_level} />
-                  <DetailRow label="Reorder Level" value={product.reorder_stock_level} />
+                  <DetailRow label="Low Stock Alert" value={product.reorder_stock_level} />
                 </dl>
               </section>
             </div>
@@ -1137,8 +1140,8 @@ function ProductDetailsPage({ data }) {
               No stock-unit activity yet.
             </p>
           )}
-          <a href={`/stock/products/${product.id}/`} className="block border-t border-nexus-line px-4 py-4 text-center text-sm font-semibold text-nexus-orange hover:bg-nexus-panel2">
-            View legacy stock page
+          <a href={`/inventory/products/${product.id}/`} className="block border-t border-nexus-line px-4 py-4 text-center text-sm font-semibold text-nexus-orange hover:bg-nexus-panel2">
+            View product detail
           </a>
         </aside>
       </div>
@@ -1259,32 +1262,33 @@ function formatCurrency(value) {
 function AddProductPage({ data }) {
   const emptyForm = {
     descript: "",
-    type: "",
     category: "",
     brand: "",
     modelName: "",
     barcode: "",
+    reorderStockLevel: "0",
     notes: "",
+    imageFile: null,
     isactive: true
   };
   const [form, setForm] = useState(emptyForm);
-  const [refs, setRefs] = useState({ types: [], categories: [], brands: [] });
+  const [refs, setRefs] = useState({ categories: [], brands: [] });
+  const [lookupForms, setLookupForms] = useState({ category: "", brand: "" });
+  const [lookupSaving, setLookupSaving] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const imageInputRef = useRef(null);
 
   useEffect(() => {
     const controller = new AbortController();
 
     async function loadRefs() {
-      const [typesResponse, categoriesResponse, brandsResponse] =
-        await Promise.all([
-          fetch(data.api.types, { signal: controller.signal }),
-          fetch(data.api.categories, { signal: controller.signal }),
-          fetch(data.api.brands, { signal: controller.signal })
-        ]);
+      const [categoriesResponse, brandsResponse] = await Promise.all([
+        fetch(data.api.categories, { signal: controller.signal }),
+        fetch(data.api.brands, { signal: controller.signal })
+      ]);
 
       setRefs({
-        types: typesResponse.ok ? await typesResponse.json() : [],
         categories: categoriesResponse.ok ? await categoriesResponse.json() : [],
         brands: brandsResponse.ok ? await brandsResponse.json() : []
       });
@@ -1297,18 +1301,12 @@ function AddProductPage({ data }) {
     });
 
     return () => controller.abort();
-  }, [data.api.brands, data.api.categories, data.api.types]);
+  }, [data.api.brands, data.api.categories]);
 
-  const filteredCategories = form.type
-    ? refs.categories.filter((category) => String(category.type) === String(form.type))
-    : refs.categories;
   const selectedCategory = refs.categories.find((category) => String(category.id) === String(form.category));
-  const selectedType = refs.types.find((type) => String(type.id) === String(form.type)) || {
-    name: selectedCategory?.type_name || ""
-  };
   const selectedBrand = refs.brands.find((brand) => String(brand.id) === String(form.brand));
-  const requiredDone = [form.descript, form.type, form.category, form.brand, form.modelName].filter(Boolean).length;
-  const requiredTotal = 5;
+  const requiredDone = [form.descript, form.category, form.brand, form.modelName].filter(Boolean).length;
+  const requiredTotal = 4;
   const requiredProgress = Math.round((requiredDone / requiredTotal) * 100);
   const skuPreview =
     selectedCategory && selectedBrand && form.modelName
@@ -1316,34 +1314,139 @@ function AddProductPage({ data }) {
       : "auto-generate";
 
   function updateField(name, value) {
-    setForm((current) => {
-      const next = { ...current, [name]: value };
-      if (name === "type") {
-        next.category = "";
+    setForm((current) => ({ ...current, [name]: value }));
+  }
+
+  function resetForm() {
+    setForm(emptyForm);
+    if (imageInputRef.current) {
+      imageInputRef.current.value = "";
+    }
+  }
+
+  function selectImageFile(file) {
+    if (!file) return;
+    if (!["image/png", "image/jpeg"].includes(file.type)) {
+      setError("Select a PNG or JPG product image.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Product image must be 5MB or smaller.");
+      return;
+    }
+
+    setForm((current) => ({ ...current, imageFile: file }));
+    setError("");
+  }
+
+  function handleImageInputChange(event) {
+    selectImageFile(event.target.files?.[0]);
+  }
+
+  function handleImageDrop(event) {
+    event.preventDefault();
+    selectImageFile(event.dataTransfer.files?.[0]);
+  }
+
+  function handleImageDragOver(event) {
+    event.preventDefault();
+  }
+
+  function clearImageFile() {
+    setForm((current) => ({ ...current, imageFile: null }));
+    if (imageInputRef.current) {
+      imageInputRef.current.value = "";
+    }
+  }
+
+  function updateLookupForm(name, value) {
+    setLookupForms((current) => ({ ...current, [name]: value }));
+  }
+
+  function addLookupItem(listName, item, labelField) {
+    setRefs((current) => ({
+      ...current,
+      [listName]: [...current[listName], item].sort((left, right) =>
+        String(left[labelField] || "").localeCompare(String(right[labelField] || ""))
+      )
+    }));
+  }
+
+  async function createLookup(kind) {
+    const lookupConfig = {
+      category: {
+        endpoint: data.api.categories,
+        listName: "categories",
+        labelField: "name",
+        formField: "category",
+        body: (name) => ({ name })
+      },
+      brand: {
+        endpoint: data.api.brands,
+        listName: "brands",
+        labelField: "brandname",
+        formField: "brand",
+        body: (name) => ({ brandname: name })
       }
-      return next;
-    });
+    };
+    const config = lookupConfig[kind];
+    const name = lookupForms[kind].trim();
+
+    if (!name) {
+      setError("Enter a name before creating a catalogue value.");
+      return;
+    }
+
+    setLookupSaving(kind);
+    setError("");
+    try {
+      const response = await fetch(config.endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": data.csrfToken
+        },
+        body: JSON.stringify(config.body(name))
+      });
+
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        throw new Error(firstApiError(details) || "Could not create catalogue value.");
+      }
+
+      const created = await response.json();
+      addLookupItem(config.listName, created, config.labelField);
+      updateField(config.formField, String(created.id));
+      updateLookupForm(kind, "");
+    } catch (lookupError) {
+      setError(lookupError.message);
+    } finally {
+      setLookupSaving("");
+    }
   }
 
   async function saveProduct(addAnother = false) {
     setSaving(true);
     setError("");
     try {
+      const payload = new FormData();
+      payload.append("descript", form.descript);
+      payload.append("category", form.category);
+      payload.append("brand", form.brand);
+      payload.append("model_name_input", form.modelName);
+      payload.append("barcode", form.barcode);
+      payload.append("reorder_stock_level", form.reorderStockLevel);
+      payload.append("isactive", form.isactive ? "true" : "false");
+      if (form.imageFile) {
+        payload.append("image", form.imageFile);
+      }
+
       const response = await fetch(data.api.products, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
           "X-CSRFToken": data.csrfToken
         },
-        body: JSON.stringify({
-          descript: form.descript,
-          printed: "",
-          category: form.category,
-          brand: form.brand,
-          model_name_input: form.modelName,
-          barcode: form.barcode,
-          isactive: form.isactive
-        })
+        body: payload
       });
 
       if (!response.ok) {
@@ -1352,7 +1455,7 @@ function AddProductPage({ data }) {
       }
 
       if (addAnother) {
-        setForm(emptyForm);
+        resetForm();
       } else {
         window.location.assign(data.routes.inventory);
       }
@@ -1369,7 +1472,7 @@ function AddProductPage({ data }) {
         <div className="min-w-0">
           <AddProductHeader
             saving={saving}
-            onReset={() => setForm(emptyForm)}
+            onReset={resetForm}
             onSave={() => saveProduct(false)}
             onSaveAnother={() => saveProduct(true)}
           />
@@ -1391,14 +1494,27 @@ function AddProductPage({ data }) {
             </div>
 
             <div className="mt-5 grid gap-5 md:grid-cols-2">
-              <Field label="Type" required>
-                <SelectInput value={form.type} onChange={(value) => updateField("type", value)} options={refs.types.map((item) => [item.id, item.name])} placeholder="Select type..." />
-              </Field>
               <Field label="Category" required>
-                <SelectInput value={form.category} onChange={(value) => updateField("category", value)} options={filteredCategories.map((item) => [item.id, item.name])} placeholder="Select category..." />
+                <SelectInput value={form.category} onChange={(value) => updateField("category", value)} options={refs.categories.map((item) => [item.id, item.name])} placeholder="Select category..." />
+                <LookupCreateControl
+                  value={lookupForms.category}
+                  onChange={(value) => updateLookupForm("category", value)}
+                  onCreate={() => createLookup("category")}
+                  saving={lookupSaving === "category"}
+                  placeholder="New category name"
+                  buttonLabel="Create Category"
+                />
               </Field>
               <Field label="Brand" required>
                 <SelectInput value={form.brand} onChange={(value) => updateField("brand", value)} options={refs.brands.map((item) => [item.id, item.brandname])} placeholder="Select brand..." />
+                <LookupCreateControl
+                  value={lookupForms.brand}
+                  onChange={(value) => updateLookupForm("brand", value)}
+                  onCreate={() => createLookup("brand")}
+                  saving={lookupSaving === "brand"}
+                  placeholder="New brand name"
+                  buttonLabel="Create Brand"
+                />
               </Field>
               <Field label="Model" required>
                 <TextInput value={form.modelName} onChange={(value) => updateField("modelName", value)} placeholder="Enter model" />
@@ -1415,6 +1531,10 @@ function AddProductPage({ data }) {
                 <TextInput value={form.barcode} onChange={(value) => updateField("barcode", value)} placeholder="Enter barcode" />
                 <p className="mt-2 text-xs text-zinc-500">EAN-13 or UPC barcode (optional).</p>
               </Field>
+              <Field label="Low Stock Alert">
+                <TextInput value={form.reorderStockLevel} onChange={(value) => updateField("reorderStockLevel", value)} placeholder="Enter alert threshold" />
+                <p className="mt-2 text-xs text-zinc-500">When available stock is at or below this number, BIM Nexus shows low stock alerts.</p>
+              </Field>
               <Field label="Internal Notes">
                 <textarea
                   value={form.notes}
@@ -1429,26 +1549,54 @@ function AddProductPage({ data }) {
 
           <FormSection icon="package" title="Product Image" subtitle="Optional photo or icon for this product.">
             <div className="grid gap-5 md:grid-cols-[120px_minmax(0,1fr)]">
-              <div className="grid aspect-square place-items-center rounded-lg border border-dashed border-nexus-line bg-black text-center text-xs text-zinc-500">
-                <span>
+              <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/png,image/jpeg"
+                className="hidden"
+                onChange={handleImageInputChange}
+              />
+              <button
+                type="button"
+                onClick={() => imageInputRef.current?.click()}
+                onDrop={handleImageDrop}
+                onDragOver={handleImageDragOver}
+                className="grid aspect-square place-items-center rounded-lg border border-dashed border-nexus-line bg-black text-center text-xs text-zinc-500 hover:border-nexus-orange hover:text-zinc-300"
+              >
+                <span className="max-w-full break-words px-2">
                   <Package className="mx-auto mb-2 h-6 w-6 text-zinc-500" />
-                  Drop image
-                  <br />
-                  or click to upload
+                  {form.imageFile ? (
+                    <>
+                      Selected
+                      <br />
+                      {form.imageFile.name}
+                    </>
+                  ) : (
+                    <>
+                      Drop image
+                      <br />
+                      or click to upload
+                    </>
+                  )}
                 </span>
-              </div>
+              </button>
               <div>
                 <p className="text-sm font-bold text-white">Product Image</p>
                 <p className="mt-2 text-sm text-zinc-400">
                   Upload a photo or icon for this product. Used in listings, detail views, and reports.
                 </p>
                 <p className="mt-4 text-xs text-zinc-500">PNG, JPG - max 5MB</p>
+                {form.imageFile ? (
+                  <button type="button" onClick={clearImageFile} className="mt-3 text-xs font-semibold text-nexus-orange hover:text-white">
+                    Remove image
+                  </button>
+                ) : null}
               </div>
             </div>
           </FormSection>
 
           <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <button type="button" onClick={() => setForm(emptyForm)} className="text-left text-sm font-semibold text-zinc-300 hover:text-white">
+            <button type="button" onClick={resetForm} className="text-left text-sm font-semibold text-zinc-300 hover:text-white">
               Discard all changes
             </button>
             <div className="flex flex-wrap gap-3">
@@ -1470,7 +1618,6 @@ function AddProductPage({ data }) {
 
         <AddProductPreview
           form={form}
-          selectedType={selectedType}
           selectedCategory={selectedCategory}
           selectedBrand={selectedBrand}
           skuPreview={skuPreview}
@@ -2128,9 +2275,38 @@ function SelectInput({ value, onChange, options, placeholder, disabled = false }
   );
 }
 
+function LookupCreateControl({ value, onChange, onCreate, placeholder, buttonLabel, saving = false, disabled = false }) {
+  const canCreate = value.trim() && !saving && !disabled;
+
+  return (
+    <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+      <input
+        disabled={saving || disabled}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && canCreate) {
+            event.preventDefault();
+            onCreate();
+          }
+        }}
+        placeholder={placeholder}
+        className="h-9 rounded-md border border-nexus-line bg-black px-3 text-sm text-zinc-200 outline-none placeholder:text-zinc-600 disabled:bg-zinc-800/80 disabled:text-zinc-500"
+      />
+      <button
+        type="button"
+        disabled={!canCreate}
+        onClick={onCreate}
+        className="inline-flex h-9 items-center justify-center rounded-md border border-nexus-line px-3 text-xs font-semibold text-zinc-200 hover:bg-nexus-panel disabled:text-zinc-600"
+      >
+        {saving ? "Creating..." : buttonLabel}
+      </button>
+    </div>
+  );
+}
+
 function AddProductPreview({
   form,
-  selectedType,
   selectedCategory,
   selectedBrand,
   skuPreview,
@@ -2140,18 +2316,18 @@ function AddProductPreview({
 }) {
   const missing = [
     ["Product Name", form.descript],
-    ["Type", selectedType?.name],
     ["Category", selectedCategory?.name],
     ["Brand", selectedBrand?.brandname],
     ["Model", form.modelName]
   ];
   const optionalFields = [
     ["Barcode", form.barcode],
+    ["Low Stock Alert", form.reorderStockLevel],
     ["Internal Notes", form.notes],
     ["Default Supplier", false],
     ["Supplier Cost", false],
     ["Client Price", false],
-    ["Product Image", false]
+    ["Product Image", form.imageFile]
   ];
 
   return (
@@ -2179,7 +2355,6 @@ function AddProductPreview({
         </div>
 
         <dl className="space-y-3 text-sm">
-          <DetailRow label="Type" value={selectedType?.name || "-"} />
           <DetailRow label="Category" value={selectedCategory?.name || "-"} />
           <DetailRow label="Brand" value={selectedBrand?.brandname || "-"} />
           <DetailRow label="Model" value={form.modelName || "-"} />

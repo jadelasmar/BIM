@@ -18,6 +18,7 @@ Next implementation focus: `07 - Receiving Records`.
 - Receive Stock React page.
 - Create Delivery React page.
 - Product Details React page with stock-unit register and permission-aware actions.
+- Add Product can create Category and Brand lookup values without Django admin.
 - Operations placeholder/detail navigation.
 - Clients terminology in Command Center.
 

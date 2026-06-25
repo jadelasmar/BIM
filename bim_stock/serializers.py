@@ -10,22 +10,13 @@ from .models import (
     ProductModel,
     ProductUnit,
     Supplier,
-    Type,
 )
 
 
-class TypeSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Type
-        fields = ("id", "name")
-
-
 class CategorySerializer(serializers.ModelSerializer):
-    type_name = serializers.CharField(source="type.name", read_only=True)
-
     class Meta:
         model = Category
-        fields = ("id", "type", "type_name", "name")
+        fields = ("id", "name")
 
 
 class BrandSerializer(serializers.ModelSerializer):
@@ -64,8 +55,6 @@ class ProductSerializer(serializers.ModelSerializer):
         write_only=True,
         allow_blank=True,
     )
-    type_id = serializers.IntegerField(source="category.type_id", read_only=True)
-    type_name = serializers.CharField(source="category.type.name", read_only=True)
     category_name = serializers.CharField(source="category.name", read_only=True)
     brand_id = serializers.IntegerField(source="model.brand_id", read_only=True)
     brand_name = serializers.CharField(source="model.brand.brandname", read_only=True)
@@ -76,7 +65,6 @@ class ProductSerializer(serializers.ModelSerializer):
     sold_units = serializers.SerializerMethodField()
     returned_units = serializers.SerializerMethodField()
     is_low_stock = serializers.SerializerMethodField()
-    is_critical_stock = serializers.SerializerMethodField()
     stock_alert_tone = serializers.SerializerMethodField()
 
     class Meta:
@@ -84,12 +72,9 @@ class ProductSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "descript",
-            "printed",
             "display_name",
             "category",
             "category_name",
-            "type_id",
-            "type_name",
             "model",
             "model_name",
             "brand_id",
@@ -99,7 +84,6 @@ class ProductSerializer(serializers.ModelSerializer):
             "sku",
             "barcode",
             "image",
-            "minimum_stock_level",
             "reorder_stock_level",
             "crdate",
             "isactive",
@@ -109,7 +93,6 @@ class ProductSerializer(serializers.ModelSerializer):
             "sold_units",
             "returned_units",
             "is_low_stock",
-            "is_critical_stock",
             "stock_alert_tone",
         )
         read_only_fields = (
@@ -121,7 +104,6 @@ class ProductSerializer(serializers.ModelSerializer):
             "sold_units",
             "returned_units",
             "is_low_stock",
-            "is_critical_stock",
             "stock_alert_tone",
         )
         validators = []
@@ -189,12 +171,7 @@ class ProductSerializer(serializers.ModelSerializer):
     def get_is_low_stock(self, obj):
         return obj.reorder_stock_level > 0 and self.get_available_units(obj) <= obj.reorder_stock_level
 
-    def get_is_critical_stock(self, obj):
-        return obj.minimum_stock_level > 0 and self.get_available_units(obj) <= obj.minimum_stock_level
-
     def get_stock_alert_tone(self, obj):
-        if self.get_is_critical_stock(obj):
-            return "critical"
         if self.get_is_low_stock(obj):
             return "warning"
         return "normal"

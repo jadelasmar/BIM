@@ -52,5 +52,4 @@ urlpatterns = [
     path('accounts/', include('django.contrib.auth.urls')),
     path('admin/', admin.site.urls),
     path('api/stock/', include('bim_stock.api_urls')),
-    path('stock/', include('bim_stock.urls')),
 ]

@@ -11,15 +11,10 @@ from .models import (
     ProductModel,
     ProductUnit,
     Supplier,
-    Type,
 )
 
 
-# Type is created first in the product setup flow.
-admin.site.register(Type)
-
-
-# Category belongs to Type.
+# Category is created before Product.
 admin.site.register(Category)
 
 
@@ -36,7 +31,6 @@ admin.site.register(ProductModel)
 class ProductAdmin(admin.ModelAdmin):
     list_display = (
         "descript",
-        "printed",
         "sku",
         "barcode",
         "total_quantity",
@@ -44,30 +38,26 @@ class ProductAdmin(admin.ModelAdmin):
         "reserved_quantity",
         "sold_quantity",
         "returned_quantity",
-        "minimum_stock_level",
         "reorder_stock_level",
         "stock_alert",
-        "product_type",
         "category",
         "brand",
         "model",
         "isactive",
         "crdate",
     )
-    search_fields = ("descript", "printed", "sku", "barcode")
+    search_fields = ("descript", "sku", "barcode")
     list_filter = ("category", "model__brand", "isactive")
-    list_select_related = ("category__type", "model__brand")
+    list_select_related = ("category", "model__brand")
     readonly_fields = ("sku", "crdate")
-    ordering = ("descript", "printed", "sku")
+    ordering = ("descript", "sku")
 
     fields = (
         "descript",
-        "printed",
         "category",
         "model",
         "sku",
         "barcode",
-        "minimum_stock_level",
         "reorder_stock_level",
         "image",
         "crdate",
@@ -139,15 +129,9 @@ class ProductAdmin(admin.ModelAdmin):
 
     @admin.display(description="Stock Alert")
     def stock_alert(self, obj):
-        if obj.is_critical_stock:
-            return "Critical"
         if obj.is_low_stock:
             return "Low"
         return "-"
-
-    @admin.display(description="Type", ordering="category__type__name")
-    def product_type(self, obj):
-        return obj.category.type
 
     @admin.display(description="Brand", ordering="model__brand__brandname")
     def brand(self, obj):
@@ -202,7 +186,6 @@ class ProductUnitAdmin(admin.ModelAdmin):
     search_fields = (
         "serial_number",
         "product__descript",
-        "product__printed",
         "product__sku",
         "product__barcode",
     )

@@ -26,6 +26,16 @@ Command Center is complete for Phase 1.
   - `frontend/src/uiRegistry.js`
 - Related workflow actions and summaries should use the same registry icon and tone. Example: Delivery Records and Create Delivery both use `delivery` with the indigo tone.
 - Product Details renders product metrics, supplier/stock information, active stock units, and permission-aware workflow actions from existing BIM Stock APIs.
+- BIM Stock list row clicks update the inline Product Detail panel; only Full
+  View navigates to `/inventory/products/<id>/`.
+- BIM Stock list KPI cards reuse the same shared React KPI card component as
+  Command Center.
+- Add Product can create Category and Brand lookup records through the stock API without requiring Django admin.
+- Product setup uses one `reorder_stock_level` threshold for low-stock alerts;
+  the separate printed name and minimum-stock fields were removed.
+- Add Product supports product image click/drop selection and saves images through multipart product API requests.
+- Legacy Django stock template routes under `/stock/` were removed; React
+  `/inventory/` and the stock APIs are the active stock surfaces.
 - Use `Clients` terminology in Command Center navigation. Do not reintroduce Sites for this phase.
 
 ## Verification Baseline

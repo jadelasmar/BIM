@@ -12,12 +12,18 @@ Command Center is complete for Phase 1.
 - Global topbar includes theme toggle, Quick Add, and logout/user controls.
 - Theme support for dark and light mode.
 - Command Center dashboard.
-- BIM Stock list page.
-- Add Product page.
+- BIM Stock list page with the same shared KPI card pattern used by Command
+  Center.
+- BIM Stock product rows update the inline Product Detail panel; Full View opens
+  the dedicated product detail route.
+- Add Product page, including inline Category/Brand creation, low-stock alert
+  threshold setup, and product image click/drop upload.
 - Product Details page with stock-unit register, product overview, activity sidebar, and permission-aware workflow actions.
 - Receive Stock page.
 - Create Delivery page.
 - Operations hub page.
+- Legacy Django stock template pages under `/stock/` were removed; stock UI now
+  uses React `/inventory/` routes.
 
 ## Command Center Status
 

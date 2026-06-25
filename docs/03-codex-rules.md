@@ -32,7 +32,7 @@ Keep work focused, direct, and aligned with the existing Django architecture.
 - ProductUnit is a physical stock item.
 - Quantity should be calculated from active ProductUnit records.
 - Soft delete uses `isactive`.
-- Preserve current model field names such as `descript`, `printed`, `crdate`, and `isactive`.
+- Preserve current model field names such as `descript`, `crdate`, and `isactive`.
 - Avoid unnecessary migrations.
 
 ## Scope Rules

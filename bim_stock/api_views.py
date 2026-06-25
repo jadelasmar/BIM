@@ -12,7 +12,6 @@ from .models import (
     ProductModel,
     ProductUnit,
     Supplier,
-    Type,
 )
 from .serializers import (
     BrandSerializer,
@@ -22,7 +21,6 @@ from .serializers import (
     ProductSerializer,
     ProductUnitSerializer,
     SupplierSerializer,
-    TypeSerializer,
 )
 
 
@@ -41,7 +39,7 @@ def _active_unit_filter(status=None):
 def _product_queryset():
     return (
         Product.objects.filter(isactive=True)
-        .select_related("category__type", "model__brand")
+        .select_related("category", "model__brand")
         .annotate(
             api_total_units=Count("units", filter=_active_unit_filter(), distinct=True),
             api_available_units=Count(
@@ -65,7 +63,7 @@ def _product_queryset():
                 distinct=True,
             ),
         )
-        .order_by("descript", "printed", "sku")
+        .order_by("descript", "sku")
     )
 
 
@@ -84,7 +82,6 @@ class ProductListCreateAPIView(generics.ListCreateAPIView):
         if query:
             queryset = queryset.filter(
                 Q(descript__icontains=query)
-                | Q(printed__icontains=query)
                 | Q(sku__icontains=query)
                 | Q(barcode__icontains=query)
                 | Q(units__serial_number__icontains=query)
@@ -142,7 +139,6 @@ class ProductUnitListCreateAPIView(generics.ListCreateAPIView):
             queryset = queryset.filter(
                 Q(serial_number__icontains=query)
                 | Q(product__descript__icontains=query)
-                | Q(product__printed__icontains=query)
                 | Q(product__sku__icontains=query)
                 | Q(product__barcode__icontains=query)
             )
@@ -241,46 +237,35 @@ class InventorySummaryAPIView(APIView):
                         product.reorder_stock_level > 0
                         and product.available_units <= product.reorder_stock_level
                     )
-                    or (
-                        product.minimum_stock_level > 0
-                        and product.available_units <= product.minimum_stock_level
-                    )
-                ),
-                "critical_stock_products": sum(
-                    1
-                    for product in _product_queryset()
-                    if product.minimum_stock_level > 0
-                    and product.available_units <= product.minimum_stock_level
                 ),
             }
         )
 
 
-class TypeListAPIView(generics.ListAPIView):
-    serializer_class = TypeSerializer
-    permission_classes = (permissions.IsAuthenticated,)
-
-    def get_queryset(self):
-        _require_perm(self.request.user, "bim_stock.view_product")
-        return Type.objects.order_by("name")
-
-
-class CategoryListAPIView(generics.ListAPIView):
+class CategoryListAPIView(generics.ListCreateAPIView):
     serializer_class = CategorySerializer
     permission_classes = (permissions.IsAuthenticated,)
 
     def get_queryset(self):
         _require_perm(self.request.user, "bim_stock.view_product")
-        return Category.objects.select_related("type").order_by("type__name", "name")
+        return Category.objects.order_by("name")
+
+    def perform_create(self, serializer):
+        _require_perm(self.request.user, "bim_stock.add_category")
+        serializer.save()
 
 
-class BrandListAPIView(generics.ListAPIView):
+class BrandListAPIView(generics.ListCreateAPIView):
     serializer_class = BrandSerializer
     permission_classes = (permissions.IsAuthenticated,)
 
     def get_queryset(self):
         _require_perm(self.request.user, "bim_stock.view_product")
         return Brand.objects.order_by("brandname")
+
+    def perform_create(self, serializer):
+        _require_perm(self.request.user, "bim_stock.add_brand")
+        serializer.save()
 
 
 class ProductModelListAPIView(generics.ListAPIView):

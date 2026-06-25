@@ -289,7 +289,6 @@ def _command_center_initial_data(
             "brands": "/api/stock/brands/",
             "models": "/api/stock/models/",
             "categories": "/api/stock/categories/",
-            "types": "/api/stock/types/",
         },
         "routes": {
             "inventory": reverse("inventory"),
