@@ -5,6 +5,7 @@ import {
   Eye,
   Filter,
   LayoutDashboard,
+  Menu,
   Moon,
   Package,
   Plus,
@@ -67,97 +68,153 @@ function applyTheme(nextTheme, storageKey = DEFAULT_THEME_STORAGE_KEY) {
 
 function Shell({ data, children, onRefresh }) {
   const secondaryNavigation = data.navigation.secondary || [];
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const closeSidebar = useCallback(() => {
+    setSidebarOpen(false);
+  }, []);
 
   return (
     <div className="min-h-screen bg-nexus-page text-zinc-100 lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
-      <aside className="border-b border-nexus-line bg-black/95 px-4 py-5 lg:min-h-screen lg:border-b-0 lg:border-r">
-        <div className="px-2">
-          <a href="/" className="inline-flex" aria-label="BIM Nexus Command Center">
-            <img src={logoWhite} alt="BIM Nexus" className="bim-sidebar-logo bim-sidebar-logo-dark h-8 w-auto max-w-[196px]" />
-            <img src={logoPrimary} alt="BIM Nexus" className="bim-sidebar-logo bim-sidebar-logo-light h-8 w-auto max-w-[196px]" />
-          </a>
-          <p className="mt-2 text-xs text-zinc-500">Internal IT Operations</p>
-        </div>
+      {sidebarOpen ? (
+        <button
+          type="button"
+          className="fixed inset-0 z-40 bg-black/70 lg:hidden"
+          aria-label="Close navigation"
+          onClick={closeSidebar}
+        />
+      ) : null}
 
-        <nav className="mt-8 space-y-2" aria-label="Primary navigation">
-          {data.navigation.primary.map((item) =>
-            item.enabled === false || !item.href ? (
-              <span
-                key={item.name}
-                className="flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-semibold text-zinc-600"
-              >
-                <Icon name={item.icon} className="h-4 w-4" />
-                {item.name}
-              </span>
-            ) : (
-              <a
-                key={item.name}
-                href={item.href}
-                className={`group flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-semibold ${
-                  item.active
-                    ? "border border-nexus-line bg-nexus-panel text-white"
-                    : "text-zinc-400 hover:bg-nexus-panel hover:text-zinc-200"
-                }`}
-              >
-                <Icon
-                  name={item.icon}
-                  className={`h-4 w-4 ${item.active ? "text-nexus-orange" : "text-zinc-500 group-hover:text-zinc-300"}`}
-                />
-                {item.name}
-              </a>
-            )
-          )}
-        </nav>
-
-        {secondaryNavigation.length ? (
-          <>
-            <div className="my-5 h-px bg-nexus-line" />
-
-            <nav className="space-y-2" aria-label="Secondary navigation">
-              {secondaryNavigation.map((item) =>
-                item.enabled && item.href ? (
-                  <a
-                    key={item.name}
-                    href={item.href}
-                    className={`group flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm font-semibold ${
-                      item.active
-                        ? "border border-nexus-line bg-nexus-panel text-white"
-                        : "text-zinc-400 hover:bg-nexus-panel hover:text-zinc-200"
-                    }`}
-                  >
-                    <Icon
-                      name={item.icon}
-                      className={`h-4 w-4 ${item.active ? "text-nexus-orange" : "text-zinc-500 group-hover:text-zinc-300"}`}
-                    />
-                    {item.name}
-                  </a>
-                ) : (
-                  <span
-                    key={item.name}
-                    className="flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm font-semibold text-zinc-600"
-                    title={item.detail || undefined}
-                  >
-                    <Icon name={item.icon} className="h-4 w-4" />
-                    {item.name}
-                  </span>
-                )
-              )}
-            </nav>
-          </>
-        ) : null}
-      </aside>
+      <Sidebar
+        data={data}
+        secondaryNavigation={secondaryNavigation}
+        isOpen={sidebarOpen}
+        onClose={closeSidebar}
+      />
 
       <main className="min-w-0 px-4 py-5 sm:px-6 lg:px-7">
-        <Topbar data={data} onRefresh={onRefresh} />
+        <Topbar
+          data={data}
+          onRefresh={onRefresh}
+          onOpenSidebar={() => setSidebarOpen(true)}
+        />
         {children}
       </main>
     </div>
   );
 }
 
-function Topbar({ data, onRefresh }) {
+function Sidebar({ data, secondaryNavigation, isOpen, onClose }) {
   return (
-    <div className="mb-5 flex flex-wrap items-center justify-end gap-3 border-b border-nexus-line pb-4 text-xs">
+    <aside
+      className={`fixed inset-y-0 left-0 z-50 w-[min(82vw,248px)] overflow-y-auto border-r border-nexus-line bg-black/95 px-4 py-5 transition-transform duration-200 lg:static lg:z-auto lg:block lg:min-h-screen lg:w-auto lg:translate-x-0 ${
+        isOpen ? "translate-x-0" : "-translate-x-full"
+      }`}
+      aria-label="Main navigation"
+    >
+      <div className="flex items-start justify-between gap-3 px-2">
+        <div>
+          <a href="/" className="inline-flex" aria-label="BIM Nexus Command Center" onClick={onClose}>
+            <img src={logoWhite} alt="BIM Nexus" className="bim-sidebar-logo bim-sidebar-logo-dark h-8 w-auto max-w-[196px]" />
+            <img src={logoPrimary} alt="BIM Nexus" className="bim-sidebar-logo bim-sidebar-logo-light h-8 w-auto max-w-[196px]" />
+          </a>
+          <p className="mt-2 text-xs text-zinc-500">Internal IT Operations</p>
+        </div>
+        <button
+          type="button"
+          className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-nexus-line text-zinc-300 hover:bg-nexus-panel lg:hidden"
+          aria-label="Close navigation"
+          onClick={onClose}
+        >
+          <X className="h-4 w-4" aria-hidden="true" />
+        </button>
+      </div>
+
+      <nav className="mt-8 space-y-2" aria-label="Primary navigation">
+        {data.navigation.primary.map((item) =>
+          item.enabled === false || !item.href ? (
+            <span
+              key={item.name}
+              className="flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-semibold text-zinc-600"
+            >
+              <Icon name={item.icon} className="h-4 w-4" />
+              {item.name}
+            </span>
+          ) : (
+            <a
+              key={item.name}
+              href={item.href}
+              onClick={onClose}
+              className={`group flex min-h-11 items-center gap-3 rounded-lg px-3 text-sm font-semibold ${
+                item.active
+                  ? "border border-nexus-line bg-nexus-panel text-white"
+                  : "text-zinc-400 hover:bg-nexus-panel hover:text-zinc-200"
+              }`}
+            >
+              <Icon
+                name={item.icon}
+                className={`h-4 w-4 ${item.active ? "text-nexus-orange" : "text-zinc-500 group-hover:text-zinc-300"}`}
+              />
+              {item.name}
+            </a>
+          )
+        )}
+      </nav>
+
+      {secondaryNavigation.length ? (
+        <>
+          <div className="my-5 h-px bg-nexus-line" />
+
+          <nav className="space-y-2" aria-label="Secondary navigation">
+            {secondaryNavigation.map((item) =>
+              item.enabled && item.href ? (
+                <a
+                  key={item.name}
+                  href={item.href}
+                  onClick={onClose}
+                  className={`group flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm font-semibold ${
+                    item.active
+                      ? "border border-nexus-line bg-nexus-panel text-white"
+                      : "text-zinc-400 hover:bg-nexus-panel hover:text-zinc-200"
+                  }`}
+                >
+                  <Icon
+                    name={item.icon}
+                    className={`h-4 w-4 ${item.active ? "text-nexus-orange" : "text-zinc-500 group-hover:text-zinc-300"}`}
+                  />
+                  {item.name}
+                </a>
+              ) : (
+                <span
+                  key={item.name}
+                  className="flex min-h-10 items-center gap-3 rounded-lg px-3 text-sm font-semibold text-zinc-600"
+                  title={item.detail || undefined}
+                >
+                  <Icon name={item.icon} className="h-4 w-4" />
+                  {item.name}
+                </span>
+              )
+            )}
+          </nav>
+        </>
+      ) : null}
+    </aside>
+  );
+}
+
+function Topbar({ data, onRefresh, onOpenSidebar }) {
+  return (
+    <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-nexus-line pb-4 text-xs">
+      <button
+        type="button"
+        onClick={onOpenSidebar}
+        className="inline-flex h-9 items-center gap-2 rounded-md border border-nexus-line px-3 font-semibold text-zinc-200 hover:bg-nexus-panel lg:hidden"
+        aria-label="Open navigation"
+      >
+        <Menu className="h-4 w-4" aria-hidden="true" />
+        Menu
+      </button>
+      <div className="flex flex-wrap items-center justify-end gap-3">
       <ThemeToggle storageKey={data.theme?.storageKey} />
       <button
         type="button"
@@ -177,6 +234,7 @@ function Topbar({ data, onRefresh }) {
         </span>
       </div>
       <LogoutForm data={data} />
+      </div>
     </div>
   );
 }
@@ -357,11 +415,19 @@ function OperationsPage({ data }) {
   const workflows = [
     {
       title: "Receive Stock",
-      detail: "Register incoming inventory units.",
+      detail: "Record supplier receipts with delivery or invoice references.",
       href: data.routes.receiveStock,
       enabled: data.quickActions.some((action) => action.label === "Receive Stock" && action.enabled),
       icon: workflowMeta.receive_stock.icon,
       tone: workflowMeta.receive_stock.tone
+    },
+    {
+      title: "Add Unit",
+      detail: "Create manual stock units from count or correction.",
+      href: data.routes.addStockUnit,
+      enabled: data.quickActions.some((action) => action.label === "Add Unit" && action.enabled),
+      icon: workflowMeta.add_stock_unit.icon,
+      tone: workflowMeta.add_stock_unit.tone
     },
     {
       title: "Create Delivery",
@@ -565,11 +631,19 @@ function InventoryPage({ data }) {
       href: `${data.routes.inventory}?status=reserved`
     },
     {
-      label: "Out of Stock",
-      value: formatCount(outOfStockCount),
+      label: "Low Stock Alerts",
+      value: formatCount(summary?.low_stock_products ?? 0),
+      detail: "products at or below threshold",
+      icon: "triangle-alert",
+      tone: (summary?.low_stock_products ?? 0) > 0 ? "warning" : "neutral",
+      href: data.routes.lowStock
+    },
+    {
+      label: "Out of Stock Products",
+      value: formatCount(summary?.out_of_stock_products ?? outOfStockCount),
       detail: "products with no available units",
       icon: "package-x",
-      tone: outOfStockCount > 0 ? "danger" : "neutral",
+      tone: (summary?.out_of_stock_products ?? outOfStockCount) > 0 ? "danger" : "neutral",
       href: data.routes.outOfStock
     }
   ];
@@ -644,7 +718,7 @@ function InventoryPage({ data }) {
           </div>
         </div>
 
-        <ProductDetail product={selectedProduct} />
+        <ProductDetail product={selectedProduct} canAccessAdmin={data.user?.canAccessAdmin} />
       </div>
     </Shell>
   );
@@ -816,7 +890,7 @@ function ProductStatus({ product }) {
   );
 }
 
-function ProductDetail({ product }) {
+function ProductDetail({ product, canAccessAdmin = false }) {
   if (!product) {
     return (
       <aside className="rounded-lg border border-nexus-line bg-nexus-panel p-4 text-sm text-zinc-500">
@@ -871,16 +945,18 @@ function ProductDetail({ product }) {
           <DetailRow label="Low Stock Alert" value={product.reorder_stock_level} />
         </div>
 
-        <a
-          href={`/admin/bim_stock/product/${product.id}/change/`}
-          className="flex items-center justify-between rounded-lg border border-nexus-line bg-nexus-panel2 px-4 py-3 hover:border-nexus-orange/70"
-        >
-          <span className="inline-flex items-center gap-3 text-sm font-semibold text-white">
-            <Package className="h-4 w-4 text-nexus-orange" />
-            Stock Units
-          </span>
-          <ChevronRight className="h-4 w-4 text-zinc-500" />
-        </a>
+        {canAccessAdmin ? (
+          <a
+            href={`/admin/bim_stock/productunit/?q=${encodeURIComponent(product.sku)}`}
+            className="flex items-center justify-between rounded-lg border border-nexus-line bg-nexus-panel2 px-4 py-3 hover:border-nexus-orange/70"
+          >
+            <span className="inline-flex items-center gap-3 text-sm font-semibold text-white">
+              <Package className="h-4 w-4 text-nexus-orange" />
+              Stock Units
+            </span>
+            <ChevronRight className="h-4 w-4 text-zinc-500" />
+          </a>
+        ) : null}
       </div>
       <div className="mt-auto grid grid-cols-2 gap-2 border-t border-nexus-line p-4">
         <a href={`/admin/bim_stock/product/${product.id}/change/`} className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-nexus-line text-sm font-semibold text-zinc-200">
@@ -983,8 +1059,9 @@ function ProductDetailsPage({ data }) {
     ? Math.round((product.available_units / product.total_units) * 100)
     : 0;
   const receiveStockAction = data.quickActions.find((action) => action.label === "Receive Stock");
+  const addStockUnitAction = data.quickActions.find((action) => action.label === "Add Unit");
   const createDeliveryAction = data.quickActions.find((action) => action.label === "Create Delivery");
-  const detailActions = [receiveStockAction, createDeliveryAction].filter(
+  const detailActions = [receiveStockAction, addStockUnitAction, createDeliveryAction].filter(
     (action) => action?.enabled && action.href
   );
   const recentActivity = units.slice(0, 6).map((unit) => ({
@@ -1033,7 +1110,7 @@ function ProductDetailsPage({ data }) {
               <ProductDetailActionLink
                 key={action.label}
                 action={action}
-                primary={action.label === "Receive Stock"}
+                primary={action.label === "Receive Stock" || action.label === "Add Unit"}
               />
             ))}
           </div>
@@ -1122,6 +1199,7 @@ function ProductDetailsPage({ data }) {
             product={product}
             units={units}
             accessDenied={unitsAccessDenied}
+            canAccessAdmin={data.user?.canAccessAdmin}
           />
         </div>
 
@@ -1162,7 +1240,7 @@ function ProductDetailActionLink({ action, primary = false }) {
   );
 }
 
-function ProductUnitRegister({ product, units, accessDenied }) {
+function ProductUnitRegister({ product, units, accessDenied, canAccessAdmin = false }) {
   const visibleUnits = units.slice(0, 10);
   const unitLabel = product.total_units === 1 ? "unit" : "units";
 
@@ -1185,6 +1263,7 @@ function ProductUnitRegister({ product, units, accessDenied }) {
                   <th className="px-4 py-3 font-medium">Cost</th>
                   <th className="px-4 py-3 font-medium">Purchased</th>
                   <th className="px-4 py-3 font-medium">Sold</th>
+                  {canAccessAdmin ? <th className="px-4 py-3 font-medium">Admin</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -1198,6 +1277,13 @@ function ProductUnitRegister({ product, units, accessDenied }) {
                     <td className="px-4 py-3 text-zinc-400">{formatCurrency(unit.cost)}</td>
                     <td className="px-4 py-3 text-zinc-400">{formatDate(unit.purchase_date)}</td>
                     <td className="px-4 py-3 text-zinc-400">{formatDate(unit.sold_date)}</td>
+                    {canAccessAdmin ? (
+                      <td className="px-4 py-3">
+                        <a href={`/admin/bim_stock/productunit/${unit.id}/change/`} className="text-xs font-semibold text-nexus-orange hover:text-white">
+                          Edit Unit
+                        </a>
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>
@@ -1630,14 +1716,15 @@ function AddProductPage({ data }) {
   );
 }
 
-function ReceiveStockPage({ data }) {
+function StockEntryPage({ data, mode = "add-unit" }) {
+  const isReceiving = mode === "receive";
   const today = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState({
     supplier: "",
-    receivingDate: today,
+    entryDate: today,
     deliveryNote: "",
     invoiceReference: "",
-    receivedBy: data.user?.displayName || "",
+    handledBy: data.user?.displayName || "",
     notes: ""
   });
   const [products, setProducts] = useState([]);
@@ -1652,22 +1739,23 @@ function ReceiveStockPage({ data }) {
     const controller = new AbortController();
 
     async function loadData() {
-      const [productsResponse, suppliersResponse] = await Promise.all([
-        fetch(data.api.products, { signal: controller.signal }),
-        fetch(data.api.suppliers, { signal: controller.signal })
-      ]);
+      const requests = [fetch(data.api.products, { signal: controller.signal })];
+      if (isReceiving) {
+        requests.push(fetch(data.api.suppliers, { signal: controller.signal }));
+      }
+      const [productsResponse, suppliersResponse] = await Promise.all(requests);
       setProducts(productsResponse.ok ? await productsResponse.json() : []);
-      setSuppliers(suppliersResponse.ok ? await suppliersResponse.json() : []);
+      setSuppliers(suppliersResponse?.ok ? await suppliersResponse.json() : []);
     }
 
     loadData().catch((loadError) => {
       if (loadError.name !== "AbortError") {
-        setError("Could not load receiving data.");
+        setError(`Could not load ${isReceiving ? "receiving" : "stock unit"} data.`);
       }
     });
 
     return () => controller.abort();
-  }, [data.api.products, data.api.suppliers]);
+  }, [data.api.products, data.api.suppliers, isReceiving]);
 
   const filteredProducts = products
     .filter((product) => {
@@ -1710,12 +1798,15 @@ function ReceiveStockPage({ data }) {
     setLines((current) => current.filter((line) => line.key !== key));
   }
 
-  async function completeReceiving() {
+  async function saveStockUnits() {
     setSaving(true);
     setError("");
     try {
-      if (!form.supplier || !form.receivingDate || !lines.length) {
-        throw new Error("Supplier, receiving date, and at least one product are required.");
+      if (!form.entryDate || !lines.length) {
+        throw new Error("Entry date and at least one product are required.");
+      }
+      if (isReceiving && !form.supplier) {
+        throw new Error("Supplier is required when receiving stock.");
       }
 
       for (const line of lines) {
@@ -1738,10 +1829,14 @@ function ReceiveStockPage({ data }) {
               product: line.product.id,
               serial_number: serialNumber,
               status: "available",
-              supplier: form.supplier,
+              supplier: isReceiving ? form.supplier : null,
               cost: line.cost || "0.00",
-              purchase_date: form.receivingDate,
-              notes: [form.deliveryNote, form.invoiceReference, form.notes]
+              purchase_date: form.entryDate,
+              notes: [
+                isReceiving && form.deliveryNote ? `Delivery note: ${form.deliveryNote}` : "",
+                isReceiving && form.invoiceReference ? `Invoice: ${form.invoiceReference}` : "",
+                form.notes
+              ]
                 .filter(Boolean)
                 .join(" | ")
             })
@@ -1749,7 +1844,7 @@ function ReceiveStockPage({ data }) {
 
           if (!response.ok) {
             const details = await response.json().catch(() => ({}));
-            throw new Error(firstApiError(details) || "Could not create received stock unit.");
+            throw new Error(firstApiError(details) || "Could not create stock unit.");
           }
         }
       }
@@ -1768,8 +1863,12 @@ function ReceiveStockPage({ data }) {
         <div className="min-w-0">
           <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-white">Receive Stock</h1>
-              <p className="mt-1 text-sm text-zinc-400">Register incoming inventory items.</p>
+              <h1 className="text-2xl font-bold text-white">{isReceiving ? "Receive Stock" : "Add Unit"}</h1>
+              <p className="mt-1 text-sm text-zinc-400">
+                {isReceiving
+                  ? "Record supplier stock received with reference details."
+                  : "Add physical inventory units without supplier or receipt details."}
+              </p>
             </div>
             <div className="flex flex-wrap gap-3 text-sm">
               <a href="/inventory/" className="inline-flex h-9 items-center gap-2 rounded-md px-3 font-semibold text-zinc-200 hover:bg-nexus-panel">
@@ -1780,9 +1879,9 @@ function ReceiveStockPage({ data }) {
                 <Save className="h-4 w-4" />
                 Save Draft
               </button>
-              <button disabled={saving} onClick={completeReceiving} type="button" className="inline-flex h-9 items-center gap-2 rounded-md bg-nexus-orange px-4 font-semibold text-black">
+              <button disabled={saving} onClick={saveStockUnits} type="button" className="inline-flex h-9 items-center gap-2 rounded-md bg-nexus-orange px-4 font-semibold text-black">
                 <Save className="h-4 w-4" />
-                Complete Receiving
+                {isReceiving ? "Receive Stock" : "Add Units"}
               </button>
             </div>
           </header>
@@ -1793,30 +1892,40 @@ function ReceiveStockPage({ data }) {
             </div>
           ) : null}
 
-          <FormSection icon="clipboard" title="Receiving Information" subtitle="Reference and logistics details for this receipt.">
+          <FormSection
+            icon="clipboard"
+            title={isReceiving ? "Receiving Information" : "Unit Entry"}
+            subtitle={isReceiving ? "Supplier and reference details for this stock receipt." : "Minimal details for manual stock-unit entry."}
+          >
             <div className="mb-5 flex items-center justify-between rounded-lg border border-nexus-line bg-nexus-panel2 p-4">
               <div>
-                <p className="text-xs text-zinc-500">Receiving Reference (auto-generated)</p>
+                <p className="text-xs text-zinc-500">{isReceiving ? "Receiving Reference" : "Entry Reference"} (auto-generated)</p>
                 <p className="mt-1 font-mono text-sm font-bold text-zinc-500">Not created yet</p>
               </div>
               <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-black">Draft</span>
             </div>
 
             <div className="grid gap-5 md:grid-cols-2">
-              <Field label="Supplier" required>
-                <SelectInput value={form.supplier} onChange={(value) => updateField("supplier", value)} options={suppliers.map((item) => [item.id, item.name])} placeholder="Select supplier" />
+              {isReceiving ? (
+                <Field label="Supplier" required>
+                  <SelectInput value={form.supplier} onChange={(value) => updateField("supplier", value)} options={suppliers.map((item) => [item.id, item.name])} placeholder="Select supplier" />
+                </Field>
+              ) : null}
+              <Field label={isReceiving ? "Receiving Date" : "Entry Date"} required>
+                <TextInput value={form.entryDate} onChange={(value) => updateField("entryDate", value)} />
               </Field>
-              <Field label="Receiving Date" required>
-                <TextInput value={form.receivingDate} onChange={(value) => updateField("receivingDate", value)} />
-              </Field>
-              <Field label="Delivery Note Number">
-                <TextInput value={form.deliveryNote} onChange={(value) => updateField("deliveryNote", value)} placeholder="Enter delivery note number" />
-              </Field>
-              <Field label="Invoice Reference">
-                <TextInput value={form.invoiceReference} onChange={(value) => updateField("invoiceReference", value)} placeholder="Enter invoice reference" />
-              </Field>
-              <Field label="Received By">
-                <TextInput value={form.receivedBy} onChange={(value) => updateField("receivedBy", value)} />
+              {isReceiving ? (
+                <>
+                  <Field label="Delivery Note Number">
+                    <TextInput value={form.deliveryNote} onChange={(value) => updateField("deliveryNote", value)} placeholder="Enter delivery note number" />
+                  </Field>
+                  <Field label="Invoice Reference">
+                    <TextInput value={form.invoiceReference} onChange={(value) => updateField("invoiceReference", value)} placeholder="Enter invoice reference" />
+                  </Field>
+                </>
+              ) : null}
+              <Field label={isReceiving ? "Received By" : "Added By"}>
+                <TextInput value={form.handledBy} onChange={(value) => updateField("handledBy", value)} />
               </Field>
             </div>
             <div className="mt-5">
@@ -1826,7 +1935,7 @@ function ReceiveStockPage({ data }) {
             </div>
           </FormSection>
 
-          <FormSection icon="box" title="Products" subtitle="Search and add products to this receiving record.">
+          <FormSection icon="box" title="Products" subtitle="Search or scan a product, then add physical units.">
             <div className="relative">
               <div className="flex gap-3">
                 <label className="flex h-10 flex-1 items-center gap-3 rounded-md border border-nexus-line bg-black px-3 text-zinc-500">
@@ -1866,21 +1975,27 @@ function ReceiveStockPage({ data }) {
             <div className="mt-4 rounded-lg border border-dashed border-nexus-line bg-black/30">
               {lines.length ? (
                 lines.map((line) => (
-                  <div key={line.key} className="grid gap-3 border-b border-nexus-line p-4 last:border-b-0 lg:grid-cols-[minmax(0,1fr)_90px_120px_minmax(0,1fr)_40px]">
+                  <div key={line.key} className="grid gap-3 border-b border-nexus-line p-4 last:border-b-0 lg:grid-cols-[minmax(0,1fr)_110px_130px_minmax(0,1fr)_40px]">
                     <div>
                       <p className="font-bold text-white">{line.product.display_name}</p>
                       <p className="mt-1 font-mono text-xs text-nexus-orange">{line.product.sku}</p>
                     </div>
-                    <TextInput value={line.quantity} onChange={(value) => updateLine(line.key, "quantity", value)} />
-                    <TextInput value={line.cost} onChange={(value) => updateLine(line.key, "cost", value)} />
-                    <textarea
-                      value={line.serials}
-                      onChange={(event) => updateLine(line.key, "serials", event.target.value)}
-                      className="min-h-10 rounded-md border border-nexus-line bg-black px-3 py-2 text-sm text-zinc-200 outline-none placeholder:text-zinc-600"
-                      placeholder="Serials, one per line. Blank = auto-generated"
-                    />
-                    <button onClick={() => removeLine(line.key)} type="button" className="text-zinc-500 hover:text-nexus-red">
-                      <X className="h-4 w-4" />
+                    <CompactField label="Quantity">
+                      <TextInput value={line.quantity} onChange={(value) => updateLine(line.key, "quantity", value)} />
+                    </CompactField>
+                    <CompactField label="Unit Cost">
+                      <TextInput value={line.cost} onChange={(value) => updateLine(line.key, "cost", value)} />
+                    </CompactField>
+                    <CompactField label="Serial Numbers">
+                      <textarea
+                        value={line.serials}
+                        onChange={(event) => updateLine(line.key, "serials", event.target.value)}
+                        className="min-h-10 rounded-md border border-nexus-line bg-black px-3 py-2 text-sm text-zinc-200 outline-none placeholder:text-zinc-600"
+                        placeholder="One per line. Blank = auto-generated"
+                      />
+                    </CompactField>
+                    <button onClick={() => removeLine(line.key)} type="button" className="mt-5 text-zinc-500 hover:text-nexus-red" aria-label={`Remove ${line.product.display_name}`}>
+                      <X className="h-4 w-4" aria-hidden="true" />
                     </button>
                   </div>
                 ))
@@ -1897,29 +2012,31 @@ function ReceiveStockPage({ data }) {
             </div>
           </FormSection>
 
-          <FormSection icon="clipboard" title="Attachments" subtitle="Upload invoice, delivery note, or supporting documents.">
-            <div className="grid min-h-28 place-items-center rounded-lg border border-dashed border-nexus-line bg-black/30 text-center text-sm text-zinc-600">
-              Drop files here or click to upload
-              <br />
-              PDF, PNG, JPG, XLSX - max 20MB
-            </div>
-          </FormSection>
+          {isReceiving ? (
+            <FormSection icon="clipboard" title="Attachments" subtitle="Upload invoice, delivery note, or supporting documents.">
+              <div className="grid min-h-28 place-items-center rounded-lg border border-dashed border-nexus-line bg-black/30 text-center text-sm text-zinc-600">
+                Drop files here or click to upload
+                <br />
+                PDF, PNG, JPG, XLSX - max 20MB
+              </div>
+            </FormSection>
+          ) : null}
         </div>
 
         <aside className="space-y-4">
           <section className="rounded-lg border border-nexus-line bg-nexus-panel">
             <div className="flex items-center justify-between border-b border-nexus-line px-4 py-4">
-              <h2 className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">Receiving Summary</h2>
+              <h2 className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">{isReceiving ? "Receiving Summary" : "Unit Summary"}</h2>
               <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-black">Draft</span>
             </div>
             <dl className="divide-y divide-nexus-line p-4">
               <DetailRow label="Reference" value="Not created yet" />
-              <DetailRow label="Supplier" value={selectedSupplier?.name || "-"} />
-              <DetailRow label="Date" value={form.receivingDate || "-"} />
-              <DetailRow label="Received By" value={form.receivedBy || "-"} />
+              {isReceiving ? <DetailRow label="Supplier" value={selectedSupplier?.name || "-"} /> : null}
+              <DetailRow label="Date" value={form.entryDate || "-"} />
+              <DetailRow label={isReceiving ? "Received By" : "Added By"} value={form.handledBy || "-"} />
               <DetailRow label="Products" value={lines.length} strong />
               <DetailRow label="Total Units" value={totalUnits} strong />
-              <DetailRow label="Attachments" value="0" />
+              {isReceiving ? <DetailRow label="Attachments" value="0" /> : null}
               <DetailRow label="Total Cost" value={totalCost ? `$${totalCost.toFixed(2)}` : "-"} />
             </dl>
           </section>
@@ -2073,8 +2190,8 @@ function CreateDeliveryPage({ data }) {
             </div>
 
             <div className="grid gap-5 md:grid-cols-2">
-              <Field label="Customer / Department" required>
-                <TextInput value={form.customerName} onChange={(value) => updateField("customerName", value)} placeholder="Enter customer or department" />
+              <Field label="Customer" required>
+                <TextInput value={form.customerName} onChange={(value) => updateField("customerName", value)} placeholder="Enter customer" />
               </Field>
               <Field label="Delivery Date" required>
                 <TextInput value={form.deliveryDate} onChange={(value) => updateField("deliveryDate", value)} />
@@ -2254,6 +2371,15 @@ function TextInput({ value, onChange, placeholder, disabled = false }) {
       placeholder={placeholder}
       className="h-10 w-full rounded-md border border-nexus-line bg-black px-3 text-sm text-zinc-200 outline-none placeholder:text-zinc-600 disabled:bg-zinc-800/80 disabled:font-mono disabled:text-zinc-500"
     />
+  );
+}
+
+function CompactField({ label, children }) {
+  return (
+    <label className="grid gap-1.5 text-xs font-semibold text-zinc-500">
+      <span>{label}</span>
+      {children}
+    </label>
   );
 }
 
@@ -2876,7 +3002,10 @@ export default function App({ initialData }) {
   }
 
   if (currentPath.startsWith("/inventory/receiving/new")) {
-    return <ReceiveStockPage data={initialData} />;
+    return <StockEntryPage data={initialData} mode="receive" />;
+  }
+  if (currentPath.startsWith("/inventory/stock-units/new")) {
+    return <StockEntryPage data={initialData} mode="add-unit" />;
   }
 
   if (currentPath.startsWith("/inventory/deliveries/new")) {

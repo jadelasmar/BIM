@@ -33,6 +33,7 @@ urlpatterns = [
     path('inventory/', views.module_launcher, name='inventory'),
     path('inventory/products/new/', views.module_launcher, name='inventory_add_product'),
     path('inventory/products/<int:pk>/', views.module_launcher, name='inventory_product_detail'),
+    path('inventory/stock-units/new/', views.module_launcher, name='inventory_add_stock_unit'),
     path('inventory/receiving/new/', views.module_launcher, name='inventory_receive_stock'),
     path('inventory/deliveries/new/', views.module_launcher, name='inventory_create_delivery'),
     path('suppliers/', views.module_launcher, name='suppliers'),

@@ -16,6 +16,7 @@ Next implementation focus: `07 - Receiving Records`.
 - BIM Stock React list page.
 - Add Product React page.
 - Receive Stock React page.
+- Add Unit React page.
 - Create Delivery React page.
 - Product Details React page with stock-unit register and permission-aware actions.
 - Add Product can create Category and Brand lookup values without Django admin.

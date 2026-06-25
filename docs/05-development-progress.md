@@ -20,7 +20,7 @@ Command Center is complete for Phase 1.
 
 ## Frontend
 
-- React/Vite/Tailwind powers Command Center, BIM Stock, Operations, Product Detail, Add Product, Receive Stock, and Create Delivery screens.
+- React/Vite/Tailwind powers Command Center, BIM Stock, Operations, Product Detail, Add Product, Create Delivery, Receive Stock, and Add Unit screens.
 - Shared UI naming, icon, tone, and status mappings are centralized in:
   - `bim/ui_registry.py`
   - `frontend/src/uiRegistry.js`

@@ -34,6 +34,11 @@ UI_TOKENS = {
         "icon": "layers",
         "tone": "green",
     },
+    "reserved_stock": {
+        "label": "Reserved Stock",
+        "icon": "box",
+        "tone": "warning",
+    },
     "out_of_stock": {
         "label": "Out of Stock Products",
         "icon": "package-x",
@@ -100,6 +105,11 @@ UI_TOKENS = {
         "label": "Add Product",
         "icon": "plus",
         "tone": "blue",
+    },
+    "add_stock_unit": {
+        "label": "Add Unit",
+        "icon": "package-plus",
+        "tone": "green",
     },
     "receive_stock": {
         "label": "Receive Stock",

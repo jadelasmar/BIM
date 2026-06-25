@@ -125,6 +125,7 @@ Main protected React routes:
 - `/inventory/products/new/` Add Product
 - `/inventory/products/<id>/` Product Details
 - `/inventory/receiving/new/` Receive Stock
+- `/inventory/stock-units/new/` Add Unit
 - `/inventory/deliveries/new/` Create Delivery
 - `/operations/` Operations hub
 - `/operations/receiving/` Receiving Records placeholder
@@ -173,6 +174,7 @@ React UI:
 - Product Details route/page with overview, stock-unit register, and workflow actions
 - Add Product with inline Category/Brand creation and product image upload
 - Receive Stock
+- Add Unit
 - Create Delivery
 - Operations hub
 - protected placeholders for future modules

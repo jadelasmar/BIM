@@ -113,6 +113,7 @@ export const statusMeta = {
 
 export const workflowMeta = {
   add_product: { icon: "plus", tone: "blue" },
+  add_stock_unit: { icon: "package-plus", tone: "green" },
   receive_stock: { icon: "download", tone: "green" },
   create_delivery: { icon: "delivery", tone: "indigo" },
   add_supplier: { icon: "suppliers", tone: "purple" },

@@ -248,10 +248,11 @@ def _command_center_initial_data(
     current_path = current_path or request.path
     total_products = metrics[0]["value"]
     available_stock = metrics[1]["value"]
-    out_of_stock = metrics[2]["value"]
+    reserved_stock = metrics[2]["value"]
     low_stock = metrics[3]["value"]
-    recent_deliveries = metrics[4]["value"]
-    recent_receiving = metrics[5]["value"]
+    out_of_stock = metrics[4]["value"]
+    recent_deliveries = metrics[5]["value"]
+    recent_receiving = metrics[6]["value"]
     out_of_stock_tone = (
         "danger" if isinstance(out_of_stock, int) and out_of_stock > 0 else "neutral"
     )
@@ -296,6 +297,7 @@ def _command_center_initial_data(
             "outOfStock": f"{reverse('inventory')}?stock=out",
             "lowStock": f"{reverse('inventory')}?stock=low",
             "addProduct": reverse("inventory_add_product"),
+            "addStockUnit": reverse("inventory_add_stock_unit"),
             "receiveStock": reverse("inventory_receive_stock"),
             "createDelivery": reverse("inventory_create_delivery"),
             "suppliers": reverse("suppliers"),
@@ -359,12 +361,11 @@ def _command_center_initial_data(
                 **ui_item("available_stock"),
             },
             {
-                "value": _format_count(out_of_stock),
-                "detail": _product_count_detail(out_of_stock, "out of stock"),
+                "value": _format_count(reserved_stock),
+                "detail": f"{_format_count(reserved_stock)} {_plural(reserved_stock, 'unit')} pending allocation",
                 "trend": "",
-                "href": f"{reverse('inventory')}?stock=out",
-                "todo": "Replace with backend out-of-stock filter when product stock filters move server-side.",
-                **ui_item("out_of_stock", tone=out_of_stock_tone),
+                "href": f"{reverse('inventory')}?status={ProductUnit.STATUS_RESERVED}",
+                **ui_item("reserved_stock"),
             },
             {
                 "value": _format_count(low_stock),
@@ -373,6 +374,14 @@ def _command_center_initial_data(
                 "href": f"{reverse('inventory')}?stock=low",
                 "todo": "Replace with backend low-stock filter when product stock filters move server-side.",
                 **ui_item("low_stock", tone=low_stock_tone),
+            },
+            {
+                "value": _format_count(out_of_stock),
+                "detail": _product_count_detail(out_of_stock, "out of stock"),
+                "trend": "",
+                "href": f"{reverse('inventory')}?stock=out",
+                "todo": "Replace with backend out-of-stock filter when product stock filters move server-side.",
+                **ui_item("out_of_stock", tone=out_of_stock_tone),
             },
         ],
         "overview": [
@@ -450,12 +459,21 @@ def _build_command_center_initial_data(request, current_path=None):
             **ui_item("available_stock"),
         },
         {
-            "value": out_of_stock_count,
-            **ui_item("out_of_stock"),
+            "value": ProductUnit.objects.filter(
+                status=ProductUnit.STATUS_RESERVED,
+                isactive=True,
+            ).count()
+            if can_view_stock
+            else "-",
+            **ui_item("reserved_stock"),
         },
         {
             "value": low_stock_count,
             **ui_item("low_stock"),
+        },
+        {
+            "value": out_of_stock_count,
+            **ui_item("out_of_stock"),
         },
         {
             "value": DeliveryRecord.objects.filter(isactive=True).count()
@@ -486,20 +504,28 @@ def _build_command_center_initial_data(request, current_path=None):
             **ui_item("add_product"),
         },
         {
-            "href": reverse("inventory_receive_stock")
-            if user.has_perm("bim_stock.add_productunit")
-            else None,
-            "enabled": user.has_perm("bim_stock.add_productunit"),
-            "description": "Record incoming stock receipt",
-            **ui_item("receive_stock"),
-        },
-        {
             "href": reverse("inventory_create_delivery")
             if user.has_perm("bim_stock.change_productunit")
             else None,
             "enabled": user.has_perm("bim_stock.change_productunit"),
             "description": "Initiate outbound delivery order",
             **ui_item("create_delivery"),
+        },
+        {
+            "href": reverse("inventory_receive_stock")
+            if user.has_perm("bim_stock.add_productunit")
+            else None,
+            "enabled": user.has_perm("bim_stock.add_productunit"),
+            "description": "Record supplier stock receipt",
+            **ui_item("receive_stock"),
+        },
+        {
+            "href": reverse("inventory_add_stock_unit")
+            if user.has_perm("bim_stock.add_productunit")
+            else None,
+            "enabled": user.has_perm("bim_stock.add_productunit"),
+            "description": "Manual count or direct unit entry",
+            **ui_item("add_stock_unit"),
         },
         {
             "href": None,

@@ -20,6 +20,7 @@ Command Center is complete for Phase 1.
   threshold setup, and product image click/drop upload.
 - Product Details page with stock-unit register, product overview, activity sidebar, and permission-aware workflow actions.
 - Receive Stock page.
+- Add Unit page.
 - Create Delivery page.
 - Operations hub page.
 - Legacy Django stock template pages under `/stock/` were removed; stock UI now
@@ -32,7 +33,7 @@ Command Center is complete for Phase 1.
 - Topbar includes Refresh, Quick Add, user controls, logout, and global theme toggle.
 - Command Center data auto-refreshes every 60 seconds through `/api/command-center/`.
 - Administration is hidden from normal users/viewers.
-- Quick Add is a dropdown with Add Product, Receive Stock, Create Delivery, disabled Add Supplier, and disabled Add Client.
+- Quick Add is a dropdown with Add Product, Create Delivery, Receive Stock, Add Unit, disabled Add Supplier, and disabled Add Client.
 - KPI cards use backend data where available.
 - KPI cards are clickable shortcuts to BIM Stock and stock-filtered inventory views.
 - System Overview cards route to Suppliers, Receiving Records, Delivery Records, and Clients placeholders where full modules are not ready.

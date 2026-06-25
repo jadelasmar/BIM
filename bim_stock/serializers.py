@@ -169,7 +169,12 @@ class ProductSerializer(serializers.ModelSerializer):
         return self._count(obj, "api_returned_units", "returned_units")
 
     def get_is_low_stock(self, obj):
-        return obj.reorder_stock_level > 0 and self.get_available_units(obj) <= obj.reorder_stock_level
+        available_units = self.get_available_units(obj)
+        return (
+            obj.reorder_stock_level > 0
+            and available_units > 0
+            and available_units <= obj.reorder_stock_level
+        )
 
     def get_stock_alert_tone(self, obj):
         if self.get_is_low_stock(obj):
@@ -189,7 +194,7 @@ class ProductUnitSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     model_name = serializers.CharField(source="product.model.modelname", read_only=True)
-    supplier_name = serializers.CharField(source="supplier.name", read_only=True)
+    supplier_name = serializers.SerializerMethodField()
     status_label = serializers.SerializerMethodField()
 
     class Meta:
@@ -225,6 +230,9 @@ class ProductUnitSerializer(serializers.ModelSerializer):
 
     def get_status_label(self, obj):
         return obj.get_status_display()
+
+    def get_supplier_name(self, obj):
+        return obj.supplier.name if obj.supplier else None
 
 
 class DeliveryItemSerializer(serializers.ModelSerializer):

@@ -96,6 +96,7 @@ class UIRegistryTests(SimpleTestCase):
             "available_stock",
             "out_of_stock",
             "low_stock",
+            "add_stock_unit",
             "receive_stock",
             "create_delivery",
         ):
@@ -159,10 +160,12 @@ class UIRegistryTests(SimpleTestCase):
         self.assertIn("function ProductUnitRegister", app_source)
         self.assertIn("<ProductUnitRegister", product_details_source)
         self.assertIn("units={units}", product_details_source)
+        self.assertIn("canAccessAdmin={data.user?.canAccessAdmin}", product_details_source)
         self.assertIn("data.quickActions.find", product_details_source)
         self.assertNotIn("Supplier Code", product_details_source)
         self.assertNotIn('href="/inventory/receiving/new/"', product_details_source)
         self.assertNotIn('href="/inventory/deliveries/new/"', product_details_source)
+        self.assertIn("/admin/bim_stock/productunit/${unit.id}/change/", app_source)
 
     def test_inventory_product_rows_select_inline_detail_without_navigation(self):
         app_source = Path("frontend/src/App.jsx").read_text(encoding="utf-8")
@@ -178,6 +181,7 @@ class UIRegistryTests(SimpleTestCase):
         self.assertIn("onSelect(product.id)", inventory_table_source)
         self.assertNotIn("window.location.assign", inventory_table_source)
         self.assertIn('href={`/inventory/products/${product.id}/`}', inline_detail_source)
+        self.assertIn("/admin/bim_stock/productunit/?q=${encodeURIComponent(product.sku)}", inline_detail_source)
         self.assertIn("Full View", inline_detail_source)
 
     def test_inventory_page_reuses_command_center_kpi_cards(self):
@@ -196,7 +200,7 @@ class UIRegistryTests(SimpleTestCase):
         app_source = Path("frontend/src/App.jsx").read_text(encoding="utf-8")
         add_product_source = app_source[
             app_source.index("function AddProductPage"):
-            app_source.index("function ReceiveStockPage")
+            app_source.index("function StockEntryPage")
         ]
 
         self.assertIn("function LookupCreateControl", app_source)
@@ -213,7 +217,7 @@ class UIRegistryTests(SimpleTestCase):
         app_source = Path("frontend/src/App.jsx").read_text(encoding="utf-8")
         add_product_source = app_source[
             app_source.index("function AddProductPage"):
-            app_source.index("function ReceiveStockPage")
+            app_source.index("function StockEntryPage")
         ]
         save_product_start = add_product_source.index("async function saveProduct")
         save_product_source = add_product_source[
@@ -232,7 +236,7 @@ class UIRegistryTests(SimpleTestCase):
 
     def test_legacy_stock_template_routes_are_not_exposed(self):
         app_source = Path("frontend/src/App.jsx").read_text(encoding="utf-8")
-        launcher_source = Path("templates/bim/module_launcher.html").read_text(
+        react_shell_source = Path("templates/bim/react_app.html").read_text(
             encoding="utf-8"
         )
 
@@ -240,7 +244,7 @@ class UIRegistryTests(SimpleTestCase):
 
         self.assertEqual(response.status_code, 404)
         self.assertNotIn("/stock/", app_source)
-        self.assertNotIn("bim_stock:", launcher_source)
+        self.assertNotIn("bim_stock:", react_shell_source)
 
 
 # Tests the available stock count shown in Product admin.
@@ -612,6 +616,11 @@ class BIMPOSAccessTests(TestCase):
         self.assertTrue(user.is_active)
         self.assertTrue(user.groups.filter(name="Viewer").exists())
 
+    def test_new_normal_users_start_in_viewer_group(self):
+        user = User.objects.create_user(username="new-user", password="test-pass")
+
+        self.assertTrue(user.groups.filter(name="Viewer").exists())
+
     def test_user_admin_creation_generates_unique_pending_usernames(self):
         from bim_accounts.forms import BimUserCreationForm
 
@@ -868,6 +877,7 @@ class BIMPOSAccessTests(TestCase):
             "/operations/deliveries/1/",
             "/inventory/",
             "/inventory/products/new/",
+            "/inventory/stock-units/new/",
             "/inventory/receiving/new/",
             "/inventory/deliveries/new/",
             "/suppliers/",
@@ -985,6 +995,7 @@ class BIMPOSAccessTests(TestCase):
 
         self.assertEqual(kpis_by_label["Total Products"]["href"], "/inventory/")
         self.assertEqual(kpis_by_label["Available Stock"]["href"], "/inventory/?status=available")
+        self.assertEqual(kpis_by_label["Reserved Stock"]["href"], "/inventory/?status=reserved")
         self.assertEqual(kpis_by_label["Out of Stock Products"]["href"], "/inventory/?stock=out")
         self.assertEqual(kpis_by_label["Low Stock Alerts"]["href"], "/inventory/?stock=low")
 
@@ -1188,17 +1199,16 @@ class BIMPOSAccessTests(TestCase):
 
         self.assertEqual(
             set(actions_by_label),
-            {"Add Product", "Receive Stock", "Create Delivery", "Add Supplier", "Add Client"},
+            {"Add Product", "Create Delivery", "Receive Stock", "Add Unit", "Add Supplier", "Add Client"},
         )
         self.assertEqual(actions_by_label["Add Product"]["href"], "/inventory/products/new/")
+        self.assertEqual(actions_by_label["Create Delivery"]["href"], "/inventory/deliveries/new/")
         self.assertEqual(actions_by_label["Receive Stock"]["href"], "/inventory/receiving/new/")
-        self.assertEqual(
-            actions_by_label["Create Delivery"]["href"],
-            "/inventory/deliveries/new/",
-        )
+        self.assertEqual(actions_by_label["Add Unit"]["href"], "/inventory/stock-units/new/")
         self.assertTrue(actions_by_label["Add Product"]["enabled"])
-        self.assertTrue(actions_by_label["Receive Stock"]["enabled"])
         self.assertTrue(actions_by_label["Create Delivery"]["enabled"])
+        self.assertTrue(actions_by_label["Receive Stock"]["enabled"])
+        self.assertTrue(actions_by_label["Add Unit"]["enabled"])
         self.assertEqual(actions_by_label["Create Delivery"]["icon"], "delivery")
         self.assertEqual(actions_by_label["Create Delivery"]["tone"], "indigo")
         self.assertFalse(actions_by_label["Add Supplier"]["enabled"])
@@ -1255,6 +1265,10 @@ class BIMPOSAccessTests(TestCase):
         self.assertEqual(low_stock_kpi["value"], "1")
         self.assertEqual(low_stock_kpi["tone"], "warning")
         self.assertEqual(low_stock_kpi["detail"], "1 product with low stock")
+        self.assertLess(
+            response.context["initial_data"]["kpis"].index(low_stock_kpi),
+            response.context["initial_data"]["kpis"].index(out_of_stock_kpi),
+        )
         low_stock_alert = response.context["initial_data"]["lowStockAlerts"][0]
         self.assertEqual(low_stock_alert["productName"], "Canon laser printer L200")
         self.assertEqual(low_stock_alert["category"], "Laser")
@@ -1283,7 +1297,7 @@ class BIMPOSAccessTests(TestCase):
 
         self.assertEqual(
             set(actions_by_label),
-            {"Add Product", "Receive Stock", "Create Delivery", "Add Supplier", "Add Client"},
+            {"Add Product", "Create Delivery", "Receive Stock", "Add Unit", "Add Supplier", "Add Client"},
         )
         self.assertFalse(actions_by_label["Add Supplier"]["enabled"])
         self.assertIsNone(actions_by_label["Add Supplier"]["href"])
@@ -1443,8 +1457,32 @@ class BIMPOSAccessTests(TestCase):
             f"/api/stock/products/{product.pk}/",
         )
 
-    def test_receive_stock_react_page_uses_receive_stock_route(self):
+    def test_add_stock_unit_react_page_uses_stock_unit_route(self):
         user = User.objects.create_user(username="operator", password="test-pass")
+        user.user_permissions.add(
+            Permission.objects.get(codename="view_product"),
+            Permission.objects.get(codename="view_supplier"),
+            Permission.objects.get(codename="add_productunit"),
+        )
+        self.client.force_login(user)
+
+        response = self.client.get("/inventory/stock-units/new/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "bim/react_app.html")
+        self.assertEqual(
+            response.context["initial_data"]["currentPath"],
+            "/inventory/stock-units/new/",
+        )
+        add_stock_unit_action = next(
+            action
+            for action in response.context["initial_data"]["quickActions"]
+            if action["label"] == "Add Unit"
+        )
+        self.assertEqual(add_stock_unit_action["href"], "/inventory/stock-units/new/")
+
+    def test_receive_stock_react_page_uses_receiving_route(self):
+        user = User.objects.create_user(username="receiver", password="test-pass")
         user.user_permissions.add(
             Permission.objects.get(codename="view_product"),
             Permission.objects.get(codename="view_supplier"),
@@ -1460,12 +1498,12 @@ class BIMPOSAccessTests(TestCase):
             response.context["initial_data"]["currentPath"],
             "/inventory/receiving/new/",
         )
-        receive_action = next(
+        receive_stock_action = next(
             action
             for action in response.context["initial_data"]["quickActions"]
             if action["label"] == "Receive Stock"
         )
-        self.assertEqual(receive_action["href"], "/inventory/receiving/new/")
+        self.assertEqual(receive_stock_action["href"], "/inventory/receiving/new/")
 
     def test_create_delivery_react_page_uses_delivery_route(self):
         user = User.objects.create_user(username="support", password="test-pass")
@@ -1506,6 +1544,7 @@ class BIMPOSAccessTests(TestCase):
 
     def test_command_center_disables_inventory_without_permission(self):
         user = User.objects.create_user(username="viewer", password="test-pass")
+        user.groups.clear()
         self.client.force_login(user)
 
         response = self.client.get("/")
@@ -1690,6 +1729,7 @@ class InventoryApiTests(TestCase):
 
     def test_product_api_requires_product_permission(self):
         user = User.objects.create_user(username="no-perm", password="test-pass")
+        user.groups.clear()
         self.client.force_login(user)
 
         response = self.client.get("/api/stock/products/")
@@ -1792,6 +1832,26 @@ class InventoryApiTests(TestCase):
         self.assertEqual(create_response.status_code, 201)
         self.assertEqual(create_response.json()["product_sku"], "LAS-CAN-L100")
 
+    def test_product_units_api_creates_manual_unit_without_supplier(self):
+        user = self._user_with_permissions("view_productunit", "add_productunit")
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/api/stock/product-units/",
+            {
+                "product": self.product.pk,
+                "serial_number": "MANUAL-COUNT-1",
+                "status": ProductUnit.STATUS_AVAILABLE,
+                "supplier": None,
+                "cost": "0.00",
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertIsNone(response.json()["supplier"])
+        self.assertEqual(response.json()["supplier_name"], None)
+
     def test_reference_apis_return_lookup_data(self):
         user = self._user_with_permissions(
             "view_product",
@@ -1858,8 +1918,26 @@ class InventoryApiTests(TestCase):
         self.assertEqual(response.json()["total_products"], 1)
         self.assertEqual(response.json()["available_units"], 1)
         self.assertEqual(response.json()["reserved_units"], 1)
+        self.assertEqual(response.json()["out_of_stock_products"], 0)
         self.assertEqual(response.json()["low_stock_products"], 1)
         self.assertNotIn("critical_stock_products", response.json())
+
+    def test_summary_api_counts_out_of_stock_separately_from_low_stock(self):
+        user = self._user_with_permissions("view_product")
+        self.client.force_login(user)
+        model = ProductModel.objects.create(brand=self.brand, modelname="L200")
+        Product.objects.create(
+            descript="Canon empty printer",
+            category=self.category,
+            model=model,
+            reorder_stock_level=3,
+        )
+
+        response = self.client.get("/api/stock/summary/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["out_of_stock_products"], 1)
+        self.assertEqual(response.json()["low_stock_products"], 1)
 
     def test_delivery_api_creates_record_and_marks_units_sold(self):
         user = self._user_with_permissions(

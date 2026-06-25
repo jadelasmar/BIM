@@ -116,7 +116,11 @@ class Product(models.Model):
 
     @property
     def is_low_stock(self):
-        return self.reorder_stock_level > 0 and self.available_units <= self.reorder_stock_level
+        return (
+            self.reorder_stock_level > 0
+            and self.available_units > 0
+            and self.available_units <= self.reorder_stock_level
+        )
 
     @property
     def stock_alert_tone(self):

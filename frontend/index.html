@@ -28,7 +28,7 @@
           "outOfStock": "/inventory/?stock=out",
           "lowStock": "/inventory/?stock=low",
           "addProduct": "/inventory/products/new/",
-          "receiveStock": "/inventory/receiving/new/",
+          "addStockUnit": "/inventory/stock-units/new/",
           "createDelivery": "/inventory/deliveries/new/",
           "suppliers": "/suppliers/",
           "receivingRecords": "/operations/receiving/",
@@ -165,20 +165,28 @@
             "tone": "blue"
           },
           {
-            "label": "Receive Stock",
-            "href": "/inventory/receiving/new/",
-            "enabled": true,
-            "description": "Record incoming stock receipt",
-            "icon": "download",
-            "tone": "green"
-          },
-          {
             "label": "Create Delivery",
             "href": "/inventory/deliveries/new/",
             "enabled": true,
             "description": "Initiate outbound delivery order",
             "icon": "delivery",
             "tone": "indigo"
+          },
+          {
+            "label": "Receive Stock",
+            "href": "/inventory/receiving/new/",
+            "enabled": true,
+            "description": "Record supplier stock receipt",
+            "icon": "download",
+            "tone": "green"
+          },
+          {
+            "label": "Add Unit",
+            "href": "/inventory/stock-units/new/",
+            "enabled": true,
+            "description": "Manual count or direct unit entry",
+            "icon": "package-plus",
+            "tone": "green"
           },
           {
             "label": "Add Supplier",

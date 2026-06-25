@@ -217,6 +217,7 @@ class InventorySummaryAPIView(APIView):
     def get(self, request):
         _require_perm(request.user, "bim_stock.view_product")
         active_units = ProductUnit.objects.filter(isactive=True)
+        products = _product_queryset()
         return Response(
             {
                 "total_products": Product.objects.filter(isactive=True).count(),
@@ -230,13 +231,13 @@ class InventorySummaryAPIView(APIView):
                 "returned_units": active_units.filter(
                     status=ProductUnit.STATUS_RETURNED,
                 ).count(),
+                "out_of_stock_products": sum(
+                    1 for product in products if product.available_units == 0
+                ),
                 "low_stock_products": sum(
                     1
-                    for product in _product_queryset()
-                    if (
-                        product.reorder_stock_level > 0
-                        and product.available_units <= product.reorder_stock_level
-                    )
+                    for product in products
+                    if product.is_low_stock
                 ),
             }
         )
