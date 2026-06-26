@@ -397,7 +397,7 @@ def _command_center_initial_data(
             {
                 "value": _format_count(recent_receiving),
                 "detail": "stock entry records",
-                "href": reverse("operations_receiving"),
+                "href": reverse("inventory_receive_stock"),
                 **ui_item("receiving_records"),
             },
             {

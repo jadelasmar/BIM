@@ -1051,7 +1051,7 @@ class BIMPOSAccessTests(TestCase):
         overview_by_label = {item["label"]: item for item in overview}
         self.assertEqual(overview_by_label["Suppliers"]["href"], "/suppliers/")
         self.assertEqual(overview_by_label["Receiving Records"]["tone"], "green")
-        self.assertEqual(overview_by_label["Receiving Records"]["href"], "/operations/receiving/")
+        self.assertEqual(overview_by_label["Receiving Records"]["href"], "/inventory/receiving/new/")
         self.assertEqual(overview_by_label["Delivery Records"]["tone"], "indigo")
         self.assertEqual(overview_by_label["Delivery Records"]["href"], "/operations/deliveries/")
         self.assertEqual(overview_by_label["Clients"]["href"], "/clients/")
