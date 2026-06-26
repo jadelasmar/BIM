@@ -18,11 +18,33 @@ class CategorySerializer(serializers.ModelSerializer):
         model = Category
         fields = ("id", "name")
 
+    def validate_name(self, value):
+        name = value.strip()
+        if not name:
+            raise serializers.ValidationError("Category name is required.")
+        queryset = Category.objects.filter(name__iexact=name)
+        if self.instance:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        if queryset.exists():
+            raise serializers.ValidationError("Category already exists.")
+        return name
+
 
 class BrandSerializer(serializers.ModelSerializer):
     class Meta:
         model = Brand
         fields = ("id", "brandname")
+
+    def validate_brandname(self, value):
+        name = value.strip()
+        if not name:
+            raise serializers.ValidationError("Brand name is required.")
+        queryset = Brand.objects.filter(brandname__iexact=name)
+        if self.instance:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        if queryset.exists():
+            raise serializers.ValidationError("Brand already exists.")
+        return name
 
 
 class ProductModelSerializer(serializers.ModelSerializer):
@@ -37,6 +59,17 @@ class SupplierSerializer(serializers.ModelSerializer):
     class Meta:
         model = Supplier
         fields = ("id", "name")
+
+    def validate_name(self, value):
+        name = value.strip()
+        if not name:
+            raise serializers.ValidationError("Supplier name is required.")
+        queryset = Supplier.objects.filter(name__iexact=name)
+        if self.instance:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        if queryset.exists():
+            raise serializers.ValidationError("Supplier already exists.")
+        return name
 
 
 class ProductSerializer(serializers.ModelSerializer):

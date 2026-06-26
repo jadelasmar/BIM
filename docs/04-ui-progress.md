@@ -16,8 +16,8 @@ Command Center is complete for Phase 1.
   Center.
 - BIM Stock product rows update the inline Product Detail panel; Full View opens
   the dedicated product detail route.
-- Add Product page, including inline Category/Brand creation, low-stock alert
-  threshold setup, and product image click/drop upload.
+- Add Product page, including searchable create-or-select Category and Brand
+  fields, low-stock alert threshold setup, and product image click/drop upload.
 - Product Details page with stock-unit register, product overview, activity sidebar, and permission-aware workflow actions.
 - Receive Stock page.
 - Add Unit page.

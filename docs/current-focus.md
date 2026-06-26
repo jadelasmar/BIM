@@ -19,7 +19,8 @@ Next implementation focus: `07 - Receiving Records`.
 - Add Unit React page.
 - Create Delivery React page.
 - Product Details React page with stock-unit register and permission-aware actions.
-- Add Product can create Category and Brand lookup values without Django admin.
+- Add Product uses searchable create-or-select lookup fields for Category and Brand without Django admin.
+- Supplier and Client selection belong to receiving, delivery, and future stock movement workflows, not product definition.
 - Operations placeholder/detail navigation.
 - Clients terminology in Command Center.
 

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Camera,
   ChevronRight,
   Edit3,
   Eye,
@@ -225,12 +226,13 @@ function Topbar({ data, onRefresh, onOpenSidebar }) {
         Refresh
       </button>
       <QuickAddMenu actions={data.quickActions || []} />
-      <div className="hidden items-center gap-2 rounded-md border border-nexus-line px-2 py-1.5 sm:inline-flex">
+      <div
+        className="hidden h-9 w-9 items-center justify-center rounded-md border border-nexus-line sm:inline-flex"
+        aria-label={`Signed in as ${data.user?.displayName || data.user?.username || "User"}`}
+        title="Signed in"
+      >
         <span className="grid h-6 w-6 place-items-center rounded-md bg-nexus-orange/10 text-xs font-bold text-nexus-orange">
           {data.user?.initials || "U"}
-        </span>
-        <span className="max-w-36 truncate text-xs font-semibold text-zinc-300">
-          {data.user?.displayName || data.user?.username || "User"}
         </span>
       </div>
       <LogoutForm data={data} />
@@ -396,12 +398,7 @@ function PlaceholderPage({ data, title }) {
   return (
     <Shell data={data}>
       <header className="mb-5">
-        <div className="text-sm text-zinc-500">
-          <a className="hover:text-zinc-200" href="/">BIM Nexus</a>
-          <span className="mx-2">/</span>
-          <span>{title}</span>
-        </div>
-        <h1 className="mt-3 text-2xl font-bold text-white">{title}</h1>
+        <h1 className="text-2xl font-bold text-white">{title}</h1>
       </header>
 
       <section className="rounded-lg border border-nexus-line bg-nexus-panel p-6">
@@ -971,7 +968,7 @@ function ProductDetail({ product, canAccessAdmin = false }) {
           <h3 className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-400">Optional</h3>
           {optionalFields.map(([label, done]) => (
             <p key={label} className={`text-sm ${done ? "text-zinc-300" : "text-zinc-600"}`}>
-              {done ? "✓" : "○"} {label}
+              {done ? "âœ“" : "â—‹"} {label}
             </p>
           ))}
         </div>
@@ -980,7 +977,7 @@ function ProductDetail({ product, canAccessAdmin = false }) {
           <h3 className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-400">Optional</h3>
           {optionalFields.map(([label, done]) => (
             <p key={label} className={`text-sm ${done ? "text-zinc-300" : "text-zinc-600"}`}>
-              {done ? "✓" : "○"} {label}
+              {done ? "âœ“" : "â—‹"} {label}
             </p>
           ))}
         </div>
@@ -1074,14 +1071,7 @@ function ProductDetailsPage({ data }) {
   return (
     <Shell data={data}>
       <header className="mb-5">
-        <div className="text-sm text-zinc-500">
-          <a className="hover:text-zinc-200" href="/inventory/">BIM Stock</a>
-          <span className="mx-2">›</span>
-          <span>Products</span>
-          <span className="mx-2">›</span>
-          <span className="font-semibold text-white">{product.display_name}</span>
-        </div>
-        <div className="mt-5 flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="flex items-start gap-4">
             <Avatar product={product} />
             <div>
@@ -1091,9 +1081,9 @@ function ProductDetailsPage({ data }) {
               </div>
               <p className="mt-2 text-sm text-zinc-400">
                 <span className="font-mono font-bold text-nexus-orange">{product.sku}</span>
-                <span className="mx-2">•</span>
+                <span className="mx-2">â€¢</span>
                 {product.category_name}
-                <span className="mx-2">•</span>
+                <span className="mx-2">â€¢</span>
                 {product.brand_name} {product.model_name}
               </p>
             </div>
@@ -1359,16 +1349,17 @@ function AddProductPage({ data }) {
   };
   const [form, setForm] = useState(emptyForm);
   const [refs, setRefs] = useState({ categories: [], brands: [] });
-  const [lookupForms, setLookupForms] = useState({ category: "", brand: "" });
-  const [lookupSaving, setLookupSaving] = useState("");
+  const [refsLoading, setRefsLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const imageInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
 
   useEffect(() => {
     const controller = new AbortController();
 
     async function loadRefs() {
+      setRefsLoading(true);
       const [categoriesResponse, brandsResponse] = await Promise.all([
         fetch(data.api.categories, { signal: controller.signal }),
         fetch(data.api.brands, { signal: controller.signal })
@@ -1378,11 +1369,13 @@ function AddProductPage({ data }) {
         categories: categoriesResponse.ok ? await categoriesResponse.json() : [],
         brands: brandsResponse.ok ? await brandsResponse.json() : []
       });
+      setRefsLoading(false);
     }
 
     loadRefs().catch((loadError) => {
       if (loadError.name !== "AbortError") {
         setError("Could not load product form data.");
+        setRefsLoading(false);
       }
     });
 
@@ -1407,6 +1400,9 @@ function AddProductPage({ data }) {
     setForm(emptyForm);
     if (imageInputRef.current) {
       imageInputRef.current.value = "";
+    }
+    if (cameraInputRef.current) {
+      cameraInputRef.current.value = "";
     }
   }
 
@@ -1443,10 +1439,9 @@ function AddProductPage({ data }) {
     if (imageInputRef.current) {
       imageInputRef.current.value = "";
     }
-  }
-
-  function updateLookupForm(name, value) {
-    setLookupForms((current) => ({ ...current, [name]: value }));
+    if (cameraInputRef.current) {
+      cameraInputRef.current.value = "";
+    }
   }
 
   function addLookupItem(listName, item, labelField) {
@@ -1458,7 +1453,7 @@ function AddProductPage({ data }) {
     }));
   }
 
-  async function createLookup(kind) {
+  async function createLookupOption(kind, name) {
     const lookupConfig = {
       category: {
         endpoint: data.api.categories,
@@ -1476,39 +1471,31 @@ function AddProductPage({ data }) {
       }
     };
     const config = lookupConfig[kind];
-    const name = lookupForms[kind].trim();
+    const trimmedName = name.trim();
 
-    if (!name) {
-      setError("Enter a name before creating a catalogue value.");
-      return;
+    if (!trimmedName) {
+      throw new Error("Enter a name before creating a catalogue value.");
     }
 
-    setLookupSaving(kind);
     setError("");
-    try {
-      const response = await fetch(config.endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-CSRFToken": data.csrfToken
-        },
-        body: JSON.stringify(config.body(name))
-      });
+    const response = await fetch(config.endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": data.csrfToken
+      },
+      body: JSON.stringify(config.body(trimmedName))
+    });
 
-      if (!response.ok) {
-        const details = await response.json().catch(() => ({}));
-        throw new Error(firstApiError(details) || "Could not create catalogue value.");
-      }
-
-      const created = await response.json();
-      addLookupItem(config.listName, created, config.labelField);
-      updateField(config.formField, String(created.id));
-      updateLookupForm(kind, "");
-    } catch (lookupError) {
-      setError(lookupError.message);
-    } finally {
-      setLookupSaving("");
+    if (!response.ok) {
+      const details = await response.json().catch(() => ({}));
+      throw new Error(firstApiError(details) || "Could not create catalogue value.");
     }
+
+    const created = await response.json();
+    addLookupItem(config.listName, created, config.labelField);
+    updateField(config.formField, String(created.id));
+    return created;
   }
 
   async function saveProduct(addAnother = false) {
@@ -1580,28 +1567,28 @@ function AddProductPage({ data }) {
             </div>
 
             <div className="mt-5 grid gap-5 md:grid-cols-2">
-              <Field label="Category" required>
-                <SelectInput value={form.category} onChange={(value) => updateField("category", value)} options={refs.categories.map((item) => [item.id, item.name])} placeholder="Select category..." />
-                <LookupCreateControl
-                  value={lookupForms.category}
-                  onChange={(value) => updateLookupForm("category", value)}
-                  onCreate={() => createLookup("category")}
-                  saving={lookupSaving === "category"}
-                  placeholder="New category name"
-                  buttonLabel="Create Category"
-                />
-              </Field>
-              <Field label="Brand" required>
-                <SelectInput value={form.brand} onChange={(value) => updateField("brand", value)} options={refs.brands.map((item) => [item.id, item.brandname])} placeholder="Select brand..." />
-                <LookupCreateControl
-                  value={lookupForms.brand}
-                  onChange={(value) => updateLookupForm("brand", value)}
-                  onCreate={() => createLookup("brand")}
-                  saving={lookupSaving === "brand"}
-                  placeholder="New brand name"
-                  buttonLabel="Create Brand"
-                />
-              </Field>
+              <SearchableCreatableSelect
+                label="Category"
+                required
+                value={form.category}
+                onChange={(value) => updateField("category", value)}
+                options={refs.categories}
+                getOptionLabel={(item) => item.name}
+                onCreate={(name) => createLookupOption("category", name)}
+                placeholder="Search or create category..."
+                loading={refsLoading}
+              />
+              <SearchableCreatableSelect
+                label="Brand"
+                required
+                value={form.brand}
+                onChange={(value) => updateField("brand", value)}
+                options={refs.brands}
+                getOptionLabel={(item) => item.brandname}
+                onCreate={(name) => createLookupOption("brand", name)}
+                placeholder="Search or create brand..."
+                loading={refsLoading}
+              />
               <Field label="Model" required>
                 <TextInput value={form.modelName} onChange={(value) => updateField("modelName", value)} placeholder="Enter model" />
                 <p className="mt-2 text-xs text-zinc-500">Used to generate SKU.</p>
@@ -1642,6 +1629,14 @@ function AddProductPage({ data }) {
                 className="hidden"
                 onChange={handleImageInputChange}
               />
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handleImageInputChange}
+              />
               <button
                 type="button"
                 onClick={() => imageInputRef.current?.click()}
@@ -1672,6 +1667,24 @@ function AddProductPage({ data }) {
                   Upload a photo or icon for this product. Used in listings, detail views, and reports.
                 </p>
                 <p className="mt-4 text-xs text-zinc-500">PNG, JPG - max 5MB</p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => imageInputRef.current?.click()}
+                    className="inline-flex h-9 items-center gap-2 rounded-md border border-nexus-line px-3 text-xs font-semibold text-zinc-200 hover:bg-nexus-panel"
+                  >
+                    <Package className="h-4 w-4" />
+                    Upload Image
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => cameraInputRef.current?.click()}
+                    className="inline-flex h-9 items-center gap-2 rounded-md border border-nexus-line px-3 text-xs font-semibold text-zinc-200 hover:bg-nexus-panel"
+                  >
+                    <Camera className="h-4 w-4" />
+                    Take Photo
+                  </button>
+                </div>
                 {form.imageFile ? (
                   <button type="button" onClick={clearImageFile} className="mt-3 text-xs font-semibold text-nexus-orange hover:text-white">
                     Remove image
@@ -1729,6 +1742,7 @@ function StockEntryPage({ data, mode = "add-unit" }) {
   });
   const [products, setProducts] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
+  const [refsLoading, setRefsLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [lines, setLines] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -1739,6 +1753,7 @@ function StockEntryPage({ data, mode = "add-unit" }) {
     const controller = new AbortController();
 
     async function loadData() {
+      setRefsLoading(true);
       const requests = [fetch(data.api.products, { signal: controller.signal })];
       if (isReceiving) {
         requests.push(fetch(data.api.suppliers, { signal: controller.signal }));
@@ -1746,11 +1761,13 @@ function StockEntryPage({ data, mode = "add-unit" }) {
       const [productsResponse, suppliersResponse] = await Promise.all(requests);
       setProducts(productsResponse.ok ? await productsResponse.json() : []);
       setSuppliers(suppliersResponse?.ok ? await suppliersResponse.json() : []);
+      setRefsLoading(false);
     }
 
     loadData().catch((loadError) => {
       if (loadError.name !== "AbortError") {
         setError(`Could not load ${isReceiving ? "receiving" : "stock unit"} data.`);
+        setRefsLoading(false);
       }
     });
 
@@ -1772,6 +1789,42 @@ function StockEntryPage({ data, mode = "add-unit" }) {
 
   function updateField(name, value) {
     setForm((current) => ({ ...current, [name]: value }));
+  }
+
+  function addSupplierItem(item) {
+    setSuppliers((current) =>
+      [...current, item].sort((left, right) =>
+        String(left.name || "").localeCompare(String(right.name || ""))
+      )
+    );
+  }
+
+  async function createSupplierOption(name) {
+    const trimmedName = name.trim();
+
+    if (!trimmedName) {
+      throw new Error("Enter a supplier name before creating it.");
+    }
+
+    setError("");
+    const response = await fetch(data.api.suppliers, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": data.csrfToken
+      },
+      body: JSON.stringify({ name: trimmedName })
+    });
+
+    if (!response.ok) {
+      const details = await response.json().catch(() => ({}));
+      throw new Error(firstApiError(details) || "Could not create supplier.");
+    }
+
+    const created = await response.json();
+    addSupplierItem(created);
+    updateField("supplier", String(created.id));
+    return created;
   }
 
   function addProductLine(product) {
@@ -1907,9 +1960,17 @@ function StockEntryPage({ data, mode = "add-unit" }) {
 
             <div className="grid gap-5 md:grid-cols-2">
               {isReceiving ? (
-                <Field label="Supplier" required>
-                  <SelectInput value={form.supplier} onChange={(value) => updateField("supplier", value)} options={suppliers.map((item) => [item.id, item.name])} placeholder="Select supplier" />
-                </Field>
+                <SearchableCreatableSelect
+                  label="Supplier"
+                  required
+                  value={form.supplier}
+                  onChange={(value) => updateField("supplier", value)}
+                  options={suppliers}
+                  getOptionLabel={(item) => item.name}
+                  onCreate={createSupplierOption}
+                  placeholder="Search or create supplier..."
+                  loading={refsLoading}
+                />
               ) : null}
               <Field label={isReceiving ? "Receiving Date" : "Entry Date"} required>
                 <TextInput value={form.entryDate} onChange={(value) => updateField("entryDate", value)} />
@@ -2301,15 +2362,6 @@ function CreateDeliveryPage({ data }) {
 function AddProductHeader({ saving, onReset, onSave, onSaveAnother }) {
   return (
     <header className="mb-5 border-b border-nexus-line pb-4">
-      <div className="mb-4 text-sm text-zinc-400">
-        <a className="hover:text-zinc-200" href="/">BIM Nexus</a>
-        <span className="mx-2">/</span>
-        <a className="hover:text-zinc-200" href="/inventory/">BIM Stock</a>
-        <span className="mx-2">/</span>
-        <span className="font-mono text-white">05</span>
-        <span className="mx-1">-</span>
-        <span className="font-semibold text-white">Add Product</span>
-      </div>
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
       <div>
         <h1 className="text-2xl font-bold text-white">Add Product</h1>
@@ -2401,32 +2453,130 @@ function SelectInput({ value, onChange, options, placeholder, disabled = false }
   );
 }
 
-function LookupCreateControl({ value, onChange, onCreate, placeholder, buttonLabel, saving = false, disabled = false }) {
-  const canCreate = value.trim() && !saving && !disabled;
+function SearchableCreatableSelect({
+  label,
+  required = false,
+  value,
+  onChange,
+  options,
+  getOptionLabel = (option) => option.name,
+  getOptionValue = (option) => option.id,
+  onCreate,
+  placeholder,
+  helperText,
+  loading = false,
+  disabled = false
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState("");
+  const selected = options.find((option) => String(getOptionValue(option)) === String(value));
+  const trimmedQuery = query.trim();
+  const normalizedQuery = trimmedQuery.toLowerCase();
+  const filteredOptions = normalizedQuery
+    ? options.filter((option) => getOptionLabel(option).toLowerCase().includes(normalizedQuery))
+    : options;
+  const visibleOptions = filteredOptions.slice(0, 8);
+  const hasExactMatch = options.some((option) => getOptionLabel(option).trim().toLowerCase() === normalizedQuery);
+  const canCreate = Boolean(onCreate && trimmedQuery && !hasExactMatch && !creating && !disabled);
+
+  function selectOption(option) {
+    onChange(String(getOptionValue(option)));
+    setQuery("");
+    setOpen(false);
+    setCreateError("");
+  }
+
+  async function createOption() {
+    if (!canCreate) return;
+
+    setCreating(true);
+    setCreateError("");
+    try {
+      const created = await onCreate(trimmedQuery);
+      selectOption(created);
+    } catch (error) {
+      setCreateError(error.message || "Could not create lookup value.");
+    } finally {
+      setCreating(false);
+    }
+  }
 
   return (
-    <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-      <input
-        disabled={saving || disabled}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" && canCreate) {
-            event.preventDefault();
-            onCreate();
-          }
-        }}
-        placeholder={placeholder}
-        className="h-9 rounded-md border border-nexus-line bg-black px-3 text-sm text-zinc-200 outline-none placeholder:text-zinc-600 disabled:bg-zinc-800/80 disabled:text-zinc-500"
-      />
-      <button
-        type="button"
-        disabled={!canCreate}
-        onClick={onCreate}
-        className="inline-flex h-9 items-center justify-center rounded-md border border-nexus-line px-3 text-xs font-semibold text-zinc-200 hover:bg-nexus-panel disabled:text-zinc-600"
-      >
-        {saving ? "Creating..." : buttonLabel}
-      </button>
+    <div className="relative">
+      <label className="block">
+        <span className="text-sm font-semibold text-white">
+          {label}
+          {required ? <span className="text-nexus-orange">*</span> : null}
+        </span>
+        <span className="relative mt-2 block">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-600" />
+          <input
+            disabled={disabled}
+            value={open ? query : selected ? getOptionLabel(selected) : ""}
+            onFocus={() => {
+              if (disabled) return;
+              setOpen(true);
+              setQuery("");
+            }}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setOpen(true);
+              setCreateError("");
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && canCreate) {
+                event.preventDefault();
+                createOption();
+              }
+              if (event.key === "Escape") {
+                setOpen(false);
+                setQuery("");
+              }
+            }}
+            onBlur={() => window.setTimeout(() => setOpen(false), 150)}
+            placeholder={loading ? "Loading..." : placeholder}
+            className="h-10 w-full rounded-md border border-nexus-line bg-black py-2 pl-9 pr-3 text-sm text-zinc-200 outline-none placeholder:text-zinc-600 disabled:bg-zinc-800/80 disabled:text-zinc-500"
+          />
+        </span>
+      </label>
+      {helperText ? <p className="mt-2 text-xs text-zinc-500">{helperText}</p> : null}
+      {createError ? <p className="mt-2 text-xs font-semibold text-red-300">{createError}</p> : null}
+      {open && !disabled ? (
+        <div className="absolute z-30 mt-2 max-h-72 w-full overflow-auto rounded-md border border-nexus-line bg-zinc-950 p-1 shadow-2xl shadow-black/50">
+          {loading ? <div className="px-3 py-2 text-sm text-zinc-500">Loading...</div> : null}
+          {!loading && visibleOptions.length ? (
+            visibleOptions.map((option) => (
+              <button
+                key={getOptionValue(option)}
+                type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => selectOption(option)}
+                className="flex w-full items-center justify-between rounded px-3 py-2 text-left text-sm text-zinc-200 hover:bg-nexus-panel"
+              >
+                <span className="min-w-0 truncate">{getOptionLabel(option)}</span>
+                {String(getOptionValue(option)) === String(value) ? <span className="text-xs text-nexus-orange">Selected</span> : null}
+              </button>
+            ))
+          ) : null}
+          {!loading && !visibleOptions.length ? (
+            <div className="px-3 py-2 text-sm text-zinc-500">No matches found.</div>
+          ) : null}
+          {!loading && canCreate ? (
+            <button
+              type="button"
+              disabled={creating}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={createOption}
+              className="mt-1 flex w-full items-center gap-2 rounded border border-dashed border-nexus-line px-3 py-2 text-left text-sm font-semibold text-nexus-orange hover:border-nexus-orange hover:bg-nexus-panel disabled:text-zinc-600"
+            >
+              <Plus className="h-4 w-4" />
+              {creating ? "Creating..." : `Create "${trimmedQuery}"`}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -2450,9 +2600,6 @@ function AddProductPreview({
     ["Barcode", form.barcode],
     ["Low Stock Alert", form.reorderStockLevel],
     ["Internal Notes", form.notes],
-    ["Default Supplier", false],
-    ["Supplier Cost", false],
-    ["Client Price", false],
     ["Product Image", form.imageFile]
   ];
 
@@ -2503,7 +2650,7 @@ function AddProductPreview({
           <h3 className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-400">Required</h3>
           {missing.map(([label, done]) => (
             <p key={label} className={`text-sm ${done ? "text-zinc-300" : "text-zinc-600"}`}>
-              {done ? "✓" : "○"} {label}
+              {done ? "âœ“" : "â—‹"} {label}
             </p>
           ))}
         </div>
@@ -2511,7 +2658,7 @@ function AddProductPreview({
           <h3 className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-400">Optional</h3>
           {optionalFields.map(([label, done]) => (
             <p key={label} className={`text-sm ${done ? "text-zinc-300" : "text-zinc-600"}`}>
-              {done ? "✓" : "○"} {label}
+              {done ? "âœ“" : "â—‹"} {label}
             </p>
           ))}
         </div>

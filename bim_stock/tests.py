@@ -150,6 +150,18 @@ class UIRegistryTests(SimpleTestCase):
         self.assertIn("onRefresh", command_center_source)
         self.assertIn("Refresh", app_source)
 
+    def test_topbar_keeps_user_avatar_without_visible_name(self):
+        app_source = Path("frontend/src/App.jsx").read_text(encoding="utf-8")
+        topbar_source = app_source[
+            app_source.index("function Topbar"):
+            app_source.index("function ThemeToggle")
+        ]
+
+        self.assertIn("data.user?.initials", topbar_source)
+        self.assertIn("aria-label={`Signed in as", topbar_source)
+        self.assertNotIn("max-w-36 truncate", topbar_source)
+        self.assertNotIn("data.user?.displayName || data.user?.username", topbar_source.split("aria-label")[0])
+
     def test_product_details_page_renders_stock_units_and_permission_aware_actions(self):
         app_source = Path("frontend/src/App.jsx").read_text(encoding="utf-8")
         product_details_source = app_source[
@@ -162,6 +174,7 @@ class UIRegistryTests(SimpleTestCase):
         self.assertIn("units={units}", product_details_source)
         self.assertIn("canAccessAdmin={data.user?.canAccessAdmin}", product_details_source)
         self.assertIn("data.quickActions.find", product_details_source)
+        self.assertNotIn('className="text-sm text-zinc-500"', product_details_source)
         self.assertNotIn("Supplier Code", product_details_source)
         self.assertNotIn('href="/inventory/receiving/new/"', product_details_source)
         self.assertNotIn('href="/inventory/deliveries/new/"', product_details_source)
@@ -203,15 +216,32 @@ class UIRegistryTests(SimpleTestCase):
             app_source.index("function StockEntryPage")
         ]
 
-        self.assertIn("function LookupCreateControl", app_source)
-        self.assertIn('createLookup("category"', add_product_source)
-        self.assertIn('createLookup("brand"', add_product_source)
+        self.assertIn("function SearchableCreatableSelect", app_source)
+        self.assertNotIn("function LookupCreateControl", app_source)
+        self.assertIn('createLookupOption("category"', add_product_source)
+        self.assertIn('createLookupOption("brand"', add_product_source)
+        self.assertNotIn('createLookupOption("supplier"', add_product_source)
+        self.assertNotIn("defaultSupplier", add_product_source)
+        self.assertNotIn("Client records are not implemented yet.", add_product_source)
         self.assertNotIn('createLookup("type"', add_product_source)
         self.assertNotIn("data.api.types", add_product_source)
         self.assertIn("reorderStockLevel", add_product_source)
         self.assertIn('payload.append("reorder_stock_level", form.reorderStockLevel)', add_product_source)
         self.assertNotIn('payload.append("printed"', add_product_source)
         self.assertNotIn("minimum_stock_level", add_product_source)
+
+    def test_add_product_header_does_not_show_breadcrumb_trail(self):
+        app_source = Path("frontend/src/App.jsx").read_text(encoding="utf-8")
+        header_source = app_source[
+            app_source.index("function AddProductHeader"):
+            app_source.index("function FormSection")
+        ]
+
+        self.assertIn("Add Product", header_source)
+        self.assertNotIn("BIM Nexus", header_source)
+        self.assertNotIn("BIM Stock", header_source)
+        self.assertNotIn(">05<", header_source)
+        self.assertNotIn('className="font-mono text-white">05', header_source)
 
     def test_add_product_page_supports_click_drop_and_upload_for_product_images(self):
         app_source = Path("frontend/src/App.jsx").read_text(encoding="utf-8")
@@ -226,13 +256,34 @@ class UIRegistryTests(SimpleTestCase):
         ]
 
         self.assertIn("const imageInputRef = useRef(null)", add_product_source)
+        self.assertIn("const cameraInputRef = useRef(null)", add_product_source)
         self.assertIn('type="file"', add_product_source)
         self.assertIn('accept="image/png,image/jpeg"', add_product_source)
+        self.assertIn('accept="image/*"', add_product_source)
+        self.assertIn('capture="environment"', add_product_source)
         self.assertIn("onClick={() => imageInputRef.current?.click()}", add_product_source)
+        self.assertIn("onClick={() => cameraInputRef.current?.click()}", add_product_source)
+        self.assertIn("Take Photo", add_product_source)
         self.assertIn("onDrop={handleImageDrop}", add_product_source)
         self.assertIn("const payload = new FormData()", save_product_source)
         self.assertIn('payload.append("image", form.imageFile)', save_product_source)
         self.assertNotIn('"Content-Type": "application/json"', save_product_source)
+
+    def test_receive_stock_page_can_search_and_create_suppliers(self):
+        app_source = Path("frontend/src/App.jsx").read_text(encoding="utf-8")
+        stock_entry_source = app_source[
+            app_source.index("function StockEntryPage"):
+            app_source.index("function CreateDeliveryPage")
+        ]
+
+        self.assertIn("function SearchableCreatableSelect", app_source)
+        self.assertIn("async function createSupplierOption", stock_entry_source)
+        self.assertIn('fetch(data.api.suppliers', stock_entry_source)
+        self.assertIn('body: JSON.stringify({ name: trimmedName })', stock_entry_source)
+        self.assertIn('label="Supplier"', stock_entry_source)
+        self.assertIn('placeholder="Search or create supplier..."', stock_entry_source)
+        self.assertIn("onCreate={createSupplierOption}", stock_entry_source)
+        self.assertNotIn("options={suppliers.map((item) => [item.id, item.name])}", stock_entry_source)
 
     def test_legacy_stock_template_routes_are_not_exposed(self):
         app_source = Path("frontend/src/App.jsx").read_text(encoding="utf-8")
@@ -1718,6 +1769,8 @@ class InventoryApiTests(TestCase):
         self.assertEqual(product_data["barcode"], "BAR-CANON-L100")
         self.assertEqual(product_data["category_name"], "Laser")
         self.assertEqual(product_data["brand_name"], "Canon")
+        self.assertNotIn("default_supplier", product_data)
+        self.assertNotIn("default_supplier_name", product_data)
         self.assertEqual(product_data["model_name"], "L100")
         self.assertEqual(product_data["total_units"], 2)
         self.assertEqual(product_data["available_units"], 1)
@@ -1754,6 +1807,7 @@ class InventoryApiTests(TestCase):
 
         self.assertEqual(response.status_code, 201, response.content)
         self.assertEqual(response.json()["sku"], "LAS-CAN-L200")
+        self.assertNotIn("default_supplier", response.json())
 
     def test_product_api_creates_product_with_new_model_name(self):
         user = self._user_with_permissions("view_product", "add_product")
@@ -1874,8 +1928,10 @@ class InventoryApiTests(TestCase):
     def test_reference_apis_create_catalogue_lookups(self):
         user = self._user_with_permissions(
             "view_product",
+            "view_supplier",
             "add_category",
             "add_brand",
+            "add_supplier",
         )
         self.client.force_login(user)
 
@@ -1889,11 +1945,54 @@ class InventoryApiTests(TestCase):
             {"brandname": "Zebra"},
             content_type="application/json",
         )
+        supplier_response = self.client.post(
+            "/api/stock/suppliers/",
+            {"name": "North Star Distribution"},
+            content_type="application/json",
+        )
 
         self.assertEqual(category_response.status_code, 201)
         self.assertEqual(category_response.json()["name"], "Barcode")
         self.assertEqual(brand_response.status_code, 201)
         self.assertEqual(brand_response.json()["brandname"], "Zebra")
+        self.assertEqual(supplier_response.status_code, 201)
+        self.assertEqual(supplier_response.json()["name"], "North Star Distribution")
+
+    def test_reference_apis_search_and_prevent_duplicate_lookup_names(self):
+        user = self._user_with_permissions(
+            "view_product",
+            "view_supplier",
+            "add_category",
+            "add_brand",
+            "add_supplier",
+        )
+        self.client.force_login(user)
+
+        search_response = self.client.get("/api/stock/suppliers/", {"q": "gulf"})
+        duplicate_category = self.client.post(
+            "/api/stock/categories/",
+            {"name": " laser "},
+            content_type="application/json",
+        )
+        duplicate_brand = self.client.post(
+            "/api/stock/brands/",
+            {"brandname": "canon"},
+            content_type="application/json",
+        )
+        duplicate_supplier = self.client.post(
+            "/api/stock/suppliers/",
+            {"name": "gulf networks llc"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(search_response.status_code, 200)
+        self.assertEqual(
+            [supplier["name"] for supplier in search_response.json()],
+            ["Gulf Networks LLC"],
+        )
+        self.assertEqual(duplicate_category.status_code, 400)
+        self.assertEqual(duplicate_brand.status_code, 400)
+        self.assertEqual(duplicate_supplier.status_code, 400)
 
     def test_reference_api_create_requires_lookup_permission(self):
         user = self._user_with_permissions("view_product")

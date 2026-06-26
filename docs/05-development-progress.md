@@ -30,7 +30,11 @@ Command Center is complete for Phase 1.
   View navigates to `/inventory/products/<id>/`.
 - BIM Stock list KPI cards reuse the same shared React KPI card component as
   Command Center.
-- Add Product can create Category and Brand lookup records through the stock API without requiring Django admin.
+- Add Product can search, select, and create Category and Brand lookup records
+  through the stock API without requiring Django admin.
+- Supplier selection remains part of receiving and future stock movement
+  workflows; Client selection remains part of delivery and future stock movement
+  workflows.
 - Product setup uses one `reorder_stock_level` threshold for low-stock alerts;
   the separate printed name and minimum-stock fields were removed.
 - Add Product supports product image click/drop selection and saves images through multipart product API requests.

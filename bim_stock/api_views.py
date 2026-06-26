@@ -249,7 +249,11 @@ class CategoryListAPIView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         _require_perm(self.request.user, "bim_stock.view_product")
-        return Category.objects.order_by("name")
+        queryset = Category.objects.order_by("name")
+        query = self.request.query_params.get("q", "").strip()
+        if query:
+            queryset = queryset.filter(name__icontains=query)
+        return queryset
 
     def perform_create(self, serializer):
         _require_perm(self.request.user, "bim_stock.add_category")
@@ -262,7 +266,11 @@ class BrandListAPIView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         _require_perm(self.request.user, "bim_stock.view_product")
-        return Brand.objects.order_by("brandname")
+        queryset = Brand.objects.order_by("brandname")
+        query = self.request.query_params.get("q", "").strip()
+        if query:
+            queryset = queryset.filter(brandname__icontains=query)
+        return queryset
 
     def perform_create(self, serializer):
         _require_perm(self.request.user, "bim_stock.add_brand")
@@ -281,10 +289,18 @@ class ProductModelListAPIView(generics.ListAPIView):
         )
 
 
-class SupplierListAPIView(generics.ListAPIView):
+class SupplierListAPIView(generics.ListCreateAPIView):
     serializer_class = SupplierSerializer
     permission_classes = (permissions.IsAuthenticated,)
 
     def get_queryset(self):
         _require_perm(self.request.user, "bim_stock.view_supplier")
-        return Supplier.objects.order_by("name")
+        queryset = Supplier.objects.order_by("name")
+        query = self.request.query_params.get("q", "").strip()
+        if query:
+            queryset = queryset.filter(name__icontains=query)
+        return queryset
+
+    def perform_create(self, serializer):
+        _require_perm(self.request.user, "bim_stock.add_supplier")
+        serializer.save()
