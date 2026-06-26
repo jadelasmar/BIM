@@ -285,6 +285,33 @@ class UIRegistryTests(SimpleTestCase):
         self.assertIn("onCreate={createSupplierOption}", stock_entry_source)
         self.assertNotIn("options={suppliers.map((item) => [item.id, item.name])}", stock_entry_source)
 
+    def test_receive_stock_date_defaults_to_today_and_uses_calendar_input(self):
+        app_source = Path("frontend/src/App.jsx").read_text(encoding="utf-8")
+        stock_entry_source = app_source[
+            app_source.index("function StockEntryPage"):
+            app_source.index("function CreateDeliveryPage")
+        ]
+
+        self.assertIn('new Date().toISOString().slice(0, 10)', stock_entry_source)
+        self.assertIn("entryDate: today", stock_entry_source)
+        self.assertIn('label={isReceiving ? "Receiving Date" : "Entry Date"}', stock_entry_source)
+        self.assertIn('<TextInput type="date" value={form.entryDate}', stock_entry_source)
+
+    def test_receive_stock_received_by_uses_logged_in_user_without_selector(self):
+        app_source = Path("frontend/src/App.jsx").read_text(encoding="utf-8")
+        stock_entry_source = app_source[
+            app_source.index("function StockEntryPage"):
+            app_source.index("function CreateDeliveryPage")
+        ]
+
+        self.assertIn('const handledByName = data.user?.displayName || data.user?.username || "-"', stock_entry_source)
+        self.assertIn('value={handledByName}', stock_entry_source)
+        self.assertNotIn("activeUsers", stock_entry_source)
+        self.assertNotIn("data.api.activeUsers", stock_entry_source)
+        self.assertNotIn("form.handledBy", stock_entry_source)
+        self.assertNotIn('<Field label={isReceiving ? "Received By" : "Added By"}>', stock_entry_source)
+        self.assertNotIn('placeholder="Select active user"', stock_entry_source)
+
     def test_legacy_stock_template_routes_are_not_exposed(self):
         app_source = Path("frontend/src/App.jsx").read_text(encoding="utf-8")
         react_shell_source = Path("templates/bim/react_app.html").read_text(
@@ -955,10 +982,12 @@ class BIMPOSAccessTests(TestCase):
             category=category,
             model=model,
         )
+        supplier = Supplier.objects.create(name="Gulf Networks LLC")
         unit = ProductUnit.objects.create(
             product=product,
             serial_number="AUTO-REFRESH-UNIT",
             status=ProductUnit.STATUS_AVAILABLE,
+            supplier=supplier,
             isactive=True,
         )
         self.client.force_login(user)
@@ -1165,10 +1194,12 @@ class BIMPOSAccessTests(TestCase):
             category=category,
             model=model,
         )
+        supplier = Supplier.objects.create(name="Gulf Networks LLC")
         unit = ProductUnit.objects.create(
             product=product,
             serial_number="RECEIVING-ACTIVITY",
             status=ProductUnit.STATUS_AVAILABLE,
+            supplier=supplier,
             isactive=True,
         )
         self.client.force_login(user)
@@ -1199,6 +1230,37 @@ class BIMPOSAccessTests(TestCase):
         self.assertNotIn(unit.serial_number, str(receiving_panel))
         self.assertEqual(receiving_panel["status"], "Received")
         self.assertEqual(receiving_panel["status_class"], "received")
+
+    def test_manual_add_unit_is_not_counted_as_receiving_record(self):
+        user = User.objects.create_user(username="viewer", password="test-pass")
+        user.user_permissions.add(Permission.objects.get(codename="view_product"))
+        category = Category.objects.create(name="Laser")
+        brand = Brand.objects.create(brandname="Canon")
+        model = ProductModel.objects.create(brand=brand, modelname="L100")
+        product = Product.objects.create(
+            descript="Canon laser printer",
+            category=category,
+            model=model,
+        )
+        manual_unit = ProductUnit.objects.create(
+            product=product,
+            serial_number="MANUAL-UNIT",
+            status=ProductUnit.STATUS_AVAILABLE,
+            supplier=None,
+            isactive=True,
+        )
+        self.client.force_login(user)
+
+        response = self.client.get("/")
+        initial_data = response.context["initial_data"]
+        overview_by_label = {
+            item["label"]: item for item in initial_data["overview"]
+        }
+
+        self.assertEqual(overview_by_label["Receiving Records"]["value"], "0")
+        self.assertEqual(initial_data["recentReceiving"], [])
+        self.assertNotIn(manual_unit.serial_number, str(initial_data["recentActivity"]))
+        self.assertNotIn("RCV-", str(initial_data["recentActivity"]))
 
     def test_command_center_recent_deliveries_panel_uses_delivery_records(self):
         user = User.objects.create_user(username="viewer", password="test-pass")

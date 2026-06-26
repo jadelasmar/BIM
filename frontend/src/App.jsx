@@ -1737,7 +1737,6 @@ function StockEntryPage({ data, mode = "add-unit" }) {
     entryDate: today,
     deliveryNote: "",
     invoiceReference: "",
-    handledBy: data.user?.displayName || "",
     notes: ""
   });
   const [products, setProducts] = useState([]);
@@ -1781,6 +1780,7 @@ function StockEntryPage({ data, mode = "add-unit" }) {
     })
     .slice(0, 6);
   const selectedSupplier = suppliers.find((supplier) => String(supplier.id) === String(form.supplier));
+  const handledByName = data.user?.displayName || data.user?.username || "-";
   const totalUnits = lines.reduce((total, line) => total + Math.max(Number(line.quantity) || 0, 0), 0);
   const totalCost = lines.reduce(
     (total, line) => total + (Number(line.quantity) || 0) * (Number(line.cost) || 0),
@@ -1973,7 +1973,7 @@ function StockEntryPage({ data, mode = "add-unit" }) {
                 />
               ) : null}
               <Field label={isReceiving ? "Receiving Date" : "Entry Date"} required>
-                <TextInput value={form.entryDate} onChange={(value) => updateField("entryDate", value)} />
+                <TextInput type="date" value={form.entryDate} onChange={(value) => updateField("entryDate", value)} />
               </Field>
               {isReceiving ? (
                 <>
@@ -1985,9 +1985,6 @@ function StockEntryPage({ data, mode = "add-unit" }) {
                   </Field>
                 </>
               ) : null}
-              <Field label={isReceiving ? "Received By" : "Added By"}>
-                <TextInput value={form.handledBy} onChange={(value) => updateField("handledBy", value)} />
-              </Field>
             </div>
             <div className="mt-5">
               <Field label="Notes">
@@ -2094,7 +2091,7 @@ function StockEntryPage({ data, mode = "add-unit" }) {
               <DetailRow label="Reference" value="Not created yet" />
               {isReceiving ? <DetailRow label="Supplier" value={selectedSupplier?.name || "-"} /> : null}
               <DetailRow label="Date" value={form.entryDate || "-"} />
-              <DetailRow label={isReceiving ? "Received By" : "Added By"} value={form.handledBy || "-"} />
+              <DetailRow label={isReceiving ? "Received By" : "Added By"} value={handledByName} />
               <DetailRow label="Products" value={lines.length} strong />
               <DetailRow label="Total Units" value={totalUnits} strong />
               {isReceiving ? <DetailRow label="Attachments" value="0" /> : null}
@@ -2414,9 +2411,10 @@ function Field({ label, required = false, children }) {
   );
 }
 
-function TextInput({ value, onChange, placeholder, disabled = false }) {
+function TextInput({ value, onChange, placeholder, disabled = false, type = "text" }) {
   return (
     <input
+      type={type}
       disabled={disabled}
       value={value}
       onChange={(event) => onChange?.(event.target.value)}

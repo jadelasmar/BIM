@@ -58,6 +58,7 @@ def _recent_stock_activity():
             }
         )
 
+    received_unit_filter = Q(supplier__isnull=False)
     fallback_units = (
         ProductUnit.objects.filter(isactive=True)
         .select_related("product", "supplier")
@@ -66,6 +67,7 @@ def _recent_stock_activity():
             | Q(sold_date__isnull=False)
         )
         .filter(delivery_item__isnull=True)
+        .filter(Q(status=ProductUnit.STATUS_SOLD) | received_unit_filter)
         .order_by("-crdate")[:8]
     )
     for unit in fallback_units:
@@ -164,6 +166,7 @@ def _recent_receiving(limit=4):
         ProductUnit.objects.filter(isactive=True, crdate__isnull=False)
         .select_related("product")
         .filter(delivery_item__isnull=True)
+        .filter(supplier__isnull=False)
         .exclude(status=ProductUnit.STATUS_SOLD)
         .order_by("-crdate")[:limit]
     )
@@ -486,6 +489,7 @@ def _build_command_center_initial_data(request, current_path=None):
             "value": ProductUnit.objects.filter(
                 crdate__gte=recent_window,
                 isactive=True,
+                supplier__isnull=False,
             ).count()
             if can_view_stock
             else "-",
