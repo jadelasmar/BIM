@@ -19,10 +19,10 @@ import {
   X
 } from "lucide-react";
 
-import logoPrimary from "./assets/brand/logo-primary.svg";
-import logoWhite from "./assets/brand/logo-white.svg";
-import coBrandBuiltForBimpos from "./assets/brand/co-brand-built-for-bimpos.svg";
 import { iconComponents, statusMeta, toneClasses, workflowMeta } from "./uiRegistry";
+
+const logoPrimary = "/static/bim/assets/brand/logo-primary.svg";
+const logoWhite = "/static/bim/assets/brand/logo-white.svg";
 
 function Icon({ name, className = "h-4 w-4" }) {
   const Component = iconComponents[name] || LayoutDashboard;
@@ -511,12 +511,6 @@ function Header({ data }) {
         <h1 className="mt-2 text-2xl font-bold tracking-tight text-white">{data.hero.title}</h1>
         <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-zinc-400">
           <span>{data.hero.subtitle}</span>
-          <span aria-hidden="true">-</span>
-          <img
-            src={coBrandBuiltForBimpos}
-            alt={`Built for ${data.hero.tenant}`}
-            className="h-4 w-auto max-w-[160px]"
-          />
         </p>
         <label className="mt-4 flex h-10 max-w-xl items-center gap-3 rounded-lg border border-nexus-line bg-nexus-panel px-3 text-zinc-500">
           <Search className="h-4 w-4" aria-hidden="true" />

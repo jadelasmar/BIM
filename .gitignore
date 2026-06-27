@@ -63,6 +63,7 @@ db.sqlite3-journal
 
 # Django media/static generated files
 media/
+products_images/
 staticfiles/
 
 # Frontend dependencies and local build cache
