@@ -1,0 +1,23 @@
+{
+  "src/assets/brand/logo-primary.svg": {
+    "file": "assets/logo-primary-lYLJjCe0.svg",
+    "src": "src/assets/brand/logo-primary.svg"
+  },
+  "src/assets/brand/logo-white.svg": {
+    "file": "assets/logo-white-DsK07wrs.svg",
+    "src": "src/assets/brand/logo-white.svg"
+  },
+  "src/main.jsx": {
+    "file": "assets/main-Bp0HPNKr.js",
+    "name": "main",
+    "src": "src/main.jsx",
+    "isEntry": true,
+    "css": [
+      "assets/main-CdhMmaWk.css"
+    ],
+    "assets": [
+      "assets/logo-primary-lYLJjCe0.svg",
+      "assets/logo-white-DsK07wrs.svg"
+    ]
+  }
+}

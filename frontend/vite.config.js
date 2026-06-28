@@ -11,16 +11,11 @@ export default defineConfig({
     strictPort: true
   },
   build: {
-    outDir: path.resolve(__dirname, "../static/frontend"),
+    outDir: path.resolve(__dirname, "../backend/static/frontend"),
     emptyOutDir: true,
-    manifest: false,
+    manifest: "manifest.json",
     rollupOptions: {
-      input: path.resolve(__dirname, "src/main.jsx"),
-      output: {
-        entryFileNames: "assets/index.js",
-        chunkFileNames: "assets/[name].js",
-        assetFileNames: "assets/[name][extname]"
-      }
+      input: path.resolve(__dirname, "src/main.jsx")
     }
   }
 });

@@ -1,5 +1,6 @@
 # Byte-compiled / optimized / DLL files
 __pycache__/
+*.pyc
 *.py[cod]
 *$py.class
 
@@ -59,19 +60,27 @@ cover/
 *.log
 local_settings.py
 db.sqlite3
+*.sqlite3
 db.sqlite3-journal
 
 # Django media/static generated files
 media/
-products_images/
+backend/media/
 staticfiles/
+backend/staticfiles/
 
 # Frontend dependencies and local build cache
+node_modules/
 frontend/node_modules/
 frontend/.vite/
+frontend/dist/
 
 # VS Code
 .vscode/
+!.vscode/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
 
 # Flask stuff:
 instance/
@@ -141,6 +150,7 @@ celerybeat.pid
 
 # Environments
 .env
+.env.*
 .venv
 .codex-venv/
 env/
@@ -178,7 +188,10 @@ cython_debug/
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
-#.idea/
+.idea/
+
+# OS files
+.DS_Store
 
 # Ruff stuff:
 .ruff_cache/

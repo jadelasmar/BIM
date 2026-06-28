@@ -1,0 +1,26 @@
+{% load vite %}
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ page_title|default:"BIM Nexus" }}</title>
+    <script>
+        (function () {
+            var savedTheme = window.localStorage.getItem("bim-nexus-theme");
+            document.documentElement.dataset.theme = savedTheme === "light" ? "light" : "dark";
+        })();
+    </script>
+</head>
+<body>
+    <div id="bim-nexus-root"></div>
+    {{ initial_data|json_script:"bim-nexus-initial-data" }}
+
+    {% if vite_dev_server %}
+        <script type="module" src="{{ vite_dev_server }}/@vite/client"></script>
+        <script type="module" src="{{ vite_dev_server }}/src/main.jsx"></script>
+    {% else %}
+        {% vite_react_assets %}
+    {% endif %}
+</body>
+</html>
