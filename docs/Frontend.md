@@ -41,6 +41,10 @@ Important rendered routes:
 - `/inventory/stock-units/new/` Add Unit
 - `/inventory/deliveries/new/` Create Delivery
 - `/operations/` Operations hub
+- `/operations/receiving/` Receiving Records placeholder
+- `/operations/receiving/<id>/` Receiving Record detail placeholder
+- `/operations/deliveries/` Delivery Records placeholder
+- `/operations/deliveries/<id>/` Delivery Record detail placeholder
 - `/settings/` Settings
 - `/accounts/login/` Login
 - `/accounts/setup/<uid>/<token>/` Password setup

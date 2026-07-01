@@ -5,7 +5,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from . import constants as stock_constants
-from .models import DeliveryRecord, Product, ProductUnit, Supplier
+from .models import DeliveryRecord, Product, ProductUnit, ReceivingRecord, Supplier
 
 
 def user_can_view_stock(user):
@@ -44,11 +44,17 @@ def delivery_record_count():
 
 def recent_receiving_count():
     recent_window = timezone.now() - timedelta(days=30)
-    return ProductUnit.objects.filter(
+    receiving_records = ReceivingRecord.objects.filter(
+        crdate__gte=recent_window,
+        isactive=True,
+    ).count()
+    legacy_units = ProductUnit.objects.filter(
         crdate__gte=recent_window,
         isactive=True,
         supplier__isnull=False,
+        receiving_item__isnull=True,
     ).count()
+    return receiving_records + legacy_units
 
 
 def supplier_count():
@@ -94,6 +100,28 @@ def recent_stock_activity():
             }
         )
 
+    receiving_records = (
+        ReceivingRecord.objects.filter(isactive=True)
+        .select_related("supplier", "created_by")
+        .prefetch_related("items__product")
+        .order_by("-crdate")[:8]
+    )
+    for receiving in receiving_records:
+        activity.append(
+            {
+                "type": "Receiving",
+                "reference": receiving.receiving_number,
+                "related": receiving_record_summary(receiving),
+                "user": _user_display_name(receiving.created_by)
+                if receiving.created_by
+                else "",
+                "date": receiving.received_date,
+                "status": "Received",
+                "status_class": "received",
+                "href": reverse("operations_receiving_detail", kwargs={"pk": receiving.pk}),
+            }
+        )
+
     received_unit_filter = Q(supplier__isnull=False)
     fallback_units = (
         ProductUnit.objects.filter(isactive=True)
@@ -103,6 +131,7 @@ def recent_stock_activity():
             | Q(sold_date__isnull=False)
         )
         .filter(delivery_item__isnull=True)
+        .filter(receiving_item__isnull=True)
         .filter(Q(status=ProductUnit.STATUS_SOLD) | received_unit_filter)
         .order_by("-crdate")[:8]
     )
@@ -194,16 +223,39 @@ def recent_deliveries(limit=4):
 
 
 def recent_receiving(limit=4):
+    records = (
+        ReceivingRecord.objects.filter(isactive=True)
+        .select_related("supplier")
+        .prefetch_related("items__product")
+        .order_by("-received_date", "-receiving_number")[:limit]
+    )
+    items = [
+        {
+            "reference": receiving.receiving_number,
+            "title": receiving.supplier.name if receiving.supplier else "Manual receiving",
+            "detail": receiving_record_summary(receiving),
+            "href": reverse("operations_receiving_detail", kwargs={"pk": receiving.pk}),
+            "date": receiving.received_date,
+            "status": "Received",
+            "status_class": "received",
+        }
+        for receiving in records
+    ]
+    remaining = max(limit - len(items), 0)
+    if not remaining:
+        return items
+
     units = (
         ProductUnit.objects.filter(isactive=True, crdate__isnull=False)
         .select_related("product")
         .filter(delivery_item__isnull=True)
+        .filter(receiving_item__isnull=True)
         .filter(supplier__isnull=False)
         .exclude(status=ProductUnit.STATUS_SOLD)
-        .order_by("-crdate")[:limit]
+        .order_by("-crdate")[:remaining]
     )
 
-    return [
+    items.extend(
         {
             "reference": operational_reference(
                 "RCV",
@@ -218,7 +270,8 @@ def recent_receiving(limit=4):
             "status_class": "received",
         }
         for unit in units
-    ]
+    )
+    return items
 
 
 def operational_reference(prefix, activity_date, number):
@@ -233,6 +286,16 @@ def delivery_record_summary(delivery):
     if len(items) == 1:
         return f"1 {items[0].product}"
     return f"{len(items)} stock units"
+
+
+def receiving_record_summary(receiving):
+    items = [item for item in receiving.items.all() if item.isactive]
+    total_quantity = sum(item.quantity for item in items)
+    if not items:
+        return "Receiving record"
+    if total_quantity == 1:
+        return f"1 {items[0].product}"
+    return f"{total_quantity} stock units"
 
 
 def _user_display_name(user):

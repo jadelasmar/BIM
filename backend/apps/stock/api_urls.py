@@ -27,6 +27,11 @@ urlpatterns = [
         api_views.DeliveryRecordListCreateAPIView.as_view(),
         name="deliveries",
     ),
+    path(
+        "receiving-records/",
+        api_views.ReceivingRecordListCreateAPIView.as_view(),
+        name="receiving-records",
+    ),
     path("suppliers/", api_views.SupplierListAPIView.as_view(), name="suppliers"),
     path("brands/", api_views.BrandListAPIView.as_view(), name="brands"),
     path("models/", api_views.ProductModelListAPIView.as_view(), name="models"),

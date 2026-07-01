@@ -12,6 +12,7 @@ This roadmap documents product direction, not implementation history.
 - Add Unit
 - Create Delivery
 - Delivery records API
+- Receiving records backend API
 - Suppliers lookup API
 - Django admin for stock and users
 - Login and password setup
@@ -20,9 +21,9 @@ This roadmap documents product direction, not implementation history.
 
 ## Current Product Focus
 
-Build full Receiving Records.
+Build full Receiving Records frontend workflows.
 
-The current receiving UI creates `ProductUnit` records directly. A durable receiving workflow should introduce receiving records when the process needs record numbers, detail pages, auditability, and reporting.
+The backend now has operational receiving records. The current receiving UI still creates `ProductUnit` records directly and should move to the receiving record API when the list/detail workflow is built.
 
 ## Near-Term Modules
 
@@ -56,4 +57,3 @@ BIM Nexus is not:
 - ticketing or Tasklogger replacement software
 
 Accounting software owns official invoices, payments, and financial posting.
-

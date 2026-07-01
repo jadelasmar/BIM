@@ -196,6 +196,97 @@ class ProductUnit(models.Model):
         return f"{self.product} - {self.serial_number}"
 
 
+class ReceivingRecord(models.Model):
+    receiving_number = models.CharField(
+        max_length=32,
+        unique=True,
+        blank=True,
+        editable=False,
+    )
+    supplier = models.ForeignKey(
+        Supplier,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+    )
+    reference_number = models.CharField(max_length=100, blank=True)
+    received_date = models.DateField(default=timezone.localdate)
+    notes = models.TextField(blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="stock_receiving_records",
+    )
+    crdate = models.DateTimeField(auto_now_add=True)
+    isactive = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("-received_date", "-receiving_number")
+
+    def save(self, *args, **kwargs):
+        if not self.receiving_number:
+            year = (self.received_date or timezone.localdate()).year
+            prefix = f"RCV-{year}-"
+            latest = (
+                ReceivingRecord.objects.filter(receiving_number__startswith=prefix)
+                .order_by("-receiving_number")
+                .first()
+            )
+            next_number = 1
+            if latest:
+                try:
+                    next_number = int(latest.receiving_number.rsplit("-", 1)[1]) + 1
+                except (IndexError, ValueError):
+                    next_number = latest.pk + 1
+            self.receiving_number = f"{prefix}{next_number:04d}"
+        super().save(*args, **kwargs)
+
+    @property
+    def total_quantity(self):
+        return sum(item.quantity for item in self.items.filter(isactive=True))
+
+    def __str__(self):
+        return self.receiving_number or "Receiving"
+
+
+class ReceivingItem(models.Model):
+    receiving = models.ForeignKey(
+        ReceivingRecord,
+        on_delete=models.CASCADE,
+        related_name="items",
+    )
+    product = models.ForeignKey(Product, on_delete=models.PROTECT)
+    product_unit = models.OneToOneField(
+        ProductUnit,
+        on_delete=models.PROTECT,
+        blank=True,
+        null=True,
+        related_name="receiving_item",
+    )
+    quantity = models.PositiveIntegerField(default=1)
+    serial_number = models.CharField(max_length=150, blank=True)
+    cost = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    notes = models.TextField(blank=True)
+    crdate = models.DateTimeField(auto_now_add=True)
+    isactive = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("product__descript", "serial_number", "pk")
+
+    def save(self, *args, **kwargs):
+        if self.product_unit_id:
+            self.product = self.product_unit.product
+            self.serial_number = self.product_unit.serial_number
+            self.quantity = 1
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        reference = self.serial_number or f"{self.quantity} units"
+        return f"{self.receiving} - {self.product} - {reference}"
+
+
 class DeliveryRecord(models.Model):
     STATUS_DRAFT = "draft"
     STATUS_COMPLETED = "completed"

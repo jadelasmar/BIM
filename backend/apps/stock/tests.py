@@ -520,6 +520,47 @@ class ProductUnitAdminTests(SimpleTestCase):
         )
 
 
+class ReceivingAdminTests(SimpleTestCase):
+    def test_receiving_admin_has_staff_friendly_configuration(self):
+        from .admin import ReceivingRecordAdmin
+        from .models import ReceivingRecord
+
+        receiving_admin = ReceivingRecordAdmin(ReceivingRecord, admin.site)
+
+        self.assertEqual(
+            receiving_admin.list_display,
+            (
+                "receiving_number",
+                "supplier",
+                "received_date",
+                "reference_number",
+                "total_quantity",
+                "created_by",
+                "isactive",
+                "crdate",
+            ),
+        )
+        self.assertEqual(
+            receiving_admin.search_fields,
+            (
+                "receiving_number",
+                "reference_number",
+                "supplier__name",
+                "items__product__descript",
+                "items__serial_number",
+                "items__product_unit__serial_number",
+            ),
+        )
+        self.assertEqual(
+            receiving_admin.list_filter,
+            ("supplier", "received_date", "isactive"),
+        )
+        self.assertEqual(
+            receiving_admin.readonly_fields,
+            ("receiving_number", "crdate"),
+        )
+
+
 # Tests purchase defaults used when adding new ProductUnit records.
 class ProductUnitPurchaseFormTests(SimpleTestCase):
     def test_new_product_unit_defaults_to_available_purchase_today(self):
@@ -1237,6 +1278,53 @@ class BIMPOSAccessTests(TestCase):
         self.assertEqual(receiving_panel["status"], "Received")
         self.assertEqual(receiving_panel["status_class"], "received")
 
+    def test_command_center_recent_activity_uses_receiving_records(self):
+        from .services import create_receiving_record
+
+        user = User.objects.create_user(username="viewer", password="test-pass")
+        user.user_permissions.add(Permission.objects.get(codename="view_product"))
+        category = Category.objects.create(name="Laser")
+        brand = Brand.objects.create(brandname="Canon")
+        model = ProductModel.objects.create(brand=brand, modelname="L100")
+        product = Product.objects.create(
+            descript="Canon laser printer",
+            category=category,
+            model=model,
+        )
+        supplier = Supplier.objects.create(name="Gulf Networks LLC")
+        receiving = create_receiving_record(
+            supplier=supplier,
+            reference_number="SUP-REF-77",
+            items=[
+                {
+                    "product": product,
+                    "quantity": 2,
+                    "serial_numbers": ["REC-ACT-1", "REC-ACT-2"],
+                }
+            ],
+        )
+        self.client.force_login(user)
+
+        response = self.client.get("/")
+        activity = response.context["initial_data"]["recentActivity"][0]
+        receiving_panel = response.context["initial_data"]["recentReceiving"][0]
+        overview_by_label = {
+            item["label"]: item for item in response.context["initial_data"]["overview"]
+        }
+
+        self.assertEqual(activity["type"], "Receiving")
+        self.assertEqual(activity["reference"], receiving.receiving_number)
+        self.assertEqual(activity["related"], "2 stock units")
+        self.assertEqual(activity["href"], f"/operations/receiving/{receiving.pk}/")
+        self.assertEqual(receiving_panel["reference"], receiving.receiving_number)
+        self.assertEqual(receiving_panel["title"], "Gulf Networks LLC")
+        self.assertEqual(receiving_panel["detail"], "2 stock units")
+        self.assertEqual(
+            receiving_panel["href"],
+            f"/operations/receiving/{receiving.pk}/",
+        )
+        self.assertEqual(overview_by_label["Receiving Records"]["value"], "1")
+
     def test_manual_add_unit_is_not_counted_as_receiving_record(self):
         user = User.objects.create_user(username="viewer", password="test-pass")
         user.user_permissions.add(Permission.objects.get(codename="view_product"))
@@ -1775,6 +1863,155 @@ class ProductUnitStatusBehaviorTests(TestCase):
         self.assertIsNone(unit.sold_date)
 
 
+class ReceivingRecordModelTests(TestCase):
+    def setUp(self):
+        self.category = Category.objects.create(name="Laser")
+        self.brand = Brand.objects.create(brandname="Canon")
+        self.model = ProductModel.objects.create(brand=self.brand, modelname="L100")
+        self.product = Product.objects.create(
+            descript="Canon laser printer",
+            category=self.category,
+            model=self.model,
+        )
+
+    def test_receiving_record_generates_year_sequence(self):
+        from .models import ReceivingRecord
+
+        first = ReceivingRecord.objects.create()
+        second = ReceivingRecord.objects.create()
+
+        self.assertEqual(
+            first.receiving_number,
+            f"RCV-{timezone.localdate().year}-0001",
+        )
+        self.assertEqual(
+            second.receiving_number,
+            f"RCV-{timezone.localdate().year}-0002",
+        )
+
+    def test_receiving_item_supports_quantity_without_product_unit(self):
+        from .models import ReceivingItem, ReceivingRecord
+
+        receiving = ReceivingRecord.objects.create()
+        item = ReceivingItem.objects.create(
+            receiving=receiving,
+            product=self.product,
+            quantity=5,
+            cost="12.50",
+        )
+
+        self.assertEqual(item.quantity, 5)
+        self.assertIsNone(item.product_unit)
+        self.assertEqual(receiving.total_quantity, 5)
+
+
+class ReceivingServiceTests(TestCase):
+    def setUp(self):
+        self.category = Category.objects.create(name="Laser")
+        self.brand = Brand.objects.create(brandname="Canon")
+        self.model = ProductModel.objects.create(brand=self.brand, modelname="L100")
+        self.supplier = Supplier.objects.create(name="Gulf Networks LLC")
+        self.product = Product.objects.create(
+            descript="Canon laser printer",
+            category=self.category,
+            model=self.model,
+        )
+        self.user = User.objects.create_user(username="receiver", password="test-pass")
+
+    def test_service_creates_manual_receiving_without_supplier_invoice(self):
+        from .models import ReceivingRecord
+        from .services import create_receiving_record
+
+        receiving = create_receiving_record(
+            created_by=self.user,
+            received_date=timezone.localdate(),
+            items=[
+                {
+                    "product": self.product,
+                    "quantity": 3,
+                    "cost": "7.25",
+                    "notes": "Opening count",
+                }
+            ],
+        )
+
+        self.assertIsNone(receiving.supplier)
+        self.assertEqual(receiving.reference_number, "")
+        self.assertEqual(receiving.total_quantity, 3)
+        self.assertEqual(receiving.items.get().product, self.product)
+        self.assertEqual(ProductUnit.objects.filter(serial_number="").count(), 0)
+        self.assertTrue(ReceivingRecord.objects.filter(pk=receiving.pk).exists())
+
+    def test_service_creates_stock_units_for_serialized_supplier_receiving(self):
+        from .services import create_receiving_record
+
+        receiving = create_receiving_record(
+            supplier=self.supplier,
+            reference_number="SUP-DOC-100",
+            created_by=self.user,
+            received_date=timezone.localdate(),
+            items=[
+                {
+                    "product": self.product,
+                    "quantity": 2,
+                    "serial_numbers": ["RCV-SN-1", "RCV-SN-2"],
+                    "cost": "88.40",
+                    "notes": "Supplier delivery",
+                }
+            ],
+        )
+
+        self.assertEqual(receiving.supplier, self.supplier)
+        self.assertEqual(receiving.reference_number, "SUP-DOC-100")
+        self.assertEqual(receiving.total_quantity, 2)
+        self.assertEqual(receiving.items.count(), 2)
+        units = ProductUnit.objects.filter(serial_number__in=["RCV-SN-1", "RCV-SN-2"])
+        self.assertEqual(units.count(), 2)
+        self.assertTrue(all(unit.supplier == self.supplier for unit in units))
+        self.assertTrue(
+            all(unit.status == ProductUnit.STATUS_AVAILABLE for unit in units)
+        )
+        self.assertTrue(
+            all(item.product_unit_id for item in receiving.items.order_by("serial_number"))
+        )
+
+    def test_service_rejects_serial_count_that_does_not_match_quantity(self):
+        from django.core.exceptions import ValidationError
+        from .services import create_receiving_record
+
+        with self.assertRaises(ValidationError):
+            create_receiving_record(
+                items=[
+                    {
+                        "product": self.product,
+                        "quantity": 2,
+                        "serial_numbers": ["ONLY-ONE"],
+                    }
+                ],
+            )
+
+    def test_service_rejects_existing_serial_numbers(self):
+        from django.core.exceptions import ValidationError
+        from .services import create_receiving_record
+
+        ProductUnit.objects.create(
+            product=self.product,
+            serial_number="EXISTING-RCV-SN",
+            status=ProductUnit.STATUS_AVAILABLE,
+        )
+
+        with self.assertRaises(ValidationError):
+            create_receiving_record(
+                items=[
+                    {
+                        "product": self.product,
+                        "quantity": 1,
+                        "serial_numbers": ["EXISTING-RCV-SN"],
+                    }
+                ],
+            )
+
+
 class InventoryApiTests(TestCase):
     def setUp(self):
         self.category = Category.objects.create(name="Laser")
@@ -2165,3 +2402,116 @@ class InventoryApiTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(unit.status, ProductUnit.STATUS_RESERVED)
+
+    def test_receiving_api_creates_supplier_record_and_stock_units(self):
+        user = self._user_with_permissions(
+            "view_productunit",
+            "add_productunit",
+            "view_receivingrecord",
+            "add_receivingrecord",
+        )
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/api/stock/receiving-records/",
+            {
+                "supplier": self.supplier.pk,
+                "reference_number": "SUP-REF-1",
+                "received_date": str(timezone.localdate()),
+                "notes": "Supplier stock entry",
+                "item_inputs": [
+                    {
+                        "product": self.product.pk,
+                        "quantity": 2,
+                        "serial_numbers": ["API-RCV-1", "API-RCV-2"],
+                        "cost": "55.00",
+                    }
+                ],
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(
+            response.json()["receiving_number"][:9],
+            f"RCV-{timezone.localdate().year}-",
+        )
+        self.assertEqual(response.json()["supplier"], self.supplier.pk)
+        self.assertEqual(response.json()["total_quantity"], 2)
+        self.assertEqual(len(response.json()["items"]), 2)
+        self.assertEqual(
+            ProductUnit.objects.filter(
+                serial_number__in=["API-RCV-1", "API-RCV-2"],
+            ).count(),
+            2,
+        )
+
+    def test_receiving_api_creates_manual_quantity_without_supplier_or_units(self):
+        user = self._user_with_permissions(
+            "view_productunit",
+            "add_productunit",
+            "view_receivingrecord",
+            "add_receivingrecord",
+        )
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/api/stock/receiving-records/",
+            {
+                "received_date": str(timezone.localdate()),
+                "item_inputs": [
+                    {
+                        "product": self.product.pk,
+                        "quantity": 4,
+                        "cost": "0.00",
+                    }
+                ],
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertIsNone(response.json()["supplier"])
+        self.assertEqual(response.json()["total_quantity"], 4)
+        self.assertEqual(response.json()["items"][0]["product"], self.product.pk)
+        self.assertIsNone(response.json()["items"][0]["product_unit"])
+
+    def test_receiving_api_requires_add_permission_to_create(self):
+        user = self._user_with_permissions("view_receivingrecord")
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/api/stock/receiving-records/",
+            {
+                "item_inputs": [{"product": self.product.pk, "quantity": 1}],
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_receiving_api_rejects_existing_serial_number(self):
+        user = self._user_with_permissions(
+            "view_productunit",
+            "add_productunit",
+            "view_receivingrecord",
+            "add_receivingrecord",
+        )
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/api/stock/receiving-records/",
+            {
+                "supplier": self.supplier.pk,
+                "item_inputs": [
+                    {
+                        "product": self.product.pk,
+                        "quantity": 1,
+                        "serial_numbers": ["API-AVAILABLE"],
+                    }
+                ],
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)

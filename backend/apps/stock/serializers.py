@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 
 from .models import (
@@ -9,8 +10,11 @@ from .models import (
     Product,
     ProductModel,
     ProductUnit,
+    ReceivingItem,
+    ReceivingRecord,
     Supplier,
 )
+from .services import create_receiving_record
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -384,3 +388,130 @@ class DeliveryRecordSerializer(serializers.ModelSerializer):
                 unit.save(update_fields=("status", "sold_date"))
 
         return delivery
+
+
+class ReceivingItemSerializer(serializers.ModelSerializer):
+    product_name = serializers.SerializerMethodField()
+    product_sku = serializers.CharField(source="product.sku", read_only=True)
+    product_unit_serial_number = serializers.CharField(
+        source="product_unit.serial_number",
+        read_only=True,
+    )
+
+    class Meta:
+        model = ReceivingItem
+        fields = (
+            "id",
+            "product",
+            "product_name",
+            "product_sku",
+            "product_unit",
+            "product_unit_serial_number",
+            "quantity",
+            "serial_number",
+            "cost",
+            "notes",
+            "crdate",
+            "isactive",
+        )
+        read_only_fields = fields
+
+    def get_product_name(self, obj):
+        return str(obj.product)
+
+
+class ReceivingItemInputSerializer(serializers.Serializer):
+    product = serializers.PrimaryKeyRelatedField(queryset=Product.objects.all())
+    product_unit = serializers.PrimaryKeyRelatedField(
+        queryset=ProductUnit.objects.filter(isactive=True),
+        required=False,
+        allow_null=True,
+    )
+    quantity = serializers.IntegerField(min_value=1, default=1)
+    serial_numbers = serializers.ListField(
+        child=serializers.CharField(allow_blank=False, trim_whitespace=True),
+        required=False,
+        allow_empty=False,
+    )
+    cost = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
+    notes = serializers.CharField(required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        serial_numbers = attrs.get("serial_numbers") or []
+        product_unit = attrs.get("product_unit")
+        quantity = attrs.get("quantity", 1)
+
+        if product_unit and serial_numbers:
+            raise serializers.ValidationError(
+                "Use either product_unit or serial_numbers, not both."
+            )
+        if product_unit:
+            attrs["product"] = product_unit.product
+            attrs["quantity"] = 1
+        if serial_numbers and len(serial_numbers) != quantity:
+            raise serializers.ValidationError(
+                "Serial number count must match quantity."
+            )
+        if len(serial_numbers) != len(set(serial_numbers)):
+            raise serializers.ValidationError("Serial numbers must be unique.")
+
+        return attrs
+
+
+class ReceivingRecordSerializer(serializers.ModelSerializer):
+    items = ReceivingItemSerializer(many=True, read_only=True)
+    item_inputs = ReceivingItemInputSerializer(
+        many=True,
+        write_only=True,
+        required=True,
+        allow_empty=False,
+    )
+    total_quantity = serializers.SerializerMethodField()
+    supplier_name = serializers.CharField(source="supplier.name", read_only=True)
+    created_by_name = serializers.CharField(
+        source="created_by.get_username",
+        read_only=True,
+    )
+
+    class Meta:
+        model = ReceivingRecord
+        fields = (
+            "id",
+            "receiving_number",
+            "supplier",
+            "supplier_name",
+            "reference_number",
+            "received_date",
+            "notes",
+            "created_by",
+            "created_by_name",
+            "total_quantity",
+            "item_inputs",
+            "items",
+            "crdate",
+            "isactive",
+        )
+        read_only_fields = (
+            "receiving_number",
+            "created_by",
+            "created_by_name",
+            "total_quantity",
+            "items",
+            "crdate",
+        )
+
+    def get_total_quantity(self, obj):
+        return obj.total_quantity
+
+    def create(self, validated_data):
+        item_inputs = validated_data.pop("item_inputs")
+        request = self.context.get("request")
+        try:
+            return create_receiving_record(
+                items=item_inputs,
+                created_by=request.user if request else None,
+                **validated_data,
+            )
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc

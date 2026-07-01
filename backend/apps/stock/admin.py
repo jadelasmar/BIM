@@ -10,6 +10,8 @@ from .models import (
     Product,
     ProductModel,
     ProductUnit,
+    ReceivingItem,
+    ReceivingRecord,
     Supplier,
 )
 
@@ -314,3 +316,72 @@ class DeliveryRecordAdmin(admin.ModelAdmin):
     @admin.display(description="Units")
     def unit_count(self, obj):
         return obj.total_units
+
+
+class ReceivingItemInline(admin.TabularInline):
+    model = ReceivingItem
+    extra = 0
+    autocomplete_fields = ("product", "product_unit")
+    readonly_fields = ("crdate",)
+    fields = (
+        "product",
+        "product_unit",
+        "quantity",
+        "serial_number",
+        "cost",
+        "notes",
+        "isactive",
+        "crdate",
+    )
+
+
+@admin.register(ReceivingRecord)
+class ReceivingRecordAdmin(admin.ModelAdmin):
+    inlines = (ReceivingItemInline,)
+    list_display = (
+        "receiving_number",
+        "supplier",
+        "received_date",
+        "reference_number",
+        "total_quantity",
+        "created_by",
+        "isactive",
+        "crdate",
+    )
+    search_fields = (
+        "receiving_number",
+        "reference_number",
+        "supplier__name",
+        "items__product__descript",
+        "items__serial_number",
+        "items__product_unit__serial_number",
+    )
+    list_filter = ("supplier", "received_date", "isactive")
+    readonly_fields = ("receiving_number", "crdate")
+    autocomplete_fields = ("supplier", "created_by")
+    ordering = ("-received_date", "-receiving_number")
+
+    fieldsets = (
+        (
+            "Receiving record",
+            {
+                "fields": (
+                    "receiving_number",
+                    "supplier",
+                    "reference_number",
+                    "received_date",
+                    "created_by",
+                    "isactive",
+                )
+            },
+        ),
+        (
+            "Notes",
+            {
+                "fields": (
+                    "notes",
+                    "crdate",
+                )
+            },
+        ),
+    )

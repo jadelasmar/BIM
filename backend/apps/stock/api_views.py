@@ -12,6 +12,7 @@ from .models import (
     Product,
     ProductModel,
     ProductUnit,
+    ReceivingRecord,
     Supplier,
 )
 from .serializers import (
@@ -21,6 +22,7 @@ from .serializers import (
     ProductModelSerializer,
     ProductSerializer,
     ProductUnitSerializer,
+    ReceivingRecordSerializer,
     SupplierSerializer,
 )
 
@@ -209,6 +211,43 @@ class DeliveryRecordListCreateAPIView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         _require_perm(self.request.user, stock_constants.CHANGE_PRODUCT_UNIT)
+        serializer.save()
+
+
+class ReceivingRecordListCreateAPIView(generics.ListCreateAPIView):
+    serializer_class = ReceivingRecordSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get_queryset(self):
+        _require_perm(self.request.user, stock_constants.VIEW_RECEIVING_RECORD)
+        queryset = (
+            ReceivingRecord.objects.filter(isactive=True)
+            .select_related("supplier", "created_by")
+            .prefetch_related(
+                "items",
+                "items__product",
+                "items__product_unit",
+            )
+            .order_by("-received_date", "-receiving_number")
+        )
+        query = self.request.query_params.get("q", "").strip()
+
+        if query:
+            queryset = queryset.filter(
+                Q(receiving_number__icontains=query)
+                | Q(reference_number__icontains=query)
+                | Q(supplier__name__icontains=query)
+                | Q(items__product__descript__icontains=query)
+                | Q(items__product__sku__icontains=query)
+                | Q(items__serial_number__icontains=query)
+                | Q(items__product_unit__serial_number__icontains=query)
+            ).distinct()
+
+        return queryset
+
+    def perform_create(self, serializer):
+        _require_perm(self.request.user, stock_constants.ADD_RECEIVING_RECORD)
+        _require_perm(self.request.user, stock_constants.ADD_PRODUCT_UNIT)
         serializer.save()
 
 

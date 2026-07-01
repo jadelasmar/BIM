@@ -98,6 +98,49 @@ Statuses:
 
 When a unit is saved as sold, `sold_date` is filled if empty.
 
+### ReceivingRecord
+
+Operational inbound receiving record. This is not a supplier invoice or accounting document.
+
+Fields:
+
+- `receiving_number`
+- `supplier`
+- `reference_number`
+- `received_date`
+- `notes`
+- `created_by`
+- `crdate`
+- `isactive`
+
+Rules:
+
+- Supplier is optional for direct/manual receiving.
+- Reference number stores an optional supplier document/reference.
+- Receiving numbers are generated as `RCV-YYYY-0001`.
+
+### ReceivingItem
+
+Line item for a receiving record.
+
+Fields:
+
+- `receiving`
+- `product`
+- `product_unit`
+- `quantity`
+- `serial_number`
+- `cost`
+- `notes`
+- `crdate`
+- `isactive`
+
+Rules:
+
+- `quantity` supports non-serialized receiving.
+- Serialized receiving creates one item per serial number and links each item to a `ProductUnit`.
+- `cost` is operational/reference cost only; it does not create accounting, invoice, tax, payment, or voucher behavior.
+
 ### DeliveryRecord
 
 Outbound delivery record.
@@ -148,11 +191,8 @@ Rules:
 
 Likely future models:
 
-- `ReceivingRecord`
-- `ReceivingItem`
 - `StockMovement`
 - attachments/documents
 - clients
 - assets
 - audit logs
-

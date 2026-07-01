@@ -49,6 +49,7 @@ Owns BIM Stock:
 - product definitions
 - physical stock units
 - suppliers
+- receiving records and receiving items
 - delivery records and delivery items
 - stock selectors
 - stock API views and serializers
@@ -83,6 +84,7 @@ Stock API views:
 
 - product list/create/detail/update
 - product unit list/create/detail/update
+- receiving record list/create
 - delivery list/create
 - inventory summary
 - lookup endpoints for categories, brands, models, suppliers
@@ -95,11 +97,14 @@ Use selectors for reusable read logic that feeds dashboards, summaries, and app-
 
 ## Services
 
-There is no dedicated `services.py` yet. Current write behavior is still simple enough to live in serializers/API views.
+Stock write workflows that span multiple models live in `backend/apps/stock/services.py`.
 
-Add services when receiving, delivery cancellation, returns, adjustments, or stock movement logic becomes more complex.
+Current services:
+
+- `create_receiving_record`: creates operational receiving records and items, and creates/links `ProductUnit` rows when serial numbers are supplied.
+
+Keep views thin. Add services when delivery cancellation, returns, adjustments, or stock movement logic becomes more complex.
 
 ## Admin
 
 Django admin remains a supported operational surface for non-technical staff. Admin configuration should stay readable, searchable, and permission-aware.
-

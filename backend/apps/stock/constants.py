@@ -8,6 +8,9 @@ VIEW_PRODUCT_UNIT = f"{APP_LABEL}.view_productunit"
 ADD_PRODUCT_UNIT = f"{APP_LABEL}.add_productunit"
 CHANGE_PRODUCT_UNIT = f"{APP_LABEL}.change_productunit"
 
+VIEW_RECEIVING_RECORD = f"{APP_LABEL}.view_receivingrecord"
+ADD_RECEIVING_RECORD = f"{APP_LABEL}.add_receivingrecord"
+
 ADD_CATEGORY = f"{APP_LABEL}.add_category"
 ADD_BRAND = f"{APP_LABEL}.add_brand"
 

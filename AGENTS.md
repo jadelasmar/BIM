@@ -81,3 +81,5 @@ Keep commits short and focused. PRs should include description, UI screenshots, 
 ## Agent-Specific Instructions
 
 Apply changes directly and make the smallest safe change. Preserve user edits. Ask before destructive operations. Do not invent structure, remove features, hardcode model/API data, add accounting behavior, or leave docs outdated.
+
+At the end of every task, summarize files changed, docs updated, checks run, results, and recommended next step.

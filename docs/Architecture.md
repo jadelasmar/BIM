@@ -85,10 +85,11 @@ BIM/
   docs/
 ```
 
+Legacy root-level Django packages and templates are not part of the current structure. Django code now lives under `backend/`, and frontend source lives under `frontend/`.
+
 ## Route Ownership
 
 - Root app shell routes are in `backend/apps/core/urls.py`.
 - Account routes are in `backend/apps/accounts/urls.py`.
 - Stock API routes are in `backend/apps/stock/api_urls.py`.
 - React page selection is centralized in `frontend/src/routes/AppRouter.jsx`.
-
