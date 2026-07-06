@@ -623,7 +623,7 @@ function ReceivingRecordsTable({ records, loading, error }) {
                     <p className="mt-1 text-xs text-zinc-500">{formatCount(record.items?.length || 0)} lines</p>
                   </td>
                   <td className="px-4 py-4">
-                    <Status status={record.isactive ? "Recorded" : "Inactive"} statusClass={record.isactive ? "received" : "inactive"} />
+                    <Status status={record.status === "cancelled" || !record.isactive ? "Cancelled" : "Recorded"} statusClass={record.status === "cancelled" || !record.isactive ? "inactive" : "received"} />
                   </td>
                 </tr>
               ))
@@ -648,9 +648,28 @@ function ReceivingRecordsTable({ records, loading, error }) {
 function ReceivingRecordDetailPage({ data }) {
   const receivingId = (data.currentPath || window.location.pathname).match(/\/operations\/receiving\/(\d+)\//)?.[1];
   const [record, setRecord] = useState(null);
+  const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notFound, setNotFound] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [editing, setEditing] = useState(false);
+  const [savingCorrection, setSavingCorrection] = useState(false);
+  const [correctionError, setCorrectionError] = useState("");
+  const [correctionMessage, setCorrectionMessage] = useState("");
+  const [correctionForm, setCorrectionForm] = useState({
+    supplier: "",
+    receivedDate: "",
+    referenceNumber: "",
+    notes: "",
+    items: []
+  });
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState("");
+
+  const isCancelled = record?.status === "cancelled" || record?.isactive === false;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -661,7 +680,10 @@ function ReceivingRecordDetailPage({ data }) {
       setNotFound(false);
       try {
         const endpoint = data.api.receivingRecordDetail.replace("{id}", receivingId);
-        const response = await fetch(endpoint, { signal: controller.signal });
+        const [response, suppliersResponse] = await Promise.all([
+          fetch(endpoint, { signal: controller.signal }),
+          fetch(data.api.suppliers, { signal: controller.signal })
+        ]);
 
         if (response.status === 404) {
           setNotFound(true);
@@ -673,6 +695,7 @@ function ReceivingRecordDetailPage({ data }) {
         }
 
         setRecord(await response.json());
+        setSuppliers(suppliersResponse.ok ? await suppliersResponse.json() : []);
       } catch (loadError) {
         if (loadError.name !== "AbortError") {
           setError(loadError.message);
@@ -684,7 +707,105 @@ function ReceivingRecordDetailPage({ data }) {
 
     loadReceivingRecord();
     return () => controller.abort();
-  }, [data.api.receivingRecordDetail, receivingId]);
+  }, [data.api.receivingRecordDetail, data.api.suppliers, receivingId, reloadKey]);
+
+  useEffect(() => {
+    if (!record) return;
+    setCorrectionForm({
+      supplier: record.supplier ? String(record.supplier) : "",
+      receivedDate: record.received_date || "",
+      referenceNumber: record.reference_number || "",
+      notes: record.notes || "",
+      items: (record.items || []).map((item) => ({
+        id: item.id,
+        cost: item.cost || "0.00",
+        notes: item.notes || ""
+      }))
+    });
+  }, [record]);
+
+  function updateCorrectionField(field, value) {
+    setCorrectionForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function updateCorrectionItem(itemId, field, value) {
+    setCorrectionForm((current) => ({
+      ...current,
+      items: current.items.map((item) =>
+        item.id === itemId ? { ...item, [field]: value } : item
+      )
+    }));
+  }
+
+  async function saveCorrection() {
+    setSavingCorrection(true);
+    setCorrectionError("");
+    setCorrectionMessage("");
+    try {
+      const endpoint = data.api.receivingRecordDetail.replace("{id}", receivingId);
+      const response = await fetch(endpoint, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": data.csrfToken
+        },
+        body: JSON.stringify({
+          supplier: correctionForm.supplier || null,
+          received_date: correctionForm.receivedDate,
+          reference_number: correctionForm.referenceNumber,
+          notes: correctionForm.notes,
+          items: correctionForm.items.map((item) => ({
+            id: item.id,
+            cost: item.cost || "0.00",
+            notes: item.notes || ""
+          }))
+        })
+      });
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        throw new Error(firstApiError(details) || "Could not update receiving record.");
+      }
+      setEditing(false);
+      setCorrectionMessage("Receiving details updated.");
+      setReloadKey((current) => current + 1);
+    } catch (saveError) {
+      setCorrectionError(saveError.message);
+    } finally {
+      setSavingCorrection(false);
+    }
+  }
+
+  async function cancelReceivingRecord() {
+    setCancelling(true);
+    setCancelError("");
+    setCorrectionMessage("");
+    try {
+      if (!cancelReason.trim()) {
+        throw new Error("Enter a cancellation reason.");
+      }
+      const endpoint = data.api.receivingRecordDetail.replace("{id}", receivingId).replace(/\/$/, "/cancel/");
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": data.csrfToken
+        },
+        body: JSON.stringify({ cancel_reason: cancelReason })
+      });
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        throw new Error(firstApiError(details) || "Could not cancel receiving record.");
+      }
+      setCancelOpen(false);
+      setCancelReason("");
+      setCorrectionMessage("Receiving record cancelled. Linked available stock units were made inactive.");
+      setReloadKey((current) => current + 1);
+    } catch (cancelSaveError) {
+      setCancelError(cancelSaveError.message);
+    } finally {
+      setCancelling(false);
+    }
+  }
 
   return (
     <Shell data={data}>
@@ -697,8 +818,30 @@ function ReceivingRecordDetailPage({ data }) {
           <h1 className="mt-3 text-2xl font-bold text-white">Receiving Record</h1>
           <p className="mt-1 text-sm text-zinc-400">Operational stock-entry detail.</p>
         </div>
-        {record ? <Status status={record.isactive ? "Recorded" : "Inactive"} statusClass={record.isactive ? "received" : "inactive"} /> : null}
+        {record ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <Status status={isCancelled ? "Cancelled" : "Recorded"} statusClass={isCancelled ? "inactive" : "received"} />
+            {!isCancelled ? (
+              <>
+                <Button type="button" variant="outline" onClick={() => setEditing((current) => !current)}>
+                  <Edit3 className="h-4 w-4" />
+                  Edit Details
+                </Button>
+                <Button type="button" variant="secondary" onClick={() => setCancelOpen((current) => !current)}>
+                  <RotateCcw className="h-4 w-4" />
+                  Cancel Record
+                </Button>
+              </>
+            ) : null}
+          </div>
+        ) : null}
       </header>
+
+      {correctionMessage ? (
+        <section className="mb-4 rounded-lg border border-nexus-green/50 bg-green-500/10 px-4 py-3 text-sm font-semibold text-green-200">
+          {correctionMessage}
+        </section>
+      ) : null}
 
       {loading ? (
         <section className="rounded-lg border border-nexus-line bg-nexus-panel p-6 text-sm text-zinc-500">
@@ -715,6 +858,56 @@ function ReceivingRecordDetailPage({ data }) {
           description="The record may have been removed or you may not have access."
         />
       ) : record ? (
+        <>
+        {editing ? (
+          <ReceivingCorrectionPanel
+            form={correctionForm}
+            suppliers={suppliers}
+            items={record.items || []}
+            saving={savingCorrection}
+            error={correctionError}
+            onFieldChange={updateCorrectionField}
+            onItemChange={updateCorrectionItem}
+            onCancel={() => {
+              setEditing(false);
+              setCorrectionError("");
+            }}
+            onSave={saveCorrection}
+          />
+        ) : null}
+
+        {cancelOpen ? (
+          <section className="mb-5 rounded-lg border border-nexus-red/60 bg-red-500/10 p-5">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <h2 className="text-sm font-bold text-red-100">Cancel receiving record</h2>
+                <p className="mt-1 text-sm text-red-200/80">
+                  Cancellation is only allowed while linked stock units are still available and unused. Wrong product, quantity, or serial entries should be cancelled and recreated when safe.
+                </p>
+              </div>
+              <Button type="button" variant="ghost" onClick={() => setCancelOpen(false)}>
+                <X className="h-4 w-4" />
+                Close
+              </Button>
+            </div>
+            <div className="mt-4">
+              <Field label="Cancellation reason" required>
+                <TextInput value={cancelReason} onChange={setCancelReason} placeholder="Explain the receiving mistake" />
+              </Field>
+            </div>
+            {cancelError ? <p className="mt-3 text-sm font-semibold text-red-200">{cancelError}</p> : null}
+            <div className="mt-4 flex flex-wrap gap-3">
+              <Button type="button" variant="danger" loading={cancelling} onClick={cancelReceivingRecord}>
+                <RotateCcw className="h-4 w-4" />
+                Confirm Cancel
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => setCancelOpen(false)}>
+                Keep Record
+              </Button>
+            </div>
+          </section>
+        ) : null}
+
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
           <div className="min-w-0 space-y-5">
             <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
@@ -741,7 +934,7 @@ function ReceivingRecordDetailPage({ data }) {
                 <DetailRow label="Reference Number" value={record.reference_number || "-"} />
                 <DetailRow label="Created By" value={record.created_by_name || "-"} />
                 <DetailRow label="Total Quantity" value={formatCount(record.total_quantity || 0)} highlight />
-                <DetailRow label="Status" value={record.isactive ? "Recorded" : "Inactive"} />
+                <DetailRow label="Status" value={isCancelled ? "Cancelled" : "Recorded"} />
               </dl>
 
               {record.notes ? (
@@ -758,15 +951,105 @@ function ReceivingRecordDetailPage({ data }) {
           <aside className="rounded-lg border border-nexus-line bg-nexus-panel p-4 xl:sticky xl:top-5 xl:self-start">
             <h2 className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">Activity</h2>
             <div className="mt-4 space-y-3 text-sm">
-              <DetailRow label="Record Status" value={record.isactive ? "Recorded" : "Inactive"} highlight />
+              <DetailRow label="Record Status" value={isCancelled ? "Cancelled" : "Recorded"} highlight />
               <DetailRow label="Created" value={formatDate(record.crdate)} />
               <DetailRow label="Item Lines" value={formatCount(record.items?.length || 0)} />
               <DetailRow label="Reference Cost" value="Reference cost only" />
+              {isCancelled ? (
+                <>
+                  <DetailRow label="Cancelled" value={formatDate(record.cancelled_at)} />
+                  <DetailRow label="Reason" value={record.cancel_reason || "-"} />
+                </>
+              ) : null}
             </div>
           </aside>
         </div>
+        </>
       ) : null}
     </Shell>
+  );
+}
+
+function ReceivingCorrectionPanel({
+  form,
+  suppliers,
+  items,
+  saving,
+  error,
+  onFieldChange,
+  onItemChange,
+  onCancel,
+  onSave
+}) {
+  return (
+    <section className="mb-5 rounded-lg border border-nexus-line bg-nexus-panel p-5">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h2 className="text-sm font-bold text-white">Edit receiving details</h2>
+          <p className="mt-1 text-sm text-zinc-400">
+            Safe edits are limited to supplier, reference, date, notes, line cost, and line notes. For wrong product, quantity, or serial, cancel and recreate the record when the linked units are still unused.
+          </p>
+        </div>
+        <Button type="button" variant="ghost" onClick={onCancel}>
+          <X className="h-4 w-4" />
+          Close
+        </Button>
+      </div>
+
+      <div className="mt-5 grid gap-5 md:grid-cols-2">
+        <Field label="Supplier">
+          <SelectInput
+            value={form.supplier}
+            onChange={(value) => onFieldChange("supplier", value)}
+            options={suppliers.map((supplier) => [supplier.id, supplier.name])}
+            placeholder="Manual source"
+          />
+        </Field>
+        <Field label="Received Date">
+          <TextInput type="date" value={form.receivedDate} onChange={(value) => onFieldChange("receivedDate", value)} />
+        </Field>
+        <Field label="Reference Number">
+          <TextInput value={form.referenceNumber} onChange={(value) => onFieldChange("referenceNumber", value)} placeholder="Supplier reference" />
+        </Field>
+        <Field label="Notes">
+          <TextInput value={form.notes} onChange={(value) => onFieldChange("notes", value)} placeholder="Receiving notes" />
+        </Field>
+      </div>
+
+      {items.length ? (
+        <div className="mt-5 overflow-hidden rounded-lg border border-nexus-line">
+          <div className="grid gap-3 bg-zinc-800/80 px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-zinc-400 md:grid-cols-[minmax(0,1fr)_130px_minmax(0,1fr)]">
+            <span>Line</span>
+            <span>Cost</span>
+            <span>Notes</span>
+          </div>
+          {items.map((item) => {
+            const formItem = form.items.find((entry) => entry.id === item.id) || {};
+            return (
+              <div key={item.id} className="grid gap-3 border-t border-nexus-line p-4 md:grid-cols-[minmax(0,1fr)_130px_minmax(0,1fr)]">
+                <div>
+                  <p className="font-semibold text-white">{item.product_name}</p>
+                  <p className="mt-1 font-mono text-xs text-zinc-500">{item.serial_number || item.product_unit_serial_number || "No serial"}</p>
+                </div>
+                <TextInput value={formItem.cost || "0.00"} onChange={(value) => onItemChange(item.id, "cost", value)} />
+                <TextInput value={formItem.notes || ""} onChange={(value) => onItemChange(item.id, "notes", value)} placeholder="Line notes" />
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+
+      {error ? <p className="mt-3 text-sm font-semibold text-red-200">{error}</p> : null}
+      <div className="mt-5 flex flex-wrap gap-3">
+        <Button type="button" variant="primary" loading={saving} onClick={onSave}>
+          <Save className="h-4 w-4" />
+          Save Details
+        </Button>
+        <Button type="button" variant="secondary" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </section>
   );
 }
 
@@ -3101,6 +3384,9 @@ function LifecycleStep({ number, title, detail, active = false }) {
 function firstApiError(details) {
   if (typeof details === "string") {
     return details;
+  }
+  if (Array.isArray(details)) {
+    return details[0] || "";
   }
   if (!details || typeof details !== "object") {
     return "";

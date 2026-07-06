@@ -197,6 +197,14 @@ class ProductUnit(models.Model):
 
 
 class ReceivingRecord(models.Model):
+    STATUS_RECORDED = "recorded"
+    STATUS_CANCELLED = "cancelled"
+
+    STATUS_CHOICES = [
+        (STATUS_RECORDED, "Recorded"),
+        (STATUS_CANCELLED, "Cancelled"),
+    ]
+
     receiving_number = models.CharField(
         max_length=32,
         unique=True,
@@ -212,6 +220,20 @@ class ReceivingRecord(models.Model):
     reference_number = models.CharField(max_length=100, blank=True)
     received_date = models.DateField(default=timezone.localdate)
     notes = models.TextField(blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_RECORDED,
+    )
+    cancel_reason = models.TextField(blank=True)
+    cancelled_at = models.DateTimeField(blank=True, null=True)
+    cancelled_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="cancelled_stock_receiving_records",
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

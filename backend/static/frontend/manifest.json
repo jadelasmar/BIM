@@ -8,12 +8,12 @@
     "src": "src/assets/brand/logo-white.svg"
   },
   "src/main.jsx": {
-    "file": "assets/main-BGShmVq1.js",
+    "file": "assets/main-BJ2mRGd0.js",
     "name": "main",
     "src": "src/main.jsx",
     "isEntry": true,
     "css": [
-      "assets/main-BUK0RPE5.css"
+      "assets/main-DjvHypoc.css"
     ],
     "assets": [
       "assets/logo-primary-lYLJjCe0.svg",

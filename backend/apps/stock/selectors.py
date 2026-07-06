@@ -44,17 +44,10 @@ def delivery_record_count():
 
 def recent_receiving_count():
     recent_window = timezone.now() - timedelta(days=30)
-    receiving_records = ReceivingRecord.objects.filter(
+    return ReceivingRecord.objects.filter(
         crdate__gte=recent_window,
         isactive=True,
     ).count()
-    legacy_units = ProductUnit.objects.filter(
-        crdate__gte=recent_window,
-        isactive=True,
-        supplier__isnull=False,
-        receiving_item__isnull=True,
-    ).count()
-    return receiving_records + legacy_units
 
 
 def supplier_count():
@@ -122,7 +115,6 @@ def recent_stock_activity():
             }
         )
 
-    received_unit_filter = Q(supplier__isnull=False)
     fallback_units = (
         ProductUnit.objects.filter(isactive=True)
         .select_related("product", "supplier")
@@ -132,35 +124,21 @@ def recent_stock_activity():
         )
         .filter(delivery_item__isnull=True)
         .filter(receiving_item__isnull=True)
-        .filter(Q(status=ProductUnit.STATUS_SOLD) | received_unit_filter)
+        .filter(status=ProductUnit.STATUS_SOLD)
         .order_by("-crdate")[:8]
     )
     for unit in fallback_units:
-        if unit.status == ProductUnit.STATUS_SOLD:
-            activity_type = "Delivery"
-            activity_date = unit.sold_date or unit.crdate
-            reference = operational_reference("DLV", activity_date, unit.pk)
-            status_label = "Delivered"
-            status_class = "delivered"
-            href = reverse("operations_delivery_detail", kwargs={"pk": unit.pk})
-        else:
-            activity_type = "Receiving"
-            activity_date = unit.purchase_date or unit.crdate
-            reference = operational_reference("RCV", activity_date, unit.pk)
-            status_label = "Received"
-            status_class = "received"
-            href = reverse("inventory_product_detail", kwargs={"pk": unit.product_id})
-
+        activity_date = unit.sold_date or unit.crdate
         activity.append(
             {
-                "type": activity_type,
-                "reference": reference,
+                "type": "Delivery",
+                "reference": operational_reference("DLV", activity_date, unit.pk),
                 "related": str(unit.product),
                 "user": "",
                 "date": activity_date,
-                "status": status_label,
-                "status_class": status_class,
-                "href": href,
+                "status": "Delivered",
+                "status_class": "delivered",
+                "href": reverse("operations_delivery_detail", kwargs={"pk": unit.pk}),
             }
         )
 
@@ -241,36 +219,6 @@ def recent_receiving(limit=4):
         }
         for receiving in records
     ]
-    remaining = max(limit - len(items), 0)
-    if not remaining:
-        return items
-
-    units = (
-        ProductUnit.objects.filter(isactive=True, crdate__isnull=False)
-        .select_related("product")
-        .filter(delivery_item__isnull=True)
-        .filter(receiving_item__isnull=True)
-        .filter(supplier__isnull=False)
-        .exclude(status=ProductUnit.STATUS_SOLD)
-        .order_by("-crdate")[:remaining]
-    )
-
-    items.extend(
-        {
-            "reference": operational_reference(
-                "RCV",
-                unit.purchase_date or unit.crdate,
-                unit.pk,
-            ),
-            "title": str(unit.product),
-            "detail": unit.product.category.name if unit.product.category_id else "",
-            "href": reverse("inventory_product_detail", kwargs={"pk": unit.product_id}),
-            "date": unit.purchase_date or unit.crdate,
-            "status": "Received",
-            "status_class": "received",
-        }
-        for unit in units
-    )
     return items
 
 

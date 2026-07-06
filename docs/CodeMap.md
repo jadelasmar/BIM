@@ -103,6 +103,7 @@ Important API routes:
 - `/api/stock/product-units/<id>/`
 - `/api/stock/receiving-records/`
 - `/api/stock/receiving-records/<id>/`
+- `/api/stock/receiving-records/<id>/cancel/`
 - `/api/stock/deliveries/`
 - `/api/stock/suppliers/`
 - `/api/stock/brands/`
@@ -263,6 +264,22 @@ React Receive Stock page
   -> creates/links ProductUnit rows when serial numbers are supplied
 ```
 
+### Receiving Correction
+
+```text
+React Receiving Record detail
+  -> PATCH /api/stock/receiving-records/<id>/
+  -> ReceivingRecordCorrectionSerializer.update()
+  -> services.update_receiving_record_header()
+  -> updates safe header fields and line cost/notes only
+
+React Receiving Record detail
+  -> POST /api/stock/receiving-records/<id>/cancel/
+  -> ReceivingRecordCancelSerializer.save()
+  -> services.cancel_receiving_record()
+  -> cancels only when linked ProductUnit rows are still active and available
+```
+
 Manual Add Unit remains separate:
 
 ```text
@@ -297,6 +314,6 @@ GET /operations/receiving/<id>/
 - `frontend/src/routes/AppRouter.jsx` is still large.
 - Frontend API calls are inline.
 - More UI patterns should move into `components/ui/` only when repeated by current screens.
-- Receiving edit is not implemented yet.
+- Receiving edit/cancel is intentionally limited to office-safe correction fields.
 - Supplier/client/assets/report modules are placeholders or partial.
 - `Product.image` still uploads to `products_images/`.

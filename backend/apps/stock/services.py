@@ -1,4 +1,4 @@
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import transaction
 from django.utils import timezone
 
@@ -111,5 +111,127 @@ def create_receiving_record(
             received_date=receiving.received_date,
             item_data=item_data,
         )
+
+    return receiving
+
+
+def _unit_has_delivery(unit):
+    try:
+        unit.delivery_item
+    except ObjectDoesNotExist:
+        return False
+    return True
+
+
+def _unit_can_be_corrected(unit):
+    return (
+        unit.isactive
+        and unit.status == ProductUnit.STATUS_AVAILABLE
+        and not _unit_has_delivery(unit)
+    )
+
+
+@transaction.atomic
+def update_receiving_record_header(
+    receiving,
+    *,
+    supplier=None,
+    reference_number=None,
+    received_date=None,
+    notes=None,
+    items=None,
+):
+    if receiving.status == ReceivingRecord.STATUS_CANCELLED:
+        raise ValidationError("Cancelled receiving records cannot be edited.")
+
+    if supplier is not None:
+        receiving.supplier = supplier
+    if reference_number is not None:
+        receiving.reference_number = reference_number.strip()
+    if received_date is not None:
+        receiving.received_date = received_date
+    if notes is not None:
+        receiving.notes = notes
+    receiving.save(
+        update_fields=(
+            "supplier",
+            "reference_number",
+            "received_date",
+            "notes",
+        )
+    )
+
+    for item_data in items or []:
+        item_id = item_data.get("id")
+        if not item_id:
+            continue
+        try:
+            item = receiving.items.select_related("product_unit").get(pk=item_id)
+        except ReceivingItem.DoesNotExist:
+            continue
+
+        update_fields = []
+        if "cost" in item_data:
+            item.cost = item_data["cost"]
+            update_fields.append("cost")
+        if "notes" in item_data:
+            item.notes = item_data["notes"]
+            update_fields.append("notes")
+        if update_fields:
+            item.save(update_fields=update_fields)
+
+    for item in receiving.items.select_related("product_unit"):
+        unit = item.product_unit
+        if unit and _unit_can_be_corrected(unit):
+            unit.supplier = receiving.supplier
+            unit.purchase_date = receiving.received_date
+            unit.cost = item.cost
+            unit.save(update_fields=("supplier", "purchase_date", "cost"))
+
+    return receiving
+
+
+@transaction.atomic
+def cancel_receiving_record(receiving, *, cancelled_by=None, cancel_reason=""):
+    if receiving.status == ReceivingRecord.STATUS_CANCELLED:
+        return receiving
+
+    items = list(receiving.items.select_related("product_unit"))
+    linked_units = [item.product_unit for item in items if item.product_unit_id]
+    blocked_units = [
+        unit.serial_number
+        for unit in linked_units
+        if not _unit_can_be_corrected(unit)
+    ]
+    if blocked_units:
+        raise ValidationError(
+            "Cannot cancel receiving record because these stock units are already used: "
+            + ", ".join(sorted(blocked_units))
+        )
+
+    receiving.status = ReceivingRecord.STATUS_CANCELLED
+    receiving.isactive = False
+    receiving.cancel_reason = (cancel_reason or "").strip()
+    receiving.cancelled_at = timezone.now()
+    receiving.cancelled_by = cancelled_by
+    receiving.save(
+        update_fields=(
+            "status",
+            "isactive",
+            "cancel_reason",
+            "cancelled_at",
+            "cancelled_by",
+        )
+    )
+
+    for item in items:
+        if item.isactive:
+            item.isactive = False
+            item.save(update_fields=("isactive",))
+
+    for unit in linked_units:
+        unit.status = ProductUnit.STATUS_INACTIVE
+        unit.isactive = False
+        unit.save(update_fields=("status", "isactive", "sold_date"))
 
     return receiving

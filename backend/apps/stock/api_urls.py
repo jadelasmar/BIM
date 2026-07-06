@@ -33,6 +33,11 @@ urlpatterns = [
         name="receiving-records",
     ),
     path(
+        "receiving-records/<int:pk>/cancel/",
+        api_views.ReceivingRecordCancelAPIView.as_view(),
+        name="receiving-record-cancel",
+    ),
+    path(
         "receiving-records/<int:pk>/",
         api_views.ReceivingRecordDetailAPIView.as_view(),
         name="receiving-record-detail",

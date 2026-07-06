@@ -14,7 +14,11 @@ from .models import (
     ReceivingRecord,
     Supplier,
 )
-from .services import create_receiving_record
+from .services import (
+    cancel_receiving_record,
+    create_receiving_record,
+    update_receiving_record_header,
+)
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -484,6 +488,10 @@ class ReceivingRecordSerializer(serializers.ModelSerializer):
             "reference_number",
             "received_date",
             "notes",
+            "status",
+            "cancel_reason",
+            "cancelled_at",
+            "cancelled_by",
             "created_by",
             "created_by_name",
             "total_quantity",
@@ -494,6 +502,10 @@ class ReceivingRecordSerializer(serializers.ModelSerializer):
         )
         read_only_fields = (
             "receiving_number",
+            "status",
+            "cancel_reason",
+            "cancelled_at",
+            "cancelled_by",
             "created_by",
             "created_by_name",
             "total_quantity",
@@ -512,6 +524,73 @@ class ReceivingRecordSerializer(serializers.ModelSerializer):
                 items=item_inputs,
                 created_by=request.user if request else None,
                 **validated_data,
+            )
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc
+
+
+class ReceivingItemCorrectionSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    cost = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
+    notes = serializers.CharField(required=False, allow_blank=True)
+
+
+class ReceivingRecordCorrectionSerializer(serializers.ModelSerializer):
+    items = ReceivingItemCorrectionSerializer(many=True, required=False)
+
+    class Meta:
+        model = ReceivingRecord
+        fields = (
+            "supplier",
+            "reference_number",
+            "received_date",
+            "notes",
+            "items",
+        )
+        extra_kwargs = {
+            "supplier": {"required": False, "allow_null": True},
+            "reference_number": {"required": False, "allow_blank": True},
+            "received_date": {"required": False},
+            "notes": {"required": False, "allow_blank": True},
+        }
+
+    def update(self, instance, validated_data):
+        item_updates = validated_data.pop("items", [])
+        try:
+            return update_receiving_record_header(
+                instance,
+                supplier=validated_data.get("supplier")
+                if "supplier" in validated_data
+                else instance.supplier,
+                reference_number=validated_data.get("reference_number")
+                if "reference_number" in validated_data
+                else instance.reference_number,
+                received_date=validated_data.get("received_date")
+                if "received_date" in validated_data
+                else instance.received_date,
+                notes=validated_data.get("notes")
+                if "notes" in validated_data
+                else instance.notes,
+                items=item_updates,
+            )
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc
+
+    def to_representation(self, instance):
+        return ReceivingRecordSerializer(instance, context=self.context).data
+
+
+class ReceivingRecordCancelSerializer(serializers.Serializer):
+    cancel_reason = serializers.CharField(required=True, allow_blank=False)
+
+    def save(self, **kwargs):
+        receiving = self.context["receiving"]
+        request = self.context.get("request")
+        try:
+            return cancel_receiving_record(
+                receiving,
+                cancelled_by=request.user if request else None,
+                cancel_reason=self.validated_data["cancel_reason"],
             )
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.messages) from exc

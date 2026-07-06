@@ -1,4 +1,5 @@
 from django.db.models import Count, Q
+from django.shortcuts import get_object_or_404
 from rest_framework import generics, permissions
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
@@ -22,6 +23,8 @@ from .serializers import (
     ProductModelSerializer,
     ProductSerializer,
     ProductUnitSerializer,
+    ReceivingRecordCancelSerializer,
+    ReceivingRecordCorrectionSerializer,
     ReceivingRecordSerializer,
     SupplierSerializer,
 )
@@ -221,7 +224,7 @@ class ReceivingRecordListCreateAPIView(generics.ListCreateAPIView):
     def get_queryset(self):
         _require_perm(self.request.user, stock_constants.VIEW_RECEIVING_RECORD)
         queryset = (
-            ReceivingRecord.objects.filter(isactive=True)
+            ReceivingRecord.objects.all()
             .select_related("supplier", "created_by")
             .prefetch_related(
                 "items",
@@ -251,14 +254,19 @@ class ReceivingRecordListCreateAPIView(generics.ListCreateAPIView):
         serializer.save()
 
 
-class ReceivingRecordDetailAPIView(generics.RetrieveAPIView):
+class ReceivingRecordDetailAPIView(generics.RetrieveUpdateAPIView):
     serializer_class = ReceivingRecordSerializer
     permission_classes = (permissions.IsAuthenticated,)
+
+    def get_serializer_class(self):
+        if self.request.method in ("PUT", "PATCH"):
+            return ReceivingRecordCorrectionSerializer
+        return ReceivingRecordSerializer
 
     def get_queryset(self):
         _require_perm(self.request.user, stock_constants.VIEW_RECEIVING_RECORD)
         return (
-            ReceivingRecord.objects.filter(isactive=True)
+            ReceivingRecord.objects.all()
             .select_related("supplier", "created_by")
             .prefetch_related(
                 "items",
@@ -266,6 +274,32 @@ class ReceivingRecordDetailAPIView(generics.RetrieveAPIView):
                 "items__product_unit",
             )
         )
+
+    def perform_update(self, serializer):
+        _require_perm(self.request.user, stock_constants.CHANGE_RECEIVING_RECORD)
+        serializer.save()
+
+
+class ReceivingRecordCancelAPIView(APIView):
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def post(self, request, pk):
+        _require_perm(request.user, stock_constants.CHANGE_RECEIVING_RECORD)
+        receiving = get_object_or_404(
+            ReceivingRecord.objects.select_related("supplier", "created_by")
+            .prefetch_related("items", "items__product", "items__product_unit"),
+            pk=pk,
+        )
+        if any(item.product_unit_id for item in receiving.items.all()):
+            _require_perm(request.user, stock_constants.CHANGE_PRODUCT_UNIT)
+
+        serializer = ReceivingRecordCancelSerializer(
+            data=request.data,
+            context={"request": request, "receiving": receiving},
+        )
+        serializer.is_valid(raise_exception=True)
+        receiving = serializer.save()
+        return Response(ReceivingRecordSerializer(receiving).data)
 
 
 class InventorySummaryAPIView(APIView):

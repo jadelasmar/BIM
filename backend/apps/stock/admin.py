@@ -343,6 +343,7 @@ class ReceivingRecordAdmin(admin.ModelAdmin):
         "supplier",
         "received_date",
         "reference_number",
+        "status",
         "total_quantity",
         "created_by",
         "isactive",
@@ -356,9 +357,9 @@ class ReceivingRecordAdmin(admin.ModelAdmin):
         "items__serial_number",
         "items__product_unit__serial_number",
     )
-    list_filter = ("supplier", "received_date", "isactive")
-    readonly_fields = ("receiving_number", "crdate")
-    autocomplete_fields = ("supplier", "created_by")
+    list_filter = ("status", "supplier", "received_date", "isactive")
+    readonly_fields = ("receiving_number", "cancelled_at", "crdate")
+    autocomplete_fields = ("supplier", "created_by", "cancelled_by")
     ordering = ("-received_date", "-receiving_number")
 
     fieldsets = (
@@ -370,8 +371,19 @@ class ReceivingRecordAdmin(admin.ModelAdmin):
                     "supplier",
                     "reference_number",
                     "received_date",
+                    "status",
                     "created_by",
                     "isactive",
+                )
+            },
+        ),
+        (
+            "Cancellation",
+            {
+                "fields": (
+                    "cancel_reason",
+                    "cancelled_at",
+                    "cancelled_by",
                 )
             },
         ),

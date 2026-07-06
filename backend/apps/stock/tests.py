@@ -2,8 +2,8 @@ from django.contrib import admin
 from django.contrib.auth.models import Group, Permission, User
 from django.contrib.auth.tokens import default_token_generator
 from django.contrib.messages.storage.fallback import FallbackStorage
-from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core import mail
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import models
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.utils.encoding import force_bytes
@@ -48,6 +48,8 @@ from .models import (
     Product,
     ProductModel,
     ProductUnit,
+    ReceivingItem,
+    ReceivingRecord,
     Supplier,
 )
 
@@ -635,6 +637,7 @@ class ReceivingAdminTests(SimpleTestCase):
                 "supplier",
                 "received_date",
                 "reference_number",
+                "status",
                 "total_quantity",
                 "created_by",
                 "isactive",
@@ -654,11 +657,11 @@ class ReceivingAdminTests(SimpleTestCase):
         )
         self.assertEqual(
             receiving_admin.list_filter,
-            ("supplier", "received_date", "isactive"),
+            ("status", "supplier", "received_date", "isactive"),
         )
         self.assertEqual(
             receiving_admin.readonly_fields,
-            ("receiving_number", "crdate"),
+            ("receiving_number", "cancelled_at", "crdate"),
         )
 
 
@@ -1147,11 +1150,8 @@ class BIMPOSAccessTests(TestCase):
         self.assertEqual(data["currentPath"], "/")
         self.assertEqual(data["api"]["commandCenter"], "/api/command-center/")
         self.assertEqual(data["pollIntervalMs"], 60000)
-        self.assertEqual(data["recentReceiving"][0]["title"], "Canon laser printer")
-        self.assertEqual(
-            data["recentReceiving"][0]["reference"],
-            f"RCV-{timezone.localdate().year}-{unit.pk:04d}",
-        )
+        self.assertEqual(data["recentReceiving"], [])
+        self.assertNotIn(unit.serial_number, str(data["recentActivity"]))
 
     def test_command_center_shows_inventory_module_by_permission(self):
         user = User.objects.create_user(username="viewer", password="test-pass")
@@ -1331,7 +1331,7 @@ class BIMPOSAccessTests(TestCase):
         self.assertEqual(activity["status"], "Delivered")
         self.assertEqual(activity["status_class"], "delivered")
 
-    def test_command_center_recent_activity_uses_receiving_reference_fallback(self):
+    def test_command_center_ignores_product_unit_only_receiving_history(self):
         user = User.objects.create_user(username="viewer", password="test-pass")
         user.user_permissions.add(Permission.objects.get(codename="view_product"))
         category = Category.objects.create(name="Laser")
@@ -1353,31 +1353,16 @@ class BIMPOSAccessTests(TestCase):
         self.client.force_login(user)
 
         response = self.client.get("/")
-        activity = response.context["initial_data"]["recentActivity"][0]
+        initial_data = response.context["initial_data"]
+        overview_by_label = {
+            item["label"]: item for item in initial_data["overview"]
+        }
 
-        self.assertEqual(activity["type"], "Receiving")
-        self.assertEqual(
-            activity["reference"],
-            f"RCV-{timezone.localdate().year}-{unit.pk:04d}",
-        )
-        self.assertEqual(activity["related"], "Canon laser printer")
-        self.assertEqual(activity["status"], "Received")
-        self.assertEqual(activity["status_class"], "received")
-        self.assertEqual(activity["href"], f"/inventory/products/{product.pk}/")
-        receiving_panel = response.context["initial_data"]["recentReceiving"][0]
-        self.assertEqual(
-            receiving_panel["reference"],
-            f"RCV-{timezone.localdate().year}-{unit.pk:04d}",
-        )
-        self.assertEqual(receiving_panel["title"], "Canon laser printer")
-        self.assertEqual(receiving_panel["detail"], "Laser")
-        self.assertEqual(
-            receiving_panel["href"],
-            f"/inventory/products/{product.pk}/",
-        )
-        self.assertNotIn(unit.serial_number, str(receiving_panel))
-        self.assertEqual(receiving_panel["status"], "Received")
-        self.assertEqual(receiving_panel["status_class"], "received")
+        self.assertEqual(overview_by_label["Receiving Records"]["value"], "0")
+        self.assertEqual(initial_data["recentReceiving"], [])
+        self.assertNotIn(unit.serial_number, str(initial_data["recentActivity"]))
+        self.assertNotIn("LEGACY-", str(initial_data["recentActivity"]))
+        self.assertNotIn("RCV-", str(initial_data["recentActivity"]))
 
     def test_command_center_recent_activity_uses_receiving_records(self):
         from .services import create_receiving_record
@@ -2607,7 +2592,6 @@ class InventoryApiTests(TestCase):
 
     def test_receiving_api_returns_single_record_detail(self):
         user = self._user_with_permissions("view_receivingrecord")
-        from .models import ReceivingRecord, ReceivingItem
 
         receiving = ReceivingRecord.objects.create(
             supplier=self.supplier,
@@ -2640,6 +2624,206 @@ class InventoryApiTests(TestCase):
         self.assertEqual(response.json()["items"][0]["product_name"], str(self.product))
         self.assertEqual(response.json()["items"][0]["product_unit_serial_number"], "API-AVAILABLE")
         self.assertEqual(response.json()["items"][0]["cost"], "50.00")
+
+    def test_receiving_api_updates_safe_header_and_line_metadata_only(self):
+        other_supplier = Supplier.objects.create(name="Metro Hardware")
+        user = self._user_with_permissions(
+            "view_receivingrecord",
+            "change_receivingrecord",
+        )
+        receiving = ReceivingRecord.objects.create(
+            supplier=self.supplier,
+            reference_number="OLD-REF",
+            notes="Old notes",
+            created_by=user,
+        )
+        unit = ProductUnit.objects.create(
+            product=self.product,
+            serial_number="EDIT-SAFE-1",
+            status=ProductUnit.STATUS_AVAILABLE,
+            supplier=self.supplier,
+            cost="10.00",
+            purchase_date=timezone.localdate(),
+        )
+        item = ReceivingItem.objects.create(
+            receiving=receiving,
+            product=self.product,
+            product_unit=unit,
+            quantity=1,
+            serial_number="EDIT-SAFE-1",
+            cost="10.00",
+            notes="Old line note",
+        )
+        self.client.force_login(user)
+
+        response = self.client.patch(
+            f"/api/stock/receiving-records/{receiving.pk}/",
+            {
+                "supplier": other_supplier.pk,
+                "reference_number": "NEW-REF",
+                "received_date": "2026-07-05",
+                "notes": "Updated header",
+                "receiving_number": "RCV-1999-9999",
+                "created_by": None,
+                "items": [
+                    {
+                        "id": item.pk,
+                        "product": self.product.pk + 1000,
+                        "quantity": 99,
+                        "serial_number": "DO-NOT-EDIT",
+                        "cost": "25.50",
+                        "notes": "Updated line note",
+                    }
+                ],
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        receiving.refresh_from_db()
+        item.refresh_from_db()
+        unit.refresh_from_db()
+        self.assertEqual(receiving.supplier, other_supplier)
+        self.assertEqual(receiving.reference_number, "NEW-REF")
+        self.assertEqual(str(receiving.received_date), "2026-07-05")
+        self.assertEqual(receiving.notes, "Updated header")
+        self.assertNotEqual(receiving.receiving_number, "RCV-1999-9999")
+        self.assertEqual(receiving.created_by, user)
+        self.assertEqual(item.product, self.product)
+        self.assertEqual(item.quantity, 1)
+        self.assertEqual(item.serial_number, "EDIT-SAFE-1")
+        self.assertEqual(item.cost, 25.50)
+        self.assertEqual(item.notes, "Updated line note")
+        self.assertEqual(unit.supplier, other_supplier)
+        self.assertEqual(str(unit.purchase_date), "2026-07-05")
+        self.assertEqual(unit.cost, 25.50)
+
+    def test_receiving_api_cancels_when_linked_units_are_available(self):
+        user = self._user_with_permissions(
+            "view_receivingrecord",
+            "change_receivingrecord",
+            "change_productunit",
+        )
+        receiving = ReceivingRecord.objects.create(
+            supplier=self.supplier,
+            reference_number="CANCEL-ME",
+            created_by=user,
+        )
+        unit = ProductUnit.objects.create(
+            product=self.product,
+            serial_number="CANCEL-RCV-1",
+            status=ProductUnit.STATUS_AVAILABLE,
+            supplier=self.supplier,
+            isactive=True,
+        )
+        item = ReceivingItem.objects.create(
+            receiving=receiving,
+            product=self.product,
+            product_unit=unit,
+            quantity=1,
+            serial_number=unit.serial_number,
+            cost="11.00",
+        )
+        self.client.force_login(user)
+
+        response = self.client.post(
+            f"/api/stock/receiving-records/{receiving.pk}/cancel/",
+            {"cancel_reason": "Wrong serial entered"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        receiving.refresh_from_db()
+        item.refresh_from_db()
+        unit.refresh_from_db()
+        self.assertEqual(receiving.status, ReceivingRecord.STATUS_CANCELLED)
+        self.assertFalse(receiving.isactive)
+        self.assertEqual(receiving.cancel_reason, "Wrong serial entered")
+        self.assertEqual(receiving.cancelled_by, user)
+        self.assertIsNotNone(receiving.cancelled_at)
+        self.assertFalse(item.isactive)
+        self.assertEqual(unit.status, ProductUnit.STATUS_INACTIVE)
+        self.assertFalse(unit.isactive)
+
+    def test_receiving_api_blocks_cancel_when_linked_unit_is_used(self):
+        user = self._user_with_permissions(
+            "view_receivingrecord",
+            "change_receivingrecord",
+            "change_productunit",
+        )
+        receiving = ReceivingRecord.objects.create(supplier=self.supplier)
+        unit = ProductUnit.objects.create(
+            product=self.product,
+            serial_number="USED-RCV-1",
+            status=ProductUnit.STATUS_RESERVED,
+            supplier=self.supplier,
+            isactive=True,
+        )
+        ReceivingItem.objects.create(
+            receiving=receiving,
+            product=self.product,
+            product_unit=unit,
+            quantity=1,
+            serial_number=unit.serial_number,
+            cost="11.00",
+        )
+        self.client.force_login(user)
+
+        response = self.client.post(
+            f"/api/stock/receiving-records/{receiving.pk}/cancel/",
+            {"cancel_reason": "Wrong serial entered"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        receiving.refresh_from_db()
+        unit.refresh_from_db()
+        self.assertTrue(receiving.isactive)
+        self.assertEqual(unit.status, ProductUnit.STATUS_RESERVED)
+        self.assertTrue(unit.isactive)
+
+    def test_receiving_api_change_requires_change_receiving_permission(self):
+        user = self._user_with_permissions("view_receivingrecord")
+        receiving = ReceivingRecord.objects.create(supplier=self.supplier)
+        self.client.force_login(user)
+
+        response = self.client.patch(
+            f"/api/stock/receiving-records/{receiving.pk}/",
+            {"notes": "No permission"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_receiving_api_cancel_requires_product_unit_change_permission(self):
+        user = self._user_with_permissions(
+            "view_receivingrecord",
+            "change_receivingrecord",
+        )
+        receiving = ReceivingRecord.objects.create(supplier=self.supplier)
+        unit = ProductUnit.objects.create(
+            product=self.product,
+            serial_number="PERM-CANCEL-1",
+            status=ProductUnit.STATUS_AVAILABLE,
+            supplier=self.supplier,
+            isactive=True,
+        )
+        ReceivingItem.objects.create(
+            receiving=receiving,
+            product=self.product,
+            product_unit=unit,
+            quantity=1,
+            serial_number=unit.serial_number,
+        )
+        self.client.force_login(user)
+
+        response = self.client.post(
+            f"/api/stock/receiving-records/{receiving.pk}/cancel/",
+            {"cancel_reason": "No unit permission"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
 
     def test_receiving_api_detail_requires_view_permission(self):
         user = self._user_with_permissions()

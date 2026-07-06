@@ -126,5 +126,11 @@ Current Receiving Records integration:
 - The screen fetches `/api/stock/receiving-records/` through `initial_data.api.receivingRecords`.
 - It shows operational receiving numbers, supplier/manual source, received date, reference number, item totals, and recorded status.
 - Loading, empty, and error states reuse the existing table and empty-state patterns.
+- Command Center receiving counts and recent receiving panels use real receiving records only. Manual Add Unit activity is direct inventory maintenance and is not shown as a receiving record.
 - `/operations/receiving/<id>/` fetches one record through `initial_data.api.receivingRecordDetail`.
 - The detail screen shows source, dates, reference, status, creator, notes, item lines, serial/unit links, and reference-only costs.
+- The detail screen supports safe correction actions only:
+  - Edit Details updates supplier, received date, reference number, notes, item cost, and item notes.
+  - Cancel Record requires a cancellation reason and uses the receiving cancel API.
+  - Product, quantity, and serial mistakes are handled by cancelling and recreating the record when linked units are still unused.
+- If cancellation is blocked because a linked stock unit is already used, the detail screen shows the backend operational message.

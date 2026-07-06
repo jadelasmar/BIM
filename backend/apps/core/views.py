@@ -293,7 +293,7 @@ def _build_command_center_initial_data(request, current_path=None):
             "label": "Recent Receiving",
             "value": recent_receiving_count() if can_view_stock else "-",
             "tone": "green",
-            "note": "Operational receiving records and legacy stock receipts",
+            "note": "Operational receiving records",
         },
     ]
 

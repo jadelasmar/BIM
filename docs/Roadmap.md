@@ -15,6 +15,7 @@ This roadmap documents product direction, not implementation history.
 - Receiving records backend API
 - Receiving Records list frontend
 - Receiving Record detail frontend
+- Receiving record edit/cancel correction workflow
 - Suppliers lookup API
 - Django admin for stock and users
 - Login and password setup
@@ -23,13 +24,12 @@ This roadmap documents product direction, not implementation history.
 
 ## Current Product Focus
 
-Build full Receiving Records frontend workflows.
+Build Delivery Records list/detail workflows.
 
-The receiving records list, detail screen, and Receive Stock form now use the operational receiving records API under `/operations/receiving/`. Manual Add Unit remains a direct stock unit workflow under inventory.
+The receiving records list, detail screen, Receive Stock form, and safe correction actions use operational receiving records under `/operations/receiving/`. Manual Add Unit remains a direct stock unit workflow under inventory.
 
 ## Near-Term Modules
 
-- Receiving record edit/correction workflow
 - Delivery Records list/detail
 - Supplier page
 - Product edit workflow

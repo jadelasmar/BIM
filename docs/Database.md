@@ -109,6 +109,10 @@ Fields:
 - `reference_number`
 - `received_date`
 - `notes`
+- `status`
+- `cancel_reason`
+- `cancelled_at`
+- `cancelled_by`
 - `created_by`
 - `crdate`
 - `isactive`
@@ -118,7 +122,12 @@ Rules:
 - Supplier is optional for direct/manual receiving.
 - Reference number stores an optional supplier document/reference.
 - Receiving numbers are generated as `RCV-YYYY-0001`.
+- Status is `recorded` or `cancelled`.
+- Cancellation is operational only and does not create accounting, invoice, payment, tax, voucher, or financial posting behavior.
+- Cancelling a receiving record requires all linked product units to still be active and available.
+- Successful cancellation marks the receiving record cancelled/inactive, marks related receiving items inactive, and marks linked available product units inactive.
 - Supplier, reference number, received date, and `isactive` are the header fields expected to support future supplier, document/reference, date-range, and active/cancelled receiving reports.
+- Clean deployments use `ReceivingRecord` and `ReceivingItem` from the start for all receiving history.
 
 ### ReceivingItem
 
@@ -142,6 +151,7 @@ Rules:
 - Serialized receiving creates one item per serial number and links each item to a `ProductUnit`.
 - `cost` is operational/reference cost only; it does not create accounting, invoice, tax, payment, or voucher behavior.
 - Product, serial number, product-unit link, and line `isactive` support future item receiving reports and serial traceability.
+- Correction workflows may update line cost and notes. Product, product-unit link, quantity, and serial number are not directly editable after creation.
 
 ### DeliveryRecord
 
