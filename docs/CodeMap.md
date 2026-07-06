@@ -55,6 +55,12 @@ Important routes:
 - `/operations/deliveries/`
 - `/operations/deliveries/new/`
 - `/operations/deliveries/<id>/`
+- `/operations/reservations/`
+- `/operations/reservations/new/`
+- `/operations/reservations/<id>/`
+- `/operations/issues/`
+- `/operations/issues/new/`
+- `/operations/issues/<id>/`
 - `/suppliers/`
 - `/clients/`
 - `/assets/`
@@ -107,6 +113,13 @@ Important API routes:
 - `/api/stock/deliveries/`
 - `/api/stock/deliveries/<id>/`
 - `/api/stock/deliveries/<id>/cancel/`
+- `/api/stock/reservations/`
+- `/api/stock/reservations/<id>/`
+- `/api/stock/reservations/<id>/release/`
+- `/api/stock/reservations/<id>/cancel/`
+- `/api/stock/issues/`
+- `/api/stock/issues/<id>/`
+- `/api/stock/issues/<id>/return/`
 - `/api/stock/suppliers/`
 - `/api/stock/brands/`
 - `/api/stock/models/`
@@ -164,6 +177,12 @@ Current main operational UI implementation:
 - Create Delivery
 - Delivery Records list
 - Delivery Record detail
+- Reservation Records list
+- Reservation Record detail
+- Create Reservation
+- Issue Records list
+- Issue Record detail
+- Create Issue
 - placeholder pages
 - shared UI pieces not yet split out
 
@@ -194,6 +213,17 @@ Small reusable UI foundation:
 - `icons.js`: single Lucide icon source
 - `statusStyles.js`: status badge styles and status icon metadata
 - `uiRegistry.js`: tone classes and workflow metadata
+
+ProductUnit status vocabulary:
+
+- `available`
+- `reserved`
+- `issued`
+- `sold`
+- `repair`
+- `inactive`
+
+`returned` and `damaged` are not active stock-unit statuses.
 
 ### `frontend/src/hooks/useTheme.js`
 
@@ -256,7 +286,7 @@ React Create Delivery page
   -> creates DeliveryRecord and DeliveryItem rows
   -> marks selected ProductUnit rows sold
   -> writes StockMovement delivered rows
-  -> redirects to /operations/deliveries/<id>/ when an id is returned
+  -> redirects to /operations/deliveries/<id>/ when the API responds with an id
 ```
 
 ### Delivery Record Detail API
@@ -293,6 +323,96 @@ GET /operations/deliveries/
   -> React AppRouter renders DeliveryRecordsPage
   -> GET /api/stock/deliveries/
   -> DeliveryRecordSerializer returns records and items
+```
+
+### Reservation Creation
+
+```text
+React Create Reservation page
+  -> GET /operations/reservations/new/
+  -> POST /api/stock/reservations/
+  -> ReservationRecordSerializer.create()
+  -> services.create_reservation_record()
+  -> creates ReservationRecord and ReservationItem rows
+  -> marks selected ProductUnit rows reserved
+  -> writes StockMovement reserved rows
+  -> redirects to /operations/reservations/<id>/ when the API responds with an id
+```
+
+### Reservation Release
+
+```text
+React Reservation Record detail
+  -> POST /api/stock/reservations/<id>/release/
+  -> ReservationReleaseSerializer.save()
+  -> services.release_reservation_record()
+  -> releases only when linked ProductUnit rows are still active, reserved, and linked to this reservation
+  -> writes StockMovement reservation_released rows
+```
+
+### Reservation Records List
+
+```text
+GET /operations/reservations/
+  -> apps.core.views.module_launcher
+  -> React AppRouter renders ReservationRecordsPage
+  -> GET /api/stock/reservations/
+  -> ReservationRecordSerializer returns records and items
+```
+
+### Reservation Record Detail
+
+```text
+GET /operations/reservations/<id>/
+  -> apps.core.views.module_launcher
+  -> React AppRouter renders ReservationRecordDetailPage
+  -> GET /api/stock/reservations/<id>/
+  -> ReservationRecordSerializer returns one record and reserved item lines
+```
+
+### Issue Creation
+
+```text
+React Create Issue page
+  -> GET /operations/issues/new/
+  -> POST /api/stock/issues/
+  -> IssueRecordSerializer.create()
+  -> services.create_issue_record()
+  -> creates IssueRecord and IssueItem rows
+  -> marks selected ProductUnit rows issued
+  -> writes StockMovement issued rows
+  -> redirects to /operations/issues/<id>/ when the API responds with an id
+```
+
+### Issue Return
+
+```text
+React Issue Record detail
+  -> POST /api/stock/issues/<id>/return/
+  -> IssueReturnSerializer.save()
+  -> services.return_issue_record()
+  -> returns only when linked ProductUnit rows are still active, issued, and linked to this issue
+  -> writes StockMovement issue_returned rows
+```
+
+### Issue Records List
+
+```text
+GET /operations/issues/
+  -> apps.core.views.module_launcher
+  -> React AppRouter renders IssueRecordsPage
+  -> GET /api/stock/issues/
+  -> IssueRecordSerializer returns records and items
+```
+
+### Issue Record Detail
+
+```text
+GET /operations/issues/<id>/
+  -> apps.core.views.module_launcher
+  -> React AppRouter renders IssueRecordDetailPage
+  -> GET /api/stock/issues/<id>/
+  -> IssueRecordSerializer returns one record and issued item lines
 ```
 
 ### Delivery Record Detail

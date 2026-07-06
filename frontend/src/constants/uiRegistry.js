@@ -20,6 +20,8 @@ export const workflowMeta = {
   add_stock_unit: { icon: "package-plus", tone: "green" },
   receive_stock: { icon: "download", tone: "green" },
   create_delivery: { icon: "delivery", tone: "indigo" },
+  create_reservation: { icon: "clock-3", tone: "warning" },
+  create_issue: { icon: "user-check", tone: "indigo" },
   add_supplier: { icon: "suppliers", tone: "purple" },
   stock_movement: { icon: "trending-up", tone: "neutral" }
 };

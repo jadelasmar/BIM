@@ -51,6 +51,8 @@ Owns BIM Stock:
 - suppliers
 - receiving records and receiving items
 - delivery records and delivery items
+- reservation records and reservation items
+- issue records and issue items
 - stock movements
 - stock selectors
 - stock API views and serializers
@@ -89,11 +91,17 @@ Stock API views:
 - receiving record cancel
 - delivery list/create/detail/update
 - delivery cancel
+- reservation list/create/detail
+- reservation release/cancel
+- issue list/create/detail
+- issue return
 - product movement history
 - inventory summary
 - lookup endpoints for categories, brands, models, suppliers
 
 Delivery record list search currently supports delivery number, customer name, receiver name, product-unit serial number, product description, and product SKU. Delivery list/detail access uses the delivery record view permission. Creating a delivery requires both the delivery record add permission and product-unit change permission because selected stock units are marked sold.
+
+Create Delivery only accepts active available product units. Reserved units must be released before they can be delivered.
 
 Delivery correction is intentionally limited:
 
@@ -129,6 +137,14 @@ Recent delivery panels and delivery activity are based on real active `DeliveryR
 
 Product movement history is based on real `StockMovement` rows. Product detail can read recent movement rows through `/api/stock/products/<id>/movements/`, which requires the stock movement view permission.
 
+Product unit statuses for office deployment are `available`, `reserved`, `issued`, `sold`, `repair`, and `inactive`. `returned` and `damaged` are not active status values. Future client return handling should move sold units back to available or repair through an operational workflow.
+
+Reservation record list search supports reservation number, reserved-for text, reason, product-unit serial number, product description, and product SKU. Reservation list/detail access uses the reservation record view permission. Creating a reservation requires both the reservation record add permission and product-unit change permission because selected stock units are marked reserved. Releasing or cancelling a reservation requires both reservation record change permission and product-unit change permission because linked units return to available stock.
+
+Issue record list search supports issue number, issued-to text, department, branch/site, reason, product-unit serial number, product description, and product SKU. Issue list/detail access uses the issue record view permission. Creating an issue requires both the issue record add permission and product-unit change permission because selected stock units are marked issued. Returning an issue requires both issue record change permission and product-unit change permission because linked units return to available stock.
+
+Create Issue only accepts active available product units. Issued units cannot be delivered directly by Create Delivery; they must be returned to available first.
+
 ## Services
 
 Stock write workflows that span multiple models live in `backend/apps/stock/services.py`.
@@ -142,10 +158,14 @@ Current services:
 - `create_delivery_record`: creates operational delivery records and items, marks selected product units sold, and records delivery movements.
 - `update_delivery_record_header`: updates safe delivery header fields and delivery item notes, synchronizing sold dates only for untouched sold units.
 - `cancel_delivery_record`: cancels a delivery record only while linked stock units are still untouched sold units for that delivery.
+- `create_reservation_record`: creates operational reservation records and items, marks selected available product units reserved, and records reservation movements.
+- `release_reservation_record`: releases or cancels a reservation only while linked stock units are still untouched reserved units for that reservation.
+- `create_issue_record`: creates operational issue records and items, marks selected available product units issued, and records issue movements.
+- `return_issue_record`: returns an issue only while linked stock units are still untouched issued units for that issue.
 
-Receiving creation, receiving cancellation, delivery creation, delivery cancellation, manual Add Unit, and direct product-unit status updates now write `StockMovement` rows going forward. Clean deployments do not need legacy backfill.
+Receiving creation, receiving cancellation, delivery creation, delivery cancellation, reservation creation, reservation release/cancel, issue creation, issue return, manual Add Unit, and direct product-unit status updates now write `StockMovement` rows going forward. Clean deployments do not need legacy backfill.
 
-Keep views thin. Reservation, issue, damage, return, and broader stock adjustment workflows should write movements through services instead of direct ad hoc model updates.
+Keep views thin. Repair, client return, and broader stock adjustment workflows should write movements through services instead of direct ad hoc model updates.
 
 ## Admin
 

@@ -6,11 +6,15 @@ from .models import (
     Category,
     DeliveryItem,
     DeliveryRecord,
+    IssueItem,
+    IssueRecord,
     Product,
     ProductModel,
     ProductUnit,
     ReceivingItem,
     ReceivingRecord,
+    ReservationItem,
+    ReservationRecord,
     StockMovement,
     Supplier,
 )
@@ -18,7 +22,11 @@ from .services import (
     cancel_delivery_record,
     cancel_receiving_record,
     create_delivery_record,
+    create_issue_record,
     create_receiving_record,
+    create_reservation_record,
+    release_reservation_record,
+    return_issue_record,
     update_delivery_record_header,
     update_receiving_record_header,
 )
@@ -106,8 +114,9 @@ class ProductSerializer(serializers.ModelSerializer):
     total_units = serializers.SerializerMethodField()
     available_units = serializers.SerializerMethodField()
     reserved_units = serializers.SerializerMethodField()
+    issued_units = serializers.SerializerMethodField()
     sold_units = serializers.SerializerMethodField()
-    returned_units = serializers.SerializerMethodField()
+    repair_units = serializers.SerializerMethodField()
     is_low_stock = serializers.SerializerMethodField()
     stock_alert_tone = serializers.SerializerMethodField()
 
@@ -134,8 +143,9 @@ class ProductSerializer(serializers.ModelSerializer):
             "total_units",
             "available_units",
             "reserved_units",
+            "issued_units",
             "sold_units",
-            "returned_units",
+            "repair_units",
             "is_low_stock",
             "stock_alert_tone",
         )
@@ -145,8 +155,9 @@ class ProductSerializer(serializers.ModelSerializer):
             "total_units",
             "available_units",
             "reserved_units",
+            "issued_units",
             "sold_units",
-            "returned_units",
+            "repair_units",
             "is_low_stock",
             "stock_alert_tone",
         )
@@ -206,11 +217,14 @@ class ProductSerializer(serializers.ModelSerializer):
     def get_reserved_units(self, obj):
         return self._count(obj, "api_reserved_units", "reserved_units")
 
+    def get_issued_units(self, obj):
+        return self._count(obj, "api_issued_units", "issued_units")
+
     def get_sold_units(self, obj):
         return self._count(obj, "api_sold_units", "sold_units")
 
-    def get_returned_units(self, obj):
-        return self._count(obj, "api_returned_units", "returned_units")
+    def get_repair_units(self, obj):
+        return self._count(obj, "api_repair_units", "repair_units")
 
     def get_is_low_stock(self, obj):
         available_units = self.get_available_units(obj)
@@ -293,6 +307,10 @@ class StockMovementSerializer(serializers.ModelSerializer):
     performed_by_name = serializers.SerializerMethodField()
     receiving_number = serializers.SerializerMethodField()
     delivery_number = serializers.SerializerMethodField()
+    reservation = serializers.IntegerField(source="reservation_record_id", read_only=True)
+    reservation_number = serializers.SerializerMethodField()
+    issue = serializers.IntegerField(source="issue_record_id", read_only=True)
+    issue_number = serializers.SerializerMethodField()
 
     class Meta:
         model = StockMovement
@@ -316,6 +334,12 @@ class StockMovementSerializer(serializers.ModelSerializer):
             "receiving_number",
             "delivery_record",
             "delivery_number",
+            "reservation",
+            "reservation_record",
+            "reservation_number",
+            "issue",
+            "issue_record",
+            "issue_number",
             "reference",
             "crdate",
             "isactive",
@@ -333,6 +357,12 @@ class StockMovementSerializer(serializers.ModelSerializer):
 
     def get_delivery_number(self, obj):
         return obj.delivery_record.delivery_number if obj.delivery_record else ""
+
+    def get_reservation_number(self, obj):
+        return obj.reservation_record.reservation_number if obj.reservation_record else ""
+
+    def get_issue_number(self, obj):
+        return obj.issue_record.issue_number if obj.issue_record else ""
 
 
 class DeliveryItemSerializer(serializers.ModelSerializer):
@@ -370,6 +400,264 @@ class DeliveryItemSerializer(serializers.ModelSerializer):
 
     def get_product_name(self, obj):
         return str(obj.product)
+
+
+class ReservationItemSerializer(serializers.ModelSerializer):
+    product_name = serializers.SerializerMethodField()
+    product_sku = serializers.CharField(source="product.sku", read_only=True)
+    serial_number = serializers.CharField(
+        source="product_unit.serial_number",
+        read_only=True,
+    )
+    product_unit_status = serializers.CharField(
+        source="product_unit.status",
+        read_only=True,
+    )
+    product_unit_status_label = serializers.CharField(
+        source="product_unit.get_status_display",
+        read_only=True,
+    )
+
+    class Meta:
+        model = ReservationItem
+        fields = (
+            "id",
+            "product",
+            "product_name",
+            "product_sku",
+            "product_unit",
+            "serial_number",
+            "product_unit_status",
+            "product_unit_status_label",
+            "notes",
+            "crdate",
+            "isactive",
+        )
+        read_only_fields = fields
+
+    def get_product_name(self, obj):
+        return str(obj.product)
+
+
+class ReservationRecordSerializer(serializers.ModelSerializer):
+    items = ReservationItemSerializer(many=True, read_only=True)
+    total_units = serializers.SerializerMethodField()
+    unit_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=True,
+        allow_empty=False,
+    )
+    reserved_by_name = serializers.CharField(
+        source="reserved_by.get_username",
+        read_only=True,
+    )
+    released_by_name = serializers.CharField(
+        source="released_by.get_username",
+        read_only=True,
+        default="",
+    )
+
+    class Meta:
+        model = ReservationRecord
+        fields = (
+            "id",
+            "reservation_number",
+            "reserved_for",
+            "reason",
+            "expected_release_date",
+            "notes",
+            "status",
+            "reserved_by",
+            "reserved_by_name",
+            "reserved_at",
+            "release_reason",
+            "released_by",
+            "released_by_name",
+            "released_at",
+            "total_units",
+            "unit_ids",
+            "items",
+            "crdate",
+            "isactive",
+        )
+        read_only_fields = (
+            "reservation_number",
+            "status",
+            "reserved_by",
+            "reserved_by_name",
+            "reserved_at",
+            "release_reason",
+            "released_by",
+            "released_by_name",
+            "released_at",
+            "total_units",
+            "items",
+            "crdate",
+        )
+
+    def get_total_units(self, obj):
+        return obj.total_units
+
+    def create(self, validated_data):
+        unit_ids = validated_data.pop("unit_ids")
+        request = self.context.get("request")
+        try:
+            return create_reservation_record(
+                unit_ids=unit_ids,
+                reserved_by=request.user if request else None,
+                **validated_data,
+            )
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc
+
+
+class ReservationReleaseSerializer(serializers.Serializer):
+    release_reason = serializers.CharField(required=True, allow_blank=False)
+
+    def save(self, **kwargs):
+        reservation = self.context["reservation"]
+        request = self.context.get("request")
+        try:
+            return release_reservation_record(
+                reservation,
+                released_by=request.user if request else None,
+                release_reason=self.validated_data["release_reason"],
+                cancel=self.context.get("cancel", False),
+            )
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc
+
+
+class IssueItemSerializer(serializers.ModelSerializer):
+    product_name = serializers.SerializerMethodField()
+    product_sku = serializers.CharField(source="product.sku", read_only=True)
+    serial_number = serializers.CharField(
+        source="product_unit.serial_number",
+        read_only=True,
+    )
+    product_unit_status = serializers.CharField(
+        source="product_unit.status",
+        read_only=True,
+    )
+    product_unit_status_label = serializers.CharField(
+        source="product_unit.get_status_display",
+        read_only=True,
+    )
+
+    class Meta:
+        model = IssueItem
+        fields = (
+            "id",
+            "product",
+            "product_name",
+            "product_sku",
+            "product_unit",
+            "serial_number",
+            "product_unit_status",
+            "product_unit_status_label",
+            "notes",
+            "crdate",
+            "isactive",
+        )
+        read_only_fields = fields
+
+    def get_product_name(self, obj):
+        return str(obj.product)
+
+
+class IssueRecordSerializer(serializers.ModelSerializer):
+    items = IssueItemSerializer(many=True, read_only=True)
+    total_units = serializers.SerializerMethodField()
+    unit_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=True,
+        allow_empty=False,
+    )
+    issued_by_name = serializers.CharField(
+        source="issued_by.get_username",
+        read_only=True,
+    )
+    returned_by_name = serializers.CharField(
+        source="returned_by.get_username",
+        read_only=True,
+        default="",
+    )
+
+    class Meta:
+        model = IssueRecord
+        fields = (
+            "id",
+            "issue_number",
+            "issued_to",
+            "department",
+            "branch_or_site",
+            "reason",
+            "issue_date",
+            "expected_return_date",
+            "returned_date",
+            "notes",
+            "status",
+            "issued_by",
+            "issued_by_name",
+            "returned_by",
+            "returned_by_name",
+            "return_reason",
+            "returned_at",
+            "total_units",
+            "unit_ids",
+            "items",
+            "crdate",
+            "isactive",
+        )
+        read_only_fields = (
+            "issue_number",
+            "returned_date",
+            "status",
+            "issued_by",
+            "issued_by_name",
+            "returned_by",
+            "returned_by_name",
+            "return_reason",
+            "returned_at",
+            "total_units",
+            "items",
+            "crdate",
+        )
+
+    def get_total_units(self, obj):
+        return obj.total_units
+
+    def create(self, validated_data):
+        unit_ids = validated_data.pop("unit_ids")
+        request = self.context.get("request")
+        try:
+            return create_issue_record(
+                unit_ids=unit_ids,
+                issued_by=request.user if request else None,
+                **validated_data,
+            )
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc
+
+
+class IssueReturnSerializer(serializers.Serializer):
+    return_reason = serializers.CharField(required=True, allow_blank=False)
+    returned_date = serializers.DateField(required=False)
+
+    def save(self, **kwargs):
+        issue = self.context["issue"]
+        request = self.context.get("request")
+        try:
+            return return_issue_record(
+                issue,
+                returned_by=request.user if request else None,
+                return_reason=self.validated_data["return_reason"],
+                returned_date=self.validated_data.get("returned_date"),
+            )
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc
 
 
 class DeliveryRecordSerializer(serializers.ModelSerializer):

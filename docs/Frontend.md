@@ -45,6 +45,12 @@ Important rendered routes:
 - `/operations/deliveries/` Delivery Records list
 - `/operations/deliveries/new/` Create Delivery
 - `/operations/deliveries/<id>/` Delivery Record detail
+- `/operations/reservations/` Reservation Records list
+- `/operations/reservations/new/` Create Reservation
+- `/operations/reservations/<id>/` Reservation Record detail
+- `/operations/issues/` Issue Records list
+- `/operations/issues/new/` Create Issue
+- `/operations/issues/<id>/` Issue Record detail
 - `/settings/` Settings
 - `/accounts/login/` Login
 - `/accounts/setup/<uid>/<token>/` Password setup
@@ -86,6 +92,8 @@ Keep components small and extract only when reused or clearly feature-specific.
 - `constants/icons.js`: single Lucide icon source.
 - `constants/statusStyles.js`: status badge classes and status icon metadata.
 - `constants/uiRegistry.js`: frontend tones and workflow metadata.
+
+Inventory stock status filters and badges use the office-ready ProductUnit set: available, reserved, issued, sold, repair, and inactive. Returned and damaged are not exposed as active stock statuses.
 
 ## Hooks
 
@@ -142,6 +150,32 @@ Current Product Details movement integration:
 - The Movement History panel lists recent movement date, type, serial, from/to status, reference, user, and notes.
 - Recent Activity on product detail is based on movement rows instead of inferring activity from current `ProductUnit.status`.
 - If the user lacks stock movement view access, the page shows a permission-aware movement message and preserves product/unit detail behavior.
+
+Current Reservation Records integration:
+
+- `/operations/reservations/new/` submits Create Reservation through `initial_data.api.reservations`.
+- The create screen loads active available stock units only and prevents selecting units that are already reserved, sold, inactive, or otherwise unavailable.
+- On success, Create Reservation redirects to `/operations/reservations/<id>/` when the API returns an id, otherwise back to the reservation records list.
+- `/operations/reservations/` renders a real list screen from `AppRouter.jsx`.
+- The screen fetches `/api/stock/reservations/` through `initial_data.api.reservations`.
+- It shows reservation number, reserved-for text, reason, expected release date, unit totals, and status.
+- `/operations/reservations/<id>/` fetches one record through `initial_data.api.reservationDetail`.
+- The detail screen shows reservation metadata, reserved item lines, and a Release Reservation action.
+- Releasing a reservation requires a reason and returns linked untouched reserved units to available stock.
+- Reserved units must be released before they can be delivered.
+
+Current Issue Records integration:
+
+- `/operations/issues/new/` submits Create Issue through `initial_data.api.issues`.
+- The create screen loads active available stock units only and prevents selecting units that are already reserved, issued, sold, inactive, repair, or otherwise unavailable.
+- On success, Create Issue redirects to `/operations/issues/<id>/` when the API returns an id, otherwise back to the issue records list.
+- `/operations/issues/` renders a real list screen from `AppRouter.jsx`.
+- The screen fetches `/api/stock/issues/` through `initial_data.api.issues`.
+- It shows issue number, issued-to text, department/site, expected return date, unit totals, and status.
+- `/operations/issues/<id>/` fetches one record through `initial_data.api.issueDetail`.
+- The detail screen shows issue metadata, issued item lines, and a Return Issue action.
+- Returning an issue requires a reason and returns linked untouched issued units to available stock.
+- Issued units must be returned before they can be delivered.
 
 Current Delivery Records integration:
 

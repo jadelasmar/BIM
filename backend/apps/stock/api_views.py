@@ -12,10 +12,12 @@ from .models import (
     Brand,
     Category,
     DeliveryRecord,
+    IssueRecord,
     Product,
     ProductModel,
     ProductUnit,
     ReceivingRecord,
+    ReservationRecord,
     StockMovement,
     Supplier,
 )
@@ -25,12 +27,16 @@ from .serializers import (
     DeliveryRecordCancelSerializer,
     DeliveryRecordCorrectionSerializer,
     DeliveryRecordSerializer,
+    IssueRecordSerializer,
+    IssueReturnSerializer,
     ProductModelSerializer,
     ProductSerializer,
     ProductUnitSerializer,
     ReceivingRecordCancelSerializer,
     ReceivingRecordCorrectionSerializer,
     ReceivingRecordSerializer,
+    ReservationRecordSerializer,
+    ReservationReleaseSerializer,
     StockMovementSerializer,
     SupplierSerializer,
 )
@@ -65,14 +71,19 @@ def _product_queryset():
                 filter=_active_unit_filter(ProductUnit.STATUS_RESERVED),
                 distinct=True,
             ),
+            api_issued_units=Count(
+                "units",
+                filter=_active_unit_filter(ProductUnit.STATUS_ISSUED),
+                distinct=True,
+            ),
             api_sold_units=Count(
                 "units",
                 filter=_active_unit_filter(ProductUnit.STATUS_SOLD),
                 distinct=True,
             ),
-            api_returned_units=Count(
+            api_repair_units=Count(
                 "units",
-                filter=_active_unit_filter(ProductUnit.STATUS_RETURNED),
+                filter=_active_unit_filter(ProductUnit.STATUS_REPAIR),
                 distinct=True,
             ),
         )
@@ -230,6 +241,8 @@ class ProductStockMovementListAPIView(generics.ListAPIView):
                 "performed_by",
                 "receiving_record",
                 "delivery_record",
+                "reservation_record",
+                "issue_record",
             )
             .order_by("-movement_date", "-crdate", "-pk")[:50]
         )
@@ -319,6 +332,175 @@ class DeliveryRecordCancelAPIView(APIView):
         serializer.is_valid(raise_exception=True)
         delivery = serializer.save()
         return Response(DeliveryRecordSerializer(delivery).data)
+
+
+class ReservationRecordListCreateAPIView(generics.ListCreateAPIView):
+    serializer_class = ReservationRecordSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get_queryset(self):
+        _require_perm(self.request.user, stock_constants.VIEW_RESERVATION_RECORD)
+        queryset = (
+            ReservationRecord.objects.all()
+            .select_related("reserved_by", "released_by")
+            .prefetch_related(
+                "items",
+                "items__product",
+                "items__product_unit",
+            )
+            .order_by("-reserved_at", "-reservation_number")
+        )
+        query = self.request.query_params.get("q", "").strip()
+
+        if query:
+            queryset = queryset.filter(
+                Q(reservation_number__icontains=query)
+                | Q(reserved_for__icontains=query)
+                | Q(reason__icontains=query)
+                | Q(items__product_unit__serial_number__icontains=query)
+                | Q(items__product__descript__icontains=query)
+                | Q(items__product__sku__icontains=query)
+            ).distinct()
+
+        return queryset
+
+    def perform_create(self, serializer):
+        _require_perm(self.request.user, stock_constants.ADD_RESERVATION_RECORD)
+        _require_perm(self.request.user, stock_constants.CHANGE_PRODUCT_UNIT)
+        serializer.save()
+
+
+class ReservationRecordDetailAPIView(generics.RetrieveAPIView):
+    serializer_class = ReservationRecordSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get_queryset(self):
+        _require_perm(self.request.user, stock_constants.VIEW_RESERVATION_RECORD)
+        return (
+            ReservationRecord.objects.all()
+            .select_related("reserved_by", "released_by")
+            .prefetch_related(
+                "items",
+                "items__product",
+                "items__product_unit",
+            )
+        )
+
+
+class ReservationRecordReleaseAPIView(APIView):
+    permission_classes = (permissions.IsAuthenticated,)
+    cancel = False
+
+    def post(self, request, pk):
+        _require_perm(request.user, stock_constants.CHANGE_RESERVATION_RECORD)
+        _require_perm(request.user, stock_constants.CHANGE_PRODUCT_UNIT)
+        reservation = get_object_or_404(
+            ReservationRecord.objects.select_related(
+                "reserved_by",
+                "released_by",
+            ).prefetch_related(
+                "items",
+                "items__product",
+                "items__product_unit",
+            ),
+            pk=pk,
+        )
+        serializer = ReservationReleaseSerializer(
+            data=request.data,
+            context={
+                "request": request,
+                "reservation": reservation,
+                "cancel": self.cancel,
+            },
+        )
+        serializer.is_valid(raise_exception=True)
+        reservation = serializer.save()
+        return Response(ReservationRecordSerializer(reservation).data)
+
+
+class ReservationRecordCancelAPIView(ReservationRecordReleaseAPIView):
+    cancel = True
+
+
+class IssueRecordListCreateAPIView(generics.ListCreateAPIView):
+    serializer_class = IssueRecordSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get_queryset(self):
+        _require_perm(self.request.user, stock_constants.VIEW_ISSUE_RECORD)
+        queryset = (
+            IssueRecord.objects.all()
+            .select_related("issued_by", "returned_by")
+            .prefetch_related(
+                "items",
+                "items__product",
+                "items__product_unit",
+            )
+            .order_by("-issue_date", "-issue_number")
+        )
+        query = self.request.query_params.get("q", "").strip()
+
+        if query:
+            queryset = queryset.filter(
+                Q(issue_number__icontains=query)
+                | Q(issued_to__icontains=query)
+                | Q(department__icontains=query)
+                | Q(branch_or_site__icontains=query)
+                | Q(reason__icontains=query)
+                | Q(items__product_unit__serial_number__icontains=query)
+                | Q(items__product__descript__icontains=query)
+                | Q(items__product__sku__icontains=query)
+            ).distinct()
+
+        return queryset
+
+    def perform_create(self, serializer):
+        _require_perm(self.request.user, stock_constants.ADD_ISSUE_RECORD)
+        _require_perm(self.request.user, stock_constants.CHANGE_PRODUCT_UNIT)
+        serializer.save()
+
+
+class IssueRecordDetailAPIView(generics.RetrieveAPIView):
+    serializer_class = IssueRecordSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get_queryset(self):
+        _require_perm(self.request.user, stock_constants.VIEW_ISSUE_RECORD)
+        return (
+            IssueRecord.objects.all()
+            .select_related("issued_by", "returned_by")
+            .prefetch_related(
+                "items",
+                "items__product",
+                "items__product_unit",
+            )
+        )
+
+
+class IssueRecordReturnAPIView(APIView):
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def post(self, request, pk):
+        _require_perm(request.user, stock_constants.CHANGE_ISSUE_RECORD)
+        _require_perm(request.user, stock_constants.CHANGE_PRODUCT_UNIT)
+        issue = get_object_or_404(
+            IssueRecord.objects.select_related(
+                "issued_by",
+                "returned_by",
+            ).prefetch_related(
+                "items",
+                "items__product",
+                "items__product_unit",
+            ),
+            pk=pk,
+        )
+        serializer = IssueReturnSerializer(
+            data=request.data,
+            context={"request": request, "issue": issue},
+        )
+        serializer.is_valid(raise_exception=True)
+        issue = serializer.save()
+        return Response(IssueRecordSerializer(issue).data)
 
 
 class ReceivingRecordListCreateAPIView(generics.ListCreateAPIView):
@@ -422,9 +604,12 @@ class InventorySummaryAPIView(APIView):
                 "reserved_units": active_units.filter(
                     status=ProductUnit.STATUS_RESERVED,
                 ).count(),
+                "issued_units": active_units.filter(
+                    status=ProductUnit.STATUS_ISSUED,
+                ).count(),
                 "sold_units": active_units.filter(status=ProductUnit.STATUS_SOLD).count(),
-                "returned_units": active_units.filter(
-                    status=ProductUnit.STATUS_RETURNED,
+                "repair_units": active_units.filter(
+                    status=ProductUnit.STATUS_REPAIR,
                 ).count(),
                 "out_of_stock_products": sum(
                     1 for product in products if product.available_units == 0

@@ -426,6 +426,22 @@ function OperationsPage({ data }) {
       tone: workflowMeta.create_delivery.tone
     },
     {
+      title: "Create Reservation",
+      detail: "Hold available units for a person, client, or job.",
+      href: data.routes.createReservation,
+      enabled: data.quickActions.some((action) => action.label === "Create Reservation" && action.enabled),
+      icon: workflowMeta.create_reservation.icon,
+      tone: workflowMeta.create_reservation.tone
+    },
+    {
+      title: "Create Issue",
+      detail: "Temporarily issue available units that are expected to come back.",
+      href: data.routes.createIssue,
+      enabled: data.quickActions.some((action) => action.label === "Create Issue" && action.enabled),
+      icon: workflowMeta.create_issue.icon,
+      tone: workflowMeta.create_issue.tone
+    },
+    {
       title: "Stock Movement",
       detail: "Manual adjustments and exceptions.",
       href: null,
@@ -1106,6 +1122,1179 @@ function ReceivingItemsTable({ items }) {
   );
 }
 
+function ReservationRecordsPage({ data }) {
+  const [records, setRecords] = useState([]);
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadReservations() {
+      setLoading(true);
+      setError("");
+      try {
+        const params = new URLSearchParams();
+        if (query.trim()) params.set("q", query.trim());
+        const endpoint = params.toString()
+          ? `${data.api.reservations}?${params.toString()}`
+          : data.api.reservations;
+        const response = await fetch(endpoint, { signal: controller.signal });
+        if (!response.ok) {
+          throw new Error("Could not load reservation records.");
+        }
+        setRecords(await response.json());
+      } catch (loadError) {
+        if (loadError.name !== "AbortError") {
+          setError(loadError.message);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadReservations();
+    return () => controller.abort();
+  }, [data.api.reservations, query]);
+
+  const activeCount = records.filter((record) => record.status === "active").length;
+  const totalUnits = records.reduce((sum, record) => sum + Number(record.total_units || 0), 0);
+  const latestRecord = records[0];
+  const reservationKpis = [
+    {
+      label: "Reservations",
+      value: formatCount(records.length),
+      detail: "operational hold records",
+      icon: "clock-3",
+      tone: "warning"
+    },
+    {
+      label: "Active Holds",
+      value: formatCount(activeCount),
+      detail: "not yet released",
+      icon: "box",
+      tone: "orange"
+    },
+    {
+      label: "Reserved Units",
+      value: formatCount(totalUnits),
+      detail: "units in these records",
+      icon: "layers",
+      tone: "blue"
+    },
+    {
+      label: "Latest Reservation",
+      value: latestRecord ? formatDate(latestRecord.reserved_at) : "-",
+      detail: latestRecord?.reservation_number || "no reservations yet",
+      icon: "clock-3",
+      tone: "neutral"
+    }
+  ];
+
+  return (
+    <Shell data={data}>
+      <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Reservation Records</h1>
+          <p className="mt-1 text-sm text-zinc-400">Hold available stock for upcoming work without delivering it.</p>
+        </div>
+        <Button as="a" href={data.routes.createReservation} variant="primary">
+          <Plus className="h-4 w-4" />
+          Create Reservation
+        </Button>
+      </header>
+
+      <KpiGrid items={reservationKpis} />
+
+      <section className="mt-4 rounded-lg border border-nexus-line bg-nexus-panel p-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <SearchBar
+            className="flex-1"
+            inputClassName="placeholder:text-zinc-500"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search reservation number, reserved for, reason, product, or serial..."
+          />
+          <span className="text-xs text-zinc-500">{records.length} records</span>
+        </div>
+      </section>
+
+      <ReservationRecordsTable records={records} loading={loading} error={error} />
+    </Shell>
+  );
+}
+
+function ReservationRecordsTable({ records, loading, error }) {
+  return (
+    <section className="mt-4 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-zinc-800/80 text-zinc-400">
+            <tr>
+              <th className="px-4 py-3 font-medium">Reservation</th>
+              <th className="px-4 py-3 font-medium">Reserved For</th>
+              <th className="px-4 py-3 font-medium">Reason</th>
+              <th className="px-4 py-3 font-medium">Expected Release</th>
+              <th className="px-4 py-3 font-medium">Units</th>
+              <th className="px-4 py-3 font-medium">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <TableMessage message="Loading reservation records..." />
+            ) : error ? (
+              <TableMessage message={error} />
+            ) : records.length ? (
+              records.map((record) => (
+                <tr key={record.id} className="border-t border-nexus-line hover:bg-zinc-900/70">
+                  <td className="px-4 py-4">
+                    <a href={`/operations/reservations/${record.id}/`} className="font-mono text-xs font-bold text-nexus-orange hover:text-orange-300">
+                      {record.reservation_number}
+                    </a>
+                    <p className="mt-1 text-xs text-zinc-500">Reserved by {record.reserved_by_name || "-"}</p>
+                  </td>
+                  <td className="px-4 py-4 font-semibold text-white">{record.reserved_for || "-"}</td>
+                  <td className="px-4 py-4 text-zinc-300">{record.reason || "-"}</td>
+                  <td className="px-4 py-4 text-zinc-300">{formatDate(record.expected_release_date)}</td>
+                  <td className="px-4 py-4">
+                    <p className="font-bold text-white">{formatCount(record.total_units || 0)}</p>
+                    <p className="mt-1 text-xs text-zinc-500">{formatCount(record.items?.length || 0)} lines</p>
+                  </td>
+                  <td className="px-4 py-4">
+                    <Status status={reservationStatusLabel(record)} statusClass={record.status} />
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan="6">
+                  <EmptyState
+                    className="border-t border-nexus-line"
+                    title="No reservation records yet."
+                    description="Create Reservation will hold available stock without delivering it."
+                  />
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function ReservationRecordDetailPage({ data }) {
+  const reservationId = (data.currentPath || window.location.pathname).match(/\/operations\/reservations\/(\d+)\//)?.[1];
+  const [record, setRecord] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+  const [releaseReason, setReleaseReason] = useState("");
+  const [releasing, setReleasing] = useState(false);
+  const [releaseError, setReleaseError] = useState("");
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadReservation() {
+      setLoading(true);
+      setError("");
+      try {
+        const endpoint = data.api.reservationDetail.replace("{id}", reservationId);
+        const response = await fetch(endpoint, { signal: controller.signal });
+        if (!response.ok) {
+          throw new Error(response.status === 404 ? "Reservation record was not found." : "Could not load reservation record.");
+        }
+        setRecord(await response.json());
+      } catch (loadError) {
+        if (loadError.name !== "AbortError") {
+          setError(loadError.message);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadReservation();
+    return () => controller.abort();
+  }, [data.api.reservationDetail, reservationId, reloadKey]);
+
+  async function releaseReservation() {
+    setReleasing(true);
+    setReleaseError("");
+    setMessage("");
+    try {
+      if (!releaseReason.trim()) {
+        throw new Error("Enter a release reason.");
+      }
+      const endpoint = data.api.reservationDetail.replace("{id}", reservationId).replace(/\/$/, "/release/");
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": data.csrfToken
+        },
+        body: JSON.stringify({ release_reason: releaseReason })
+      });
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        throw new Error(firstApiError(details) || "Could not release reservation.");
+      }
+      setReleaseReason("");
+      setMessage("Reservation released. Linked reserved units were moved back to available stock.");
+      setReloadKey((current) => current + 1);
+    } catch (releaseSaveError) {
+      setReleaseError(releaseSaveError.message);
+    } finally {
+      setReleasing(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <Shell data={data}>
+        <div className="rounded-lg border border-nexus-line bg-nexus-panel p-6 text-zinc-400">
+          Loading reservation record...
+        </div>
+      </Shell>
+    );
+  }
+
+  if (error || !record) {
+    return (
+      <Shell data={data}>
+        <div className="rounded-lg border border-nexus-red/60 bg-red-500/10 p-6 text-red-200">
+          {error || "Reservation record was not found."}
+        </div>
+      </Shell>
+    );
+  }
+
+  const isActive = record.status === "active";
+
+  return (
+    <Shell data={data}>
+      <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <a href="/operations/reservations/" className="mb-2 inline-flex text-sm font-semibold text-nexus-orange hover:text-orange-300">
+            Back to reservations
+          </a>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-bold text-white">{record.reservation_number}</h1>
+            <Status status={reservationStatusLabel(record)} statusClass={record.status} />
+          </div>
+          <p className="mt-1 text-sm text-zinc-400">Reserved stock must be released before delivery.</p>
+        </div>
+      </header>
+
+      {message ? (
+        <div className="mb-4 rounded-lg border border-nexus-green/60 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-200">
+          {message}
+        </div>
+      ) : null}
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="space-y-5">
+          <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
+            <SectionTitle title="Reservation Details" />
+            <dl className="mt-4 divide-y divide-nexus-line">
+              <DetailRow label="Reserved For" value={record.reserved_for || "-"} />
+              <DetailRow label="Reason" value={record.reason || "-"} />
+              <DetailRow label="Expected Release" value={formatDate(record.expected_release_date)} />
+              <DetailRow label="Reserved By" value={record.reserved_by_name || "-"} />
+              <DetailRow label="Reserved At" value={formatDate(record.reserved_at)} />
+              <DetailRow label="Notes" value={record.notes || "-"} />
+              {record.released_at ? <DetailRow label="Released At" value={formatDate(record.released_at)} /> : null}
+              {record.release_reason ? <DetailRow label="Release Reason" value={record.release_reason} /> : null}
+            </dl>
+          </section>
+
+          <ReservationItemsTable items={record.items || []} />
+        </div>
+
+        <aside className="space-y-4">
+          <section className="rounded-lg border border-nexus-line bg-nexus-panel">
+            <PanelHeader title="Reservation Summary" />
+            <dl className="divide-y divide-nexus-line p-4">
+              <DetailRow label="Reference" value={record.reservation_number} />
+              <DetailRow label="Status" value={reservationStatusLabel(record)} />
+              <DetailRow label="Units" value={record.total_units || 0} strong />
+            </dl>
+          </section>
+
+          <section className="rounded-lg border border-nexus-line bg-nexus-panel p-4">
+            <h2 className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">Release Reservation</h2>
+            <p className="mt-3 text-sm text-zinc-500">
+              Release only when this hold is no longer needed. Units return to available stock.
+            </p>
+            <div className="mt-4">
+              <Field label="Release Reason" required>
+                <TextInput
+                  value={releaseReason}
+                  onChange={setReleaseReason}
+                  placeholder="Why is this reservation being released?"
+                  disabled={!isActive}
+                />
+              </Field>
+            </div>
+            {releaseError ? <p className="mt-3 text-sm font-semibold text-red-300">{releaseError}</p> : null}
+            <Button type="button" onClick={releaseReservation} disabled={!isActive || releasing} className="mt-4 w-full" variant="primary">
+              <RotateCcw className="h-4 w-4" />
+              {releasing ? "Releasing..." : "Release Reservation"}
+            </Button>
+          </section>
+        </aside>
+      </div>
+    </Shell>
+  );
+}
+
+function ReservationItemsTable({ items }) {
+  return (
+    <section className="overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
+      <PanelHeader title="Reserved Units" badge={`${formatCount(items.length)} units`} />
+      {items.length ? (
+        <div className="overflow-x-auto border-t border-nexus-line">
+          <table className="min-w-full text-left text-sm">
+            <thead className="bg-zinc-800/80 text-zinc-400">
+              <tr>
+                <th className="px-4 py-3 font-medium">Product</th>
+                <th className="px-4 py-3 font-medium">SKU</th>
+                <th className="px-4 py-3 font-medium">Unit ID</th>
+                <th className="px-4 py-3 font-medium">Serial</th>
+                <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium">Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={item.id} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
+                  <td className="px-4 py-3 font-semibold text-white">{item.product_name}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-nexus-orange">{item.product_sku || "-"}</td>
+                  <td className="px-4 py-3 text-zinc-400">#{item.product_unit}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-zinc-300">{item.serial_number || "-"}</td>
+                  <td className="px-4 py-3">
+                    <Status status={item.product_unit_status_label || item.product_unit_status} statusClass={item.product_unit_status} />
+                  </td>
+                  <td className="px-4 py-3 text-zinc-400">{item.notes || "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="border-t border-nexus-line px-4 py-5 text-sm text-zinc-500">
+          No reserved units are linked to this record.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function CreateReservationPage({ data }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [form, setForm] = useState({
+    reservedFor: "",
+    reason: "",
+    expectedReleaseDate: today,
+    notes: ""
+  });
+  const [units, setUnits] = useState([]);
+  const [query, setQuery] = useState("");
+  const [selectedUnits, setSelectedUnits] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadUnits() {
+      const response = await fetch(`${data.api.productUnits}?status=available`, {
+        signal: controller.signal
+      });
+      setUnits(response.ok ? await response.json() : []);
+    }
+
+    loadUnits().catch((loadError) => {
+      if (loadError.name !== "AbortError") {
+        setError("Could not load available stock units.");
+      }
+    });
+
+    return () => controller.abort();
+  }, [data.api.productUnits]);
+
+  const selectedIds = new Set(selectedUnits.map((unit) => unit.id));
+  const filteredUnits = units
+    .filter((unit) => !selectedIds.has(unit.id))
+    .filter((unit) => {
+      const text = `${unit.product_name} ${unit.product_sku} ${unit.product_barcode || ""} ${unit.serial_number}`.toLowerCase();
+      return query && text.includes(query.toLowerCase());
+    })
+    .slice(0, 8);
+
+  function updateField(name, value) {
+    setForm((current) => ({ ...current, [name]: value }));
+  }
+
+  function addUnit(unit) {
+    setSelectedUnits((current) => [...current, unit]);
+    setQuery("");
+  }
+
+  function removeUnit(unitId) {
+    setSelectedUnits((current) => current.filter((unit) => unit.id !== unitId));
+  }
+
+  async function saveReservation() {
+    setSaving(true);
+    setError("");
+    try {
+      if (!form.reservedFor.trim() || !selectedUnits.length) {
+        throw new Error("Reserved for and at least one available stock unit are required.");
+      }
+
+      const response = await fetch(data.api.reservations, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": data.csrfToken
+        },
+        body: JSON.stringify({
+          reserved_for: form.reservedFor,
+          reason: form.reason,
+          expected_release_date: form.expectedReleaseDate || null,
+          notes: form.notes,
+          unit_ids: selectedUnits.map((unit) => unit.id)
+        })
+      });
+
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        throw new Error(firstApiError(details) || "Could not create reservation.");
+      }
+
+      const created = await response.json();
+      window.location.assign(created.id ? `/operations/reservations/${created.id}/` : data.routes.reservationRecords);
+    } catch (saveError) {
+      setError(saveError.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Shell data={data}>
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="min-w-0">
+          <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-white">Create Reservation</h1>
+              <p className="mt-1 text-sm text-zinc-400">Hold available stock without delivering it.</p>
+            </div>
+            <div className="flex flex-wrap gap-3 text-sm">
+              <a href="/operations/reservations/" className="inline-flex h-9 items-center gap-2 rounded-md px-3 font-semibold text-zinc-200 hover:bg-nexus-panel">
+                <X className="h-4 w-4" />
+                Cancel
+              </a>
+              <button disabled={saving} onClick={saveReservation} type="button" className="inline-flex h-9 items-center gap-2 rounded-md bg-nexus-orange px-4 font-semibold text-black">
+                <Icon name="clock-3" className="h-4 w-4" />
+                Save Reservation
+              </button>
+            </div>
+          </header>
+
+          {error ? (
+            <div className="mb-4 rounded-lg border border-nexus-red/60 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-200">
+              {error}
+            </div>
+          ) : null}
+
+          <FormSection icon="clock-3" title="Reservation Information" subtitle="Operational hold details for selected stock units.">
+            <div className="grid gap-5 md:grid-cols-2">
+              <Field label="Reserved For" required>
+                <TextInput value={form.reservedFor} onChange={(value) => updateField("reservedFor", value)} placeholder="Client, person, department, or job" />
+              </Field>
+              <Field label="Expected Release Date">
+                <TextInput type="date" value={form.expectedReleaseDate} onChange={(value) => updateField("expectedReleaseDate", value)} />
+              </Field>
+              <Field label="Reason">
+                <TextInput value={form.reason} onChange={(value) => updateField("reason", value)} placeholder="Why this stock is being held" />
+              </Field>
+              <Field label="Notes">
+                <TextInput value={form.notes} onChange={(value) => updateField("notes", value)} placeholder="Operational notes" />
+              </Field>
+            </div>
+          </FormSection>
+
+          <FormSection icon="box" title="Available Units" subtitle="Only active available units can be reserved.">
+            <SearchBar
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search product, SKU, barcode, or serial..."
+            />
+            {filteredUnits.length ? (
+              <div className="mt-2 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
+                {filteredUnits.map((unit) => (
+                  <button
+                    key={unit.id}
+                    onClick={() => addUnit(unit)}
+                    type="button"
+                    className="flex w-full items-center justify-between border-b border-nexus-line px-4 py-3 text-left last:border-b-0 hover:bg-nexus-panel2"
+                  >
+                    <span>
+                      <span className="block text-sm font-bold text-white">{unit.product_name}</span>
+                      <span className="font-mono text-xs text-nexus-orange">{unit.serial_number}</span>
+                    </span>
+                    <Plus className="h-4 w-4 text-zinc-500" />
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
+            <SelectedUnitsTable units={selectedUnits} onRemove={removeUnit} emptyText="No units selected for reservation yet." />
+          </FormSection>
+        </div>
+
+        <aside className="space-y-4">
+          <section className="rounded-lg border border-nexus-line bg-nexus-panel">
+            <PanelHeader title="Reservation Summary" />
+            <dl className="divide-y divide-nexus-line p-4">
+              <DetailRow label="Reserved For" value={form.reservedFor || "-"} />
+              <DetailRow label="Expected Release" value={formatDate(form.expectedReleaseDate)} />
+              <DetailRow label="Selected Units" value={selectedUnits.length} strong />
+              <DetailRow label="Status" value="Draft" />
+            </dl>
+          </section>
+        </aside>
+      </div>
+    </Shell>
+  );
+}
+
+function SelectedUnitsTable({ units, onRemove, emptyText }) {
+  return (
+    <div className="mt-4 overflow-hidden rounded-lg border border-dashed border-nexus-line bg-black/30">
+      {units.length ? (
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-zinc-800/80 text-zinc-400">
+            <tr>
+              <th className="px-4 py-3 font-medium">Product</th>
+              <th className="px-4 py-3 font-medium">SKU</th>
+              <th className="px-4 py-3 font-medium">Serial</th>
+              <th className="px-4 py-3 font-medium">Status</th>
+              <th className="px-4 py-3 font-medium">Remove</th>
+            </tr>
+          </thead>
+          <tbody>
+            {units.map((unit) => (
+              <tr key={unit.id} className="border-t border-nexus-line">
+                <td className="px-4 py-3 font-semibold text-white">{unit.product_name}</td>
+                <td className="px-4 py-3 font-mono text-xs text-nexus-orange">{unit.product_sku || "-"}</td>
+                <td className="px-4 py-3 font-mono text-xs text-zinc-300">{unit.serial_number}</td>
+                <td className="px-4 py-3">
+                  <Status status={unit.status_label || unit.status} statusClass={unit.status} />
+                </td>
+                <td className="px-4 py-3">
+                  <button onClick={() => onRemove(unit.id)} type="button" className="text-zinc-500 hover:text-nexus-red" aria-label={`Remove ${unit.serial_number}`}>
+                    <X className="h-4 w-4" />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <div className="grid min-h-32 place-items-center text-center text-sm text-zinc-600">
+          {emptyText}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function IssueRecordsPage({ data }) {
+  const [records, setRecords] = useState([]);
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadIssues() {
+      setLoading(true);
+      setError("");
+      try {
+        const params = new URLSearchParams();
+        if (query.trim()) params.set("q", query.trim());
+        const endpoint = params.toString()
+          ? `${data.api.issues}?${params.toString()}`
+          : data.api.issues;
+        const response = await fetch(endpoint, { signal: controller.signal });
+        if (!response.ok) {
+          throw new Error("Could not load issue records.");
+        }
+        setRecords(await response.json());
+      } catch (loadError) {
+        if (loadError.name !== "AbortError") {
+          setError(loadError.message);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadIssues();
+    return () => controller.abort();
+  }, [data.api.issues, query]);
+
+  const activeCount = records.filter((record) => record.status === "active").length;
+  const totalUnits = records.reduce((sum, record) => sum + Number(record.total_units || 0), 0);
+  const latestRecord = records[0];
+  const issueKpis = [
+    {
+      label: "Issue Records",
+      value: formatCount(records.length),
+      detail: "temporary handoffs",
+      icon: "user-check",
+      tone: "indigo"
+    },
+    {
+      label: "Active Issues",
+      value: formatCount(activeCount),
+      detail: "not yet returned",
+      icon: "box",
+      tone: "warning"
+    },
+    {
+      label: "Issued Units",
+      value: formatCount(totalUnits),
+      detail: "units in these records",
+      icon: "layers",
+      tone: "blue"
+    },
+    {
+      label: "Latest Issue",
+      value: latestRecord ? formatDate(latestRecord.issue_date) : "-",
+      detail: latestRecord?.issue_number || "no issues yet",
+      icon: "clock-3",
+      tone: "neutral"
+    }
+  ];
+
+  return (
+    <Shell data={data}>
+      <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Issue Records</h1>
+          <p className="mt-1 text-sm text-zinc-400">Track temporary stock handoffs expected to come back.</p>
+        </div>
+        <Button as="a" href={data.routes.createIssue} variant="primary">
+          <Plus className="h-4 w-4" />
+          Create Issue
+        </Button>
+      </header>
+
+      <KpiGrid items={issueKpis} />
+
+      <section className="mt-4 rounded-lg border border-nexus-line bg-nexus-panel p-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <SearchBar
+            className="flex-1"
+            inputClassName="placeholder:text-zinc-500"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search issue number, issued to, department, site, product, or serial..."
+          />
+          <span className="text-xs text-zinc-500">{records.length} records</span>
+        </div>
+      </section>
+
+      <IssueRecordsTable records={records} loading={loading} error={error} />
+    </Shell>
+  );
+}
+
+function IssueRecordsTable({ records, loading, error }) {
+  return (
+    <section className="mt-4 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-zinc-800/80 text-zinc-400">
+            <tr>
+              <th className="px-4 py-3 font-medium">Issue</th>
+              <th className="px-4 py-3 font-medium">Issued To</th>
+              <th className="px-4 py-3 font-medium">Department / Site</th>
+              <th className="px-4 py-3 font-medium">Expected Return</th>
+              <th className="px-4 py-3 font-medium">Units</th>
+              <th className="px-4 py-3 font-medium">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <TableMessage message="Loading issue records..." />
+            ) : error ? (
+              <TableMessage message={error} />
+            ) : records.length ? (
+              records.map((record) => (
+                <tr key={record.id} className="border-t border-nexus-line hover:bg-zinc-900/70">
+                  <td className="px-4 py-4">
+                    <a href={`/operations/issues/${record.id}/`} className="font-mono text-xs font-bold text-nexus-orange hover:text-orange-300">
+                      {record.issue_number}
+                    </a>
+                    <p className="mt-1 text-xs text-zinc-500">Issued by {record.issued_by_name || "-"}</p>
+                  </td>
+                  <td className="px-4 py-4 font-semibold text-white">{record.issued_to || "-"}</td>
+                  <td className="px-4 py-4 text-zinc-300">{[record.department, record.branch_or_site].filter(Boolean).join(" / ") || "-"}</td>
+                  <td className="px-4 py-4 text-zinc-300">{formatDate(record.expected_return_date)}</td>
+                  <td className="px-4 py-4">
+                    <p className="font-bold text-white">{formatCount(record.total_units || 0)}</p>
+                    <p className="mt-1 text-xs text-zinc-500">{formatCount(record.items?.length || 0)} lines</p>
+                  </td>
+                  <td className="px-4 py-4">
+                    <Status status={issueStatusLabel(record)} statusClass={record.status} />
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan="6">
+                  <EmptyState
+                    className="border-t border-nexus-line"
+                    title="No issue records yet."
+                    description="Create Issue will temporarily hand off available stock without delivering it."
+                  />
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function IssueRecordDetailPage({ data }) {
+  const issueId = (data.currentPath || window.location.pathname).match(/\/operations\/issues\/(\d+)\//)?.[1];
+  const [record, setRecord] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+  const [returnReason, setReturnReason] = useState("");
+  const [returning, setReturning] = useState(false);
+  const [returnError, setReturnError] = useState("");
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadIssue() {
+      setLoading(true);
+      setError("");
+      try {
+        const endpoint = data.api.issueDetail.replace("{id}", issueId);
+        const response = await fetch(endpoint, { signal: controller.signal });
+        if (!response.ok) {
+          throw new Error(response.status === 404 ? "Issue record was not found." : "Could not load issue record.");
+        }
+        setRecord(await response.json());
+      } catch (loadError) {
+        if (loadError.name !== "AbortError") {
+          setError(loadError.message);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadIssue();
+    return () => controller.abort();
+  }, [data.api.issueDetail, issueId, reloadKey]);
+
+  async function returnIssue() {
+    setReturning(true);
+    setReturnError("");
+    setMessage("");
+    try {
+      if (!returnReason.trim()) {
+        throw new Error("Enter a return reason.");
+      }
+      const endpoint = data.api.issueDetail.replace("{id}", issueId).replace(/\/$/, "/return/");
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": data.csrfToken
+        },
+        body: JSON.stringify({ return_reason: returnReason })
+      });
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        throw new Error(firstApiError(details) || "Could not return issue.");
+      }
+      setReturnReason("");
+      setMessage("Issue returned. Linked issued units were moved back to available stock.");
+      setReloadKey((current) => current + 1);
+    } catch (returnSaveError) {
+      setReturnError(returnSaveError.message);
+    } finally {
+      setReturning(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <Shell data={data}>
+        <div className="rounded-lg border border-nexus-line bg-nexus-panel p-6 text-zinc-400">
+          Loading issue record...
+        </div>
+      </Shell>
+    );
+  }
+
+  if (error || !record) {
+    return (
+      <Shell data={data}>
+        <div className="rounded-lg border border-nexus-red/60 bg-red-500/10 p-6 text-red-200">
+          {error || "Issue record was not found."}
+        </div>
+      </Shell>
+    );
+  }
+
+  const isActive = record.status === "active";
+
+  return (
+    <Shell data={data}>
+      <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <a href="/operations/issues/" className="mb-2 inline-flex text-sm font-semibold text-nexus-orange hover:text-orange-300">
+            Back to issues
+          </a>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-bold text-white">{record.issue_number}</h1>
+            <Status status={issueStatusLabel(record)} statusClass={record.status} />
+          </div>
+          <p className="mt-1 text-sm text-zinc-400">Issued units must be returned before delivery.</p>
+        </div>
+      </header>
+
+      {message ? (
+        <div className="mb-4 rounded-lg border border-nexus-green/60 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-200">
+          {message}
+        </div>
+      ) : null}
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="space-y-5">
+          <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
+            <SectionTitle title="Issue Details" />
+            <dl className="mt-4 divide-y divide-nexus-line">
+              <DetailRow label="Issued To" value={record.issued_to || "-"} />
+              <DetailRow label="Department" value={record.department || "-"} />
+              <DetailRow label="Branch / Site" value={record.branch_or_site || "-"} />
+              <DetailRow label="Reason" value={record.reason || "-"} />
+              <DetailRow label="Issue Date" value={formatDate(record.issue_date)} />
+              <DetailRow label="Expected Return" value={formatDate(record.expected_return_date)} />
+              <DetailRow label="Issued By" value={record.issued_by_name || "-"} />
+              <DetailRow label="Notes" value={record.notes || "-"} />
+              {record.returned_date ? <DetailRow label="Returned Date" value={formatDate(record.returned_date)} /> : null}
+              {record.return_reason ? <DetailRow label="Return Reason" value={record.return_reason} /> : null}
+            </dl>
+          </section>
+
+          <IssueItemsTable items={record.items || []} />
+        </div>
+
+        <aside className="space-y-4">
+          <section className="rounded-lg border border-nexus-line bg-nexus-panel">
+            <PanelHeader title="Issue Summary" />
+            <dl className="divide-y divide-nexus-line p-4">
+              <DetailRow label="Reference" value={record.issue_number} />
+              <DetailRow label="Status" value={issueStatusLabel(record)} />
+              <DetailRow label="Units" value={record.total_units || 0} strong />
+            </dl>
+          </section>
+
+          <section className="rounded-lg border border-nexus-line bg-nexus-panel p-4">
+            <h2 className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">Return Issue</h2>
+            <p className="mt-3 text-sm text-zinc-500">
+              Return only when all linked units are back and still untouched issued units.
+            </p>
+            <div className="mt-4">
+              <Field label="Return Reason" required>
+                <TextInput
+                  value={returnReason}
+                  onChange={setReturnReason}
+                  placeholder="Why is this issue being returned?"
+                  disabled={!isActive}
+                />
+              </Field>
+            </div>
+            {returnError ? <p className="mt-3 text-sm font-semibold text-red-300">{returnError}</p> : null}
+            <Button type="button" onClick={returnIssue} disabled={!isActive || returning} className="mt-4 w-full" variant="primary">
+              <RotateCcw className="h-4 w-4" />
+              {returning ? "Returning..." : "Return Issue"}
+            </Button>
+          </section>
+        </aside>
+      </div>
+    </Shell>
+  );
+}
+
+function IssueItemsTable({ items }) {
+  return (
+    <section className="overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
+      <PanelHeader title="Issued Units" badge={`${formatCount(items.length)} units`} />
+      {items.length ? (
+        <div className="overflow-x-auto border-t border-nexus-line">
+          <table className="min-w-full text-left text-sm">
+            <thead className="bg-zinc-800/80 text-zinc-400">
+              <tr>
+                <th className="px-4 py-3 font-medium">Product</th>
+                <th className="px-4 py-3 font-medium">SKU</th>
+                <th className="px-4 py-3 font-medium">Unit ID</th>
+                <th className="px-4 py-3 font-medium">Serial</th>
+                <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium">Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={item.id} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
+                  <td className="px-4 py-3 font-semibold text-white">{item.product_name}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-nexus-orange">{item.product_sku || "-"}</td>
+                  <td className="px-4 py-3 text-zinc-400">#{item.product_unit}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-zinc-300">{item.serial_number || "-"}</td>
+                  <td className="px-4 py-3">
+                    <Status status={item.product_unit_status_label || item.product_unit_status} statusClass={item.product_unit_status} />
+                  </td>
+                  <td className="px-4 py-3 text-zinc-400">{item.notes || "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="border-t border-nexus-line px-4 py-5 text-sm text-zinc-500">
+          No issued units are linked to this record.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function CreateIssuePage({ data }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [form, setForm] = useState({
+    issuedTo: "",
+    department: "",
+    branchOrSite: "",
+    reason: "",
+    issueDate: today,
+    expectedReturnDate: "",
+    notes: ""
+  });
+  const [units, setUnits] = useState([]);
+  const [query, setQuery] = useState("");
+  const [selectedUnits, setSelectedUnits] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadUnits() {
+      const response = await fetch(`${data.api.productUnits}?status=available`, {
+        signal: controller.signal
+      });
+      setUnits(response.ok ? await response.json() : []);
+    }
+
+    loadUnits().catch((loadError) => {
+      if (loadError.name !== "AbortError") {
+        setError("Could not load available stock units.");
+      }
+    });
+
+    return () => controller.abort();
+  }, [data.api.productUnits]);
+
+  const selectedIds = new Set(selectedUnits.map((unit) => unit.id));
+  const filteredUnits = units
+    .filter((unit) => !selectedIds.has(unit.id))
+    .filter((unit) => {
+      const text = `${unit.product_name} ${unit.product_sku} ${unit.product_barcode || ""} ${unit.serial_number}`.toLowerCase();
+      return query && text.includes(query.toLowerCase());
+    })
+    .slice(0, 8);
+
+  function updateField(name, value) {
+    setForm((current) => ({ ...current, [name]: value }));
+  }
+
+  function addUnit(unit) {
+    setSelectedUnits((current) => [...current, unit]);
+    setQuery("");
+  }
+
+  function removeUnit(unitId) {
+    setSelectedUnits((current) => current.filter((unit) => unit.id !== unitId));
+  }
+
+  async function saveIssue() {
+    setSaving(true);
+    setError("");
+    try {
+      if (!form.issuedTo.trim() || !selectedUnits.length) {
+        throw new Error("Issued to and at least one available stock unit are required.");
+      }
+
+      const response = await fetch(data.api.issues, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": data.csrfToken
+        },
+        body: JSON.stringify({
+          issued_to: form.issuedTo,
+          department: form.department,
+          branch_or_site: form.branchOrSite,
+          reason: form.reason,
+          issue_date: form.issueDate || null,
+          expected_return_date: form.expectedReturnDate || null,
+          notes: form.notes,
+          unit_ids: selectedUnits.map((unit) => unit.id)
+        })
+      });
+
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        throw new Error(firstApiError(details) || "Could not create issue.");
+      }
+
+      const created = await response.json();
+      window.location.assign(created.id ? `/operations/issues/${created.id}/` : data.routes.issueRecords);
+    } catch (saveError) {
+      setError(saveError.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Shell data={data}>
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="min-w-0">
+          <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-white">Create Issue</h1>
+              <p className="mt-1 text-sm text-zinc-400">Temporarily issue available stock that is expected to come back.</p>
+            </div>
+            <div className="flex flex-wrap gap-3 text-sm">
+              <a href="/operations/issues/" className="inline-flex h-9 items-center gap-2 rounded-md px-3 font-semibold text-zinc-200 hover:bg-nexus-panel">
+                <X className="h-4 w-4" />
+                Cancel
+              </a>
+              <button disabled={saving} onClick={saveIssue} type="button" className="inline-flex h-9 items-center gap-2 rounded-md bg-nexus-orange px-4 font-semibold text-black">
+                <Icon name="user-check" className="h-4 w-4" />
+                Save Issue
+              </button>
+            </div>
+          </header>
+
+          {error ? (
+            <div className="mb-4 rounded-lg border border-nexus-red/60 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-200">
+              {error}
+            </div>
+          ) : null}
+
+          <FormSection icon="user-check" title="Issue Information" subtitle="Operational handoff details for selected stock units.">
+            <div className="grid gap-5 md:grid-cols-2">
+              <Field label="Issued To" required>
+                <TextInput value={form.issuedTo} onChange={(value) => updateField("issuedTo", value)} placeholder="Person, team, branch, or site" />
+              </Field>
+              <Field label="Department">
+                <TextInput value={form.department} onChange={(value) => updateField("department", value)} placeholder="Department or team" />
+              </Field>
+              <Field label="Branch / Site">
+                <TextInput value={form.branchOrSite} onChange={(value) => updateField("branchOrSite", value)} placeholder="Branch, room, or site" />
+              </Field>
+              <Field label="Reason">
+                <TextInput value={form.reason} onChange={(value) => updateField("reason", value)} placeholder="Why this stock is being issued" />
+              </Field>
+              <Field label="Issue Date">
+                <TextInput type="date" value={form.issueDate} onChange={(value) => updateField("issueDate", value)} />
+              </Field>
+              <Field label="Expected Return">
+                <TextInput type="date" value={form.expectedReturnDate} onChange={(value) => updateField("expectedReturnDate", value)} />
+              </Field>
+              <Field label="Notes">
+                <TextInput value={form.notes} onChange={(value) => updateField("notes", value)} placeholder="Operational notes" />
+              </Field>
+            </div>
+          </FormSection>
+
+          <FormSection icon="box" title="Available Units" subtitle="Only active available units can be issued.">
+            <SearchBar
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search product, SKU, barcode, or serial..."
+            />
+            {filteredUnits.length ? (
+              <div className="mt-2 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
+                {filteredUnits.map((unit) => (
+                  <button
+                    key={unit.id}
+                    onClick={() => addUnit(unit)}
+                    type="button"
+                    className="flex w-full items-center justify-between border-b border-nexus-line px-4 py-3 text-left last:border-b-0 hover:bg-nexus-panel2"
+                  >
+                    <span>
+                      <span className="block text-sm font-bold text-white">{unit.product_name}</span>
+                      <span className="font-mono text-xs text-nexus-orange">{unit.serial_number}</span>
+                    </span>
+                    <Plus className="h-4 w-4 text-zinc-500" />
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
+            <SelectedUnitsTable units={selectedUnits} onRemove={removeUnit} emptyText="No units selected for issue yet." />
+          </FormSection>
+        </div>
+
+        <aside className="space-y-4">
+          <section className="rounded-lg border border-nexus-line bg-nexus-panel">
+            <PanelHeader title="Issue Summary" />
+            <dl className="divide-y divide-nexus-line p-4">
+              <DetailRow label="Issued To" value={form.issuedTo || "-"} />
+              <DetailRow label="Issue Date" value={formatDate(form.issueDate)} />
+              <DetailRow label="Expected Return" value={formatDate(form.expectedReturnDate)} />
+              <DetailRow label="Selected Units" value={selectedUnits.length} strong />
+              <DetailRow label="Status" value="Draft" />
+            </dl>
+          </section>
+        </aside>
+      </div>
+    </Shell>
+  );
+}
+
+function issueStatusLabel(record) {
+  if (!record?.status) return "-";
+  return record.status.charAt(0).toUpperCase() + record.status.slice(1);
+}
+
+function reservationStatusLabel(record) {
+  if (!record?.status) return "-";
+  return record.status.charAt(0).toUpperCase() + record.status.slice(1);
+}
+
 function DeliveryRecordsPage({ data }) {
   const [records, setRecords] = useState([]);
   const [query, setQuery] = useState("");
@@ -1419,7 +2608,7 @@ function DeliveryRecordDetailPage({ data }) {
       }
       setCancelOpen(false);
       setCancelReason("");
-      setCorrectionMessage("Delivery record cancelled. Linked untouched sold units were returned to available stock.");
+      setCorrectionMessage("Delivery record cancelled. Linked untouched sold units were moved back to available stock.");
       setReloadKey((current) => current + 1);
     } catch (cancelSaveError) {
       setCancelError(cancelSaveError.message);
@@ -1928,8 +3117,9 @@ function InventoryPage({ data }) {
                 options={[
                   ["available", "Available"],
                   ["reserved", "Reserved"],
+                  ["issued", "Issued"],
                   ["sold", "Sold"],
-                  ["returned", "Returned"],
+                  ["repair", "Repair"],
                   ["inactive", "Inactive"]
                 ]}
                 label="Status"
@@ -4500,6 +5690,30 @@ const appRoutes = [
   {
     match: (path) => path === "/operations/deliveries/",
     render: (data) => <DeliveryRecordsPage data={data} />
+  },
+  {
+    match: (path) => /^\/operations\/reservations\/\d+\//.test(path),
+    render: (data) => <ReservationRecordDetailPage data={data} />
+  },
+  {
+    match: (path) => path.startsWith("/operations/reservations/new"),
+    render: (data) => <CreateReservationPage data={data} />
+  },
+  {
+    match: (path) => path === "/operations/reservations/",
+    render: (data) => <ReservationRecordsPage data={data} />
+  },
+  {
+    match: (path) => /^\/operations\/issues\/\d+\//.test(path),
+    render: (data) => <IssueRecordDetailPage data={data} />
+  },
+  {
+    match: (path) => path.startsWith("/operations/issues/new"),
+    render: (data) => <CreateIssuePage data={data} />
+  },
+  {
+    match: (path) => path === "/operations/issues/",
+    render: (data) => <IssueRecordsPage data={data} />
   },
   {
     match: (path) => path.startsWith("/operations"),

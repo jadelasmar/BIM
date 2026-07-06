@@ -107,12 +107,16 @@ class Product(models.Model):
         return self.active_unit_count(ProductUnit.STATUS_RESERVED)
 
     @property
+    def issued_units(self):
+        return self.active_unit_count(ProductUnit.STATUS_ISSUED)
+
+    @property
     def sold_units(self):
         return self.active_unit_count(ProductUnit.STATUS_SOLD)
 
     @property
-    def returned_units(self):
-        return self.active_unit_count(ProductUnit.STATUS_RETURNED)
+    def repair_units(self):
+        return self.active_unit_count(ProductUnit.STATUS_REPAIR)
 
     @property
     def is_low_stock(self):
@@ -142,15 +146,17 @@ class Supplier(models.Model):
 class ProductUnit(models.Model):
     STATUS_AVAILABLE = "available"
     STATUS_RESERVED = "reserved"
+    STATUS_ISSUED = "issued"
     STATUS_SOLD = "sold"
-    STATUS_RETURNED = "returned"
+    STATUS_REPAIR = "repair"
     STATUS_INACTIVE = "inactive"
 
     STATUS_CHOICES = [
         (STATUS_AVAILABLE, "Available"),
         (STATUS_RESERVED, "Reserved"),
+        (STATUS_ISSUED, "Issued"),
         (STATUS_SOLD, "Sold"),
-        (STATUS_RETURNED, "Returned"),
+        (STATUS_REPAIR, "Repair"),
         (STATUS_INACTIVE, "Inactive"),
     ]
 
@@ -184,6 +190,8 @@ class ProductUnit(models.Model):
         elif self.status in (
             self.STATUS_AVAILABLE,
             self.STATUS_RESERVED,
+            self.STATUS_ISSUED,
+            self.STATUS_REPAIR,
             self.STATUS_INACTIVE,
         ):
             self.sold_date = None
@@ -411,6 +419,215 @@ class DeliveryItem(models.Model):
         return f"{self.delivery} - {self.product_unit.serial_number}"
 
 
+class ReservationRecord(models.Model):
+    STATUS_ACTIVE = "active"
+    STATUS_RELEASED = "released"
+    STATUS_CANCELLED = "cancelled"
+
+    STATUS_CHOICES = [
+        (STATUS_ACTIVE, "Active"),
+        (STATUS_RELEASED, "Released"),
+        (STATUS_CANCELLED, "Cancelled"),
+    ]
+
+    reservation_number = models.CharField(
+        max_length=32,
+        unique=True,
+        blank=True,
+        editable=False,
+    )
+    reserved_for = models.CharField(max_length=150)
+    reason = models.CharField(max_length=150, blank=True)
+    expected_release_date = models.DateField(blank=True, null=True)
+    notes = models.TextField(blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_ACTIVE,
+    )
+    reserved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="stock_reservation_records",
+    )
+    reserved_at = models.DateTimeField(default=timezone.now)
+    release_reason = models.TextField(blank=True)
+    released_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="released_stock_reservation_records",
+    )
+    released_at = models.DateTimeField(blank=True, null=True)
+    crdate = models.DateTimeField(auto_now_add=True)
+    isactive = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("-reserved_at", "-reservation_number")
+
+    def save(self, *args, **kwargs):
+        if not self.reservation_number:
+            year = (self.reserved_at or timezone.now()).year
+            prefix = f"RSV-{year}-"
+            latest = (
+                ReservationRecord.objects.filter(reservation_number__startswith=prefix)
+                .order_by("-reservation_number")
+                .first()
+            )
+            next_number = 1
+            if latest:
+                try:
+                    next_number = int(latest.reservation_number.rsplit("-", 1)[1]) + 1
+                except (IndexError, ValueError):
+                    next_number = latest.pk + 1
+            self.reservation_number = f"{prefix}{next_number:04d}"
+        super().save(*args, **kwargs)
+
+    @property
+    def total_units(self):
+        return self.items.filter(isactive=True).count()
+
+    def __str__(self):
+        return self.reservation_number or "Reservation"
+
+
+class ReservationItem(models.Model):
+    reservation = models.ForeignKey(
+        ReservationRecord,
+        on_delete=models.CASCADE,
+        related_name="items",
+    )
+    product_unit = models.ForeignKey(
+        ProductUnit,
+        on_delete=models.PROTECT,
+        related_name="reservation_items",
+    )
+    product = models.ForeignKey(Product, on_delete=models.PROTECT)
+    notes = models.TextField(blank=True)
+    crdate = models.DateTimeField(auto_now_add=True)
+    isactive = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("product__descript", "product_unit__serial_number")
+
+    def save(self, *args, **kwargs):
+        if self.product_unit_id and not self.product_id:
+            self.product = self.product_unit.product
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.reservation} - {self.product_unit.serial_number}"
+
+
+class IssueRecord(models.Model):
+    STATUS_ACTIVE = "active"
+    STATUS_RETURNED = "returned"
+    STATUS_CANCELLED = "cancelled"
+
+    STATUS_CHOICES = [
+        (STATUS_ACTIVE, "Active"),
+        (STATUS_RETURNED, "Returned"),
+        (STATUS_CANCELLED, "Cancelled"),
+    ]
+
+    issue_number = models.CharField(
+        max_length=32,
+        unique=True,
+        blank=True,
+        editable=False,
+    )
+    issued_to = models.CharField(max_length=150)
+    department = models.CharField(max_length=150, blank=True)
+    branch_or_site = models.CharField(max_length=150, blank=True)
+    reason = models.CharField(max_length=150, blank=True)
+    issue_date = models.DateField(default=timezone.localdate)
+    expected_return_date = models.DateField(blank=True, null=True)
+    returned_date = models.DateField(blank=True, null=True)
+    notes = models.TextField(blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_ACTIVE,
+    )
+    issued_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="stock_issue_records",
+    )
+    returned_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="returned_stock_issue_records",
+    )
+    return_reason = models.TextField(blank=True)
+    returned_at = models.DateTimeField(blank=True, null=True)
+    crdate = models.DateTimeField(auto_now_add=True)
+    isactive = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("-issue_date", "-issue_number")
+
+    def save(self, *args, **kwargs):
+        if not self.issue_number:
+            year = (self.issue_date or timezone.localdate()).year
+            prefix = f"ISS-{year}-"
+            latest = (
+                IssueRecord.objects.filter(issue_number__startswith=prefix)
+                .order_by("-issue_number")
+                .first()
+            )
+            next_number = 1
+            if latest:
+                try:
+                    next_number = int(latest.issue_number.rsplit("-", 1)[1]) + 1
+                except (IndexError, ValueError):
+                    next_number = latest.pk + 1
+            self.issue_number = f"{prefix}{next_number:04d}"
+        super().save(*args, **kwargs)
+
+    @property
+    def total_units(self):
+        return self.items.filter(isactive=True).count()
+
+    def __str__(self):
+        return self.issue_number or "Issue"
+
+
+class IssueItem(models.Model):
+    issue = models.ForeignKey(
+        IssueRecord,
+        on_delete=models.CASCADE,
+        related_name="items",
+    )
+    product_unit = models.ForeignKey(
+        ProductUnit,
+        on_delete=models.PROTECT,
+        related_name="issue_items",
+    )
+    product = models.ForeignKey(Product, on_delete=models.PROTECT)
+    notes = models.TextField(blank=True)
+    crdate = models.DateTimeField(auto_now_add=True)
+    isactive = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("product__descript", "product_unit__serial_number")
+
+    def save(self, *args, **kwargs):
+        if self.product_unit_id and not self.product_id:
+            self.product = self.product_unit.product
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.issue} - {self.product_unit.serial_number}"
+
+
 class StockMovement(models.Model):
     TYPE_RECEIVED = "received"
     TYPE_RECEIVING_CANCELLED = "receiving_cancelled"
@@ -418,6 +635,10 @@ class StockMovement(models.Model):
     TYPE_DELIVERY_CANCELLED = "delivery_cancelled"
     TYPE_MANUAL_ADD = "manual_add"
     TYPE_MANUAL_UPDATE = "manual_update"
+    TYPE_RESERVED = "reserved"
+    TYPE_RESERVATION_RELEASED = "reservation_released"
+    TYPE_ISSUED = "issued"
+    TYPE_ISSUE_RETURNED = "issue_returned"
 
     MOVEMENT_TYPE_CHOICES = [
         (TYPE_RECEIVED, "Received"),
@@ -426,6 +647,10 @@ class StockMovement(models.Model):
         (TYPE_DELIVERY_CANCELLED, "Delivery Cancelled"),
         (TYPE_MANUAL_ADD, "Manual Add"),
         (TYPE_MANUAL_UPDATE, "Manual Update"),
+        (TYPE_RESERVED, "Reserved"),
+        (TYPE_RESERVATION_RELEASED, "Reservation Released"),
+        (TYPE_ISSUED, "Issued"),
+        (TYPE_ISSUE_RETURNED, "Issue Returned"),
     ]
 
     product_unit = models.ForeignKey(
@@ -460,6 +685,20 @@ class StockMovement(models.Model):
     )
     delivery_record = models.ForeignKey(
         DeliveryRecord,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="stock_movements",
+    )
+    reservation_record = models.ForeignKey(
+        ReservationRecord,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="stock_movements",
+    )
+    issue_record = models.ForeignKey(
+        IssueRecord,
         on_delete=models.SET_NULL,
         blank=True,
         null=True,

@@ -69,6 +69,11 @@ UI_TOKENS = {
         "icon": "delivery",
         "tone": "indigo",
     },
+    "reservation_records": {
+        "label": "Reservation Records",
+        "icon": "clock-3",
+        "tone": "warning",
+    },
     "clients": {
         "label": "Clients",
         "icon": "suppliers",
@@ -119,6 +124,16 @@ UI_TOKENS = {
     "create_delivery": {
         "label": "Create Delivery",
         "icon": "delivery",
+        "tone": "indigo",
+    },
+    "create_reservation": {
+        "label": "Create Reservation",
+        "icon": "clock-3",
+        "tone": "warning",
+    },
+    "create_issue": {
+        "label": "Create Issue",
+        "icon": "user-check",
         "tone": "indigo",
     },
     "add_supplier": {

@@ -111,6 +111,10 @@ def _command_center_initial_data(
             "productUnitDetail": "/api/stock/product-units/{id}/",
             "deliveries": "/api/stock/deliveries/",
             "deliveryDetail": "/api/stock/deliveries/{id}/",
+            "reservations": "/api/stock/reservations/",
+            "reservationDetail": "/api/stock/reservations/{id}/",
+            "issues": "/api/stock/issues/",
+            "issueDetail": "/api/stock/issues/{id}/",
             "receivingRecords": "/api/stock/receiving-records/",
             "receivingRecordDetail": "/api/stock/receiving-records/{id}/",
             "suppliers": "/api/stock/suppliers/",
@@ -127,9 +131,13 @@ def _command_center_initial_data(
             "addStockUnit": reverse("inventory_add_stock_unit"),
             "receiveStock": reverse("operations_receive_stock"),
             "createDelivery": reverse("operations_create_delivery"),
+            "createReservation": reverse("operations_create_reservation"),
+            "createIssue": reverse("operations_create_issue"),
             "suppliers": reverse("suppliers"),
             "receivingRecords": reverse("operations_receiving"),
             "deliveryRecords": reverse("operations_deliveries"),
+            "reservationRecords": reverse("operations_reservations"),
+            "issueRecords": reverse("operations_issues"),
             "clients": reverse("clients"),
             "assets": reverse("assets"),
             "knowledgeBase": reverse("knowledge_base"),
@@ -268,6 +276,12 @@ def _build_command_center_initial_data(request, current_path=None):
     can_create_delivery = user.has_perm(
         stock_constants.ADD_DELIVERY_RECORD
     ) and user.has_perm(stock_constants.CHANGE_PRODUCT_UNIT)
+    can_create_reservation = user.has_perm(
+        stock_constants.ADD_RESERVATION_RECORD
+    ) and user.has_perm(stock_constants.CHANGE_PRODUCT_UNIT)
+    can_create_issue = user.has_perm(
+        stock_constants.ADD_ISSUE_RECORD
+    ) and user.has_perm(stock_constants.CHANGE_PRODUCT_UNIT)
 
     metrics = [
         {
@@ -320,6 +334,22 @@ def _build_command_center_initial_data(request, current_path=None):
             **ui_item("create_delivery"),
         },
         {
+            "href": reverse("operations_create_reservation")
+            if can_create_reservation
+            else None,
+            "enabled": can_create_reservation,
+            "description": "Hold available stock for a person, client, or job",
+            **ui_item("create_reservation"),
+        },
+        {
+            "href": reverse("operations_create_issue")
+            if can_create_issue
+            else None,
+            "enabled": can_create_issue,
+            "description": "Temporarily issue stock to a person, branch, or site",
+            **ui_item("create_issue"),
+        },
+        {
             "href": reverse("operations_receive_stock")
             if user.has_perm(stock_constants.ADD_PRODUCT_UNIT)
             else None,
@@ -359,10 +389,10 @@ def _build_command_center_initial_data(request, current_path=None):
             **ui_item("inventory"),
         },
         {
-            "description": "Receiving records, delivery records, stock history",
+            "description": "Receiving, delivery, reservation, issue, stock history",
             "href": reverse("operations") if can_use_operations else None,
             "enabled": can_use_operations,
-            "count": 2,
+            "count": 4,
             "meta": "active workflows",
             **ui_item("operations"),
         },

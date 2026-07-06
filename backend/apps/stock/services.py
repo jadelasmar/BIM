@@ -5,9 +5,13 @@ from django.utils import timezone
 from .models import (
     DeliveryItem,
     DeliveryRecord,
+    IssueItem,
+    IssueRecord,
     ProductUnit,
     ReceivingItem,
     ReceivingRecord,
+    ReservationItem,
+    ReservationRecord,
     StockMovement,
 )
 
@@ -34,6 +38,8 @@ def create_stock_movement(
     movement_date=None,
     receiving_record=None,
     delivery_record=None,
+    reservation_record=None,
+    issue_record=None,
     reference="",
 ):
     return StockMovement.objects.create(
@@ -48,6 +54,8 @@ def create_stock_movement(
         movement_date=movement_date or timezone.localdate(),
         receiving_record=receiving_record,
         delivery_record=delivery_record,
+        reservation_record=reservation_record,
+        issue_record=issue_record,
         reference=(reference or "").strip()[:150],
     )
 
@@ -225,6 +233,324 @@ def create_delivery_record(
         )
 
     return delivery
+
+
+def _active_reservation_item_for_unit(unit):
+    return unit.reservation_items.filter(isactive=True).first()
+
+
+@transaction.atomic
+def create_reservation_record(
+    *,
+    unit_ids,
+    reserved_for,
+    reason="",
+    expected_release_date=None,
+    notes="",
+    reserved_by=None,
+):
+    unique_ids = list(dict.fromkeys(unit_ids or []))
+    if not unique_ids:
+        raise ValidationError("At least one stock unit is required.")
+
+    units = list(
+        ProductUnit.objects.select_for_update()
+        .select_related("product")
+        .filter(pk__in=unique_ids)
+        .order_by("product__descript", "serial_number")
+    )
+    units_by_id = {unit.pk: unit for unit in units}
+    missing_ids = [unit_id for unit_id in unique_ids if unit_id not in units_by_id]
+    if missing_ids:
+        raise ValidationError("One or more stock units were not found.")
+
+    unavailable_units = [
+        unit.serial_number
+        for unit in units
+        if not unit.isactive or unit.status != ProductUnit.STATUS_AVAILABLE
+    ]
+    if unavailable_units:
+        raise ValidationError(
+            "Only active available stock units can be reserved: "
+            + ", ".join(sorted(unavailable_units))
+        )
+
+    reservation = ReservationRecord.objects.create(
+        reserved_for=(reserved_for or "").strip(),
+        reason=(reason or "").strip(),
+        expected_release_date=expected_release_date,
+        notes=notes,
+        reserved_by=reserved_by,
+    )
+
+    for unit in units:
+        from_status = unit.status
+        ReservationItem.objects.create(
+            reservation=reservation,
+            product_unit=unit,
+            product=unit.product,
+        )
+        unit.status = ProductUnit.STATUS_RESERVED
+        unit.save(update_fields=("status", "sold_date"))
+        create_stock_movement(
+            product_unit=unit,
+            movement_type=StockMovement.TYPE_RESERVED,
+            from_status=from_status,
+            to_status=ProductUnit.STATUS_RESERVED,
+            reason=reservation.reason,
+            notes=notes,
+            performed_by=reserved_by,
+            movement_date=timezone.localdate(),
+            reservation_record=reservation,
+            reference=reservation.reservation_number,
+        )
+
+    return reservation
+
+
+def _reservation_item_can_be_released(item):
+    unit = item.product_unit
+    if not item.isactive or not unit:
+        return False
+    active_item = _active_reservation_item_for_unit(unit)
+    return (
+        unit.isactive
+        and unit.status == ProductUnit.STATUS_RESERVED
+        and active_item
+        and active_item.pk == item.pk
+    )
+
+
+@transaction.atomic
+def release_reservation_record(
+    reservation,
+    *,
+    released_by=None,
+    release_reason="",
+    cancel=False,
+):
+    reservation = ReservationRecord.objects.select_for_update().get(pk=reservation.pk)
+    if reservation.status != ReservationRecord.STATUS_ACTIVE:
+        raise ValidationError("Only active reservation records can be released.")
+
+    items = list(
+        reservation.items.select_for_update()
+        .select_related("product_unit", "product")
+        .filter()
+        .order_by("product__descript", "product_unit__serial_number")
+    )
+    blocked_units = [
+        item.product_unit.serial_number
+        for item in items
+        if not _reservation_item_can_be_released(item)
+    ]
+    if blocked_units:
+        raise ValidationError(
+            "Cannot release reservation because these stock units are no longer untouched reserved units: "
+            + ", ".join(sorted(blocked_units))
+        )
+
+    reservation.status = (
+        ReservationRecord.STATUS_CANCELLED if cancel else ReservationRecord.STATUS_RELEASED
+    )
+    reservation.release_reason = (release_reason or "").strip()
+    reservation.released_at = timezone.now()
+    reservation.released_by = released_by
+    reservation.save(
+        update_fields=(
+            "status",
+            "release_reason",
+            "released_at",
+            "released_by",
+        )
+    )
+
+    for item in items:
+        if item.isactive:
+            item.isactive = False
+            item.save(update_fields=("isactive",))
+
+    for item in items:
+        unit = item.product_unit
+        from_status = unit.status
+        unit.status = ProductUnit.STATUS_AVAILABLE
+        unit.save(update_fields=("status", "sold_date"))
+        create_stock_movement(
+            product_unit=unit,
+            movement_type=StockMovement.TYPE_RESERVATION_RELEASED,
+            from_status=from_status,
+            to_status=ProductUnit.STATUS_AVAILABLE,
+            reason=reservation.release_reason,
+            notes=reservation.release_reason,
+            performed_by=released_by,
+            movement_date=timezone.localdate(),
+            reservation_record=reservation,
+            reference=reservation.reservation_number,
+        )
+
+    return reservation
+
+
+def _active_issue_item_for_unit(unit):
+    return unit.issue_items.filter(isactive=True).first()
+
+
+@transaction.atomic
+def create_issue_record(
+    *,
+    unit_ids,
+    issued_to,
+    department="",
+    branch_or_site="",
+    reason="",
+    issue_date=None,
+    expected_return_date=None,
+    notes="",
+    issued_by=None,
+):
+    unique_ids = list(dict.fromkeys(unit_ids or []))
+    if not unique_ids:
+        raise ValidationError("At least one stock unit is required.")
+
+    units = list(
+        ProductUnit.objects.select_for_update()
+        .select_related("product")
+        .filter(pk__in=unique_ids)
+        .order_by("product__descript", "serial_number")
+    )
+    units_by_id = {unit.pk: unit for unit in units}
+    missing_ids = [unit_id for unit_id in unique_ids if unit_id not in units_by_id]
+    if missing_ids:
+        raise ValidationError("One or more stock units were not found.")
+
+    unavailable_units = [
+        unit.serial_number
+        for unit in units
+        if not unit.isactive or unit.status != ProductUnit.STATUS_AVAILABLE
+    ]
+    if unavailable_units:
+        raise ValidationError(
+            "Only active available stock units can be issued: "
+            + ", ".join(sorted(unavailable_units))
+        )
+
+    issue = IssueRecord.objects.create(
+        issued_to=(issued_to or "").strip(),
+        department=(department or "").strip(),
+        branch_or_site=(branch_or_site or "").strip(),
+        reason=(reason or "").strip(),
+        issue_date=issue_date or timezone.localdate(),
+        expected_return_date=expected_return_date,
+        notes=notes,
+        issued_by=issued_by,
+    )
+
+    for unit in units:
+        from_status = unit.status
+        IssueItem.objects.create(
+            issue=issue,
+            product_unit=unit,
+            product=unit.product,
+        )
+        unit.status = ProductUnit.STATUS_ISSUED
+        unit.save(update_fields=("status", "sold_date"))
+        create_stock_movement(
+            product_unit=unit,
+            movement_type=StockMovement.TYPE_ISSUED,
+            from_status=from_status,
+            to_status=ProductUnit.STATUS_ISSUED,
+            reason=issue.reason,
+            notes=notes,
+            performed_by=issued_by,
+            movement_date=issue.issue_date,
+            issue_record=issue,
+            reference=issue.issue_number,
+        )
+
+    return issue
+
+
+def _issue_item_can_be_returned(item):
+    unit = item.product_unit
+    if not item.isactive or not unit:
+        return False
+    active_item = _active_issue_item_for_unit(unit)
+    return (
+        unit.isactive
+        and unit.status == ProductUnit.STATUS_ISSUED
+        and active_item
+        and active_item.pk == item.pk
+    )
+
+
+@transaction.atomic
+def return_issue_record(
+    issue,
+    *,
+    returned_by=None,
+    return_reason="",
+    returned_date=None,
+):
+    issue = IssueRecord.objects.select_for_update().get(pk=issue.pk)
+    if issue.status != IssueRecord.STATUS_ACTIVE:
+        raise ValidationError("Only active issue records can be returned.")
+
+    items = list(
+        issue.items.select_for_update()
+        .select_related("product_unit", "product")
+        .filter()
+        .order_by("product__descript", "product_unit__serial_number")
+    )
+    blocked_units = [
+        item.product_unit.serial_number
+        for item in items
+        if not _issue_item_can_be_returned(item)
+    ]
+    if blocked_units:
+        raise ValidationError(
+            "Cannot return issue because these stock units are no longer untouched issued units: "
+            + ", ".join(sorted(blocked_units))
+        )
+
+    issue.status = IssueRecord.STATUS_RETURNED
+    issue.return_reason = (return_reason or "").strip()
+    issue.returned_date = returned_date or timezone.localdate()
+    issue.returned_at = timezone.now()
+    issue.returned_by = returned_by
+    issue.save(
+        update_fields=(
+            "status",
+            "return_reason",
+            "returned_date",
+            "returned_at",
+            "returned_by",
+        )
+    )
+
+    for item in items:
+        if item.isactive:
+            item.isactive = False
+            item.save(update_fields=("isactive",))
+
+    for item in items:
+        unit = item.product_unit
+        from_status = unit.status
+        unit.status = ProductUnit.STATUS_AVAILABLE
+        unit.save(update_fields=("status", "sold_date"))
+        create_stock_movement(
+            product_unit=unit,
+            movement_type=StockMovement.TYPE_ISSUE_RETURNED,
+            from_status=from_status,
+            to_status=ProductUnit.STATUS_AVAILABLE,
+            reason=issue.return_reason,
+            notes=issue.return_reason,
+            performed_by=returned_by,
+            movement_date=issue.returned_date,
+            issue_record=issue,
+            reference=issue.issue_number,
+        )
+
+    return issue
 
 
 def _unit_has_delivery(unit):

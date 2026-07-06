@@ -43,6 +43,41 @@ urlpatterns = [
         name="delivery-detail",
     ),
     path(
+        "reservations/",
+        api_views.ReservationRecordListCreateAPIView.as_view(),
+        name="reservations",
+    ),
+    path(
+        "reservations/<int:pk>/release/",
+        api_views.ReservationRecordReleaseAPIView.as_view(),
+        name="reservation-release",
+    ),
+    path(
+        "reservations/<int:pk>/cancel/",
+        api_views.ReservationRecordCancelAPIView.as_view(),
+        name="reservation-cancel",
+    ),
+    path(
+        "reservations/<int:pk>/",
+        api_views.ReservationRecordDetailAPIView.as_view(),
+        name="reservation-detail",
+    ),
+    path(
+        "issues/",
+        api_views.IssueRecordListCreateAPIView.as_view(),
+        name="issues",
+    ),
+    path(
+        "issues/<int:pk>/return/",
+        api_views.IssueRecordReturnAPIView.as_view(),
+        name="issue-return",
+    ),
+    path(
+        "issues/<int:pk>/",
+        api_views.IssueRecordDetailAPIView.as_view(),
+        name="issue-detail",
+    ),
+    path(
         "receiving-records/",
         api_views.ReceivingRecordListCreateAPIView.as_view(),
         name="receiving-records",

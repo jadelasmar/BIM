@@ -22,6 +22,7 @@ BACKEND_ROOT = PROJECT_ROOT / "backend"
 FRONTEND_SRC = PROJECT_ROOT / "frontend" / "src"
 REACT_APP_SOURCE = FRONTEND_SRC / "routes" / "AppRouter.jsx"
 REACT_REGISTRY_SOURCE = FRONTEND_SRC / "constants" / "uiRegistry.js"
+REACT_STATUS_STYLES_SOURCE = FRONTEND_SRC / "constants" / "statusStyles.js"
 REACT_SHELL_TEMPLATE = BACKEND_ROOT / "templates" / "bim" / "react_app.html"
 
 
@@ -46,11 +47,15 @@ from .models import (
     Category,
     DeliveryItem,
     DeliveryRecord,
+    IssueItem,
+    IssueRecord,
     Product,
     ProductModel,
     ProductUnit,
     ReceivingItem,
     ReceivingRecord,
+    ReservationItem,
+    ReservationRecord,
     StockMovement,
     Supplier,
 )
@@ -71,8 +76,9 @@ class ProductAdminTests(SimpleTestCase):
                 "total_quantity",
                 "available_quantity",
                 "reserved_quantity",
+                "issued_quantity",
                 "sold_quantity",
-                "returned_quantity",
+                "repair_quantity",
                 "reorder_stock_level",
                 "stock_alert",
                 "category",
@@ -110,6 +116,7 @@ class UIRegistryTests(SimpleTestCase):
             "add_stock_unit",
             "receive_stock",
             "create_delivery",
+            "create_reservation",
         ):
             token = UI_TOKENS[key]
 
@@ -128,11 +135,17 @@ class UIRegistryTests(SimpleTestCase):
     def test_delivery_ui_tokens_use_same_icon_and_tone(self):
         delivery_records = UI_TOKENS["delivery_records"]
         create_delivery = UI_TOKENS["create_delivery"]
+        reservation_records = UI_TOKENS["reservation_records"]
+        create_reservation = UI_TOKENS["create_reservation"]
 
         self.assertEqual(create_delivery["icon"], delivery_records["icon"])
         self.assertEqual(create_delivery["tone"], delivery_records["tone"])
         self.assertEqual(create_delivery["icon"], "delivery")
         self.assertEqual(create_delivery["tone"], "indigo")
+        self.assertEqual(create_reservation["icon"], reservation_records["icon"])
+        self.assertEqual(create_reservation["tone"], reservation_records["tone"])
+        self.assertEqual(create_reservation["icon"], "clock-3")
+        self.assertEqual(create_reservation["tone"], "warning")
 
     def test_frontend_uses_registry_for_workflow_icons(self):
         app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
@@ -236,7 +249,7 @@ class UIRegistryTests(SimpleTestCase):
         ]
         inventory_header_source = app_source[
             app_source.index("function InventoryHeader"):
-            app_source.index("function Select")
+            app_source.index("function ProductDetail")
         ]
         stock_entry_source = app_source[
             app_source.index("function StockEntryPage"):
@@ -485,10 +498,56 @@ class UIRegistryTests(SimpleTestCase):
         self.assertIn("<CreateDeliveryPage data={data}", routes_source)
         self.assertIn("<DeliveryRecordsPage data={data}", routes_source)
         self.assertIn("<DeliveryRecordDetailPage data={data}", routes_source)
+        self.assertIn('match: (path) => path === "/operations/reservations/"', routes_source)
+        self.assertIn('match: (path) => path.startsWith("/operations/reservations/new")', routes_source)
+        self.assertIn('match: (path) => /^\\/operations\\/reservations\\/\\d+\\//.test(path)', routes_source)
+        self.assertIn("<CreateReservationPage data={data}", routes_source)
+        self.assertIn("<ReservationRecordsPage data={data}", routes_source)
+        self.assertIn("<ReservationRecordDetailPage data={data}", routes_source)
+        self.assertIn('match: (path) => path === "/operations/issues/"', routes_source)
+        self.assertIn('match: (path) => path.startsWith("/operations/issues/new")', routes_source)
+        self.assertIn('match: (path) => /^\\/operations\\/issues\\/\\d+\\//.test(path)', routes_source)
+        self.assertIn("<CreateIssuePage data={data}", routes_source)
+        self.assertIn("<IssueRecordsPage data={data}", routes_source)
+        self.assertIn("<IssueRecordDetailPage data={data}", routes_source)
         self.assertNotIn('path.startsWith("/inventory/receiving/new")', routes_source)
         self.assertNotIn('path.startsWith("/inventory/deliveries/new")', routes_source)
         self.assertNotIn('path.startsWith("/operations/receiving")', routes_source)
         self.assertNotIn('path.startsWith("/operations/deliveries")', routes_source)
+
+    def test_frontend_has_reservation_list_detail_and_create_screens(self):
+        app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
+
+        self.assertIn("function ReservationRecordsPage", app_source)
+        self.assertIn("function ReservationRecordDetailPage", app_source)
+        self.assertIn("function CreateReservationPage", app_source)
+        self.assertIn("data.api.reservations", app_source)
+        self.assertIn("data.api.reservationDetail", app_source)
+        self.assertIn("Release Reservation", app_source)
+        self.assertIn("Reserved stock must be released before delivery.", app_source)
+
+    def test_frontend_has_issue_list_detail_and_create_screens(self):
+        app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
+
+        self.assertIn("function IssueRecordsPage", app_source)
+        self.assertIn("function IssueRecordDetailPage", app_source)
+        self.assertIn("function CreateIssuePage", app_source)
+        self.assertIn("data.api.issues", app_source)
+        self.assertIn("data.api.issueDetail", app_source)
+        self.assertIn("Return Issue", app_source)
+        self.assertIn("Issued units must be returned before delivery.", app_source)
+
+    def test_frontend_inventory_status_vocabulary_matches_product_unit_statuses(self):
+        app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
+        status_source = REACT_STATUS_STYLES_SOURCE.read_text(encoding="utf-8")
+
+        for status in ("available", "reserved", "issued", "sold", "repair", "inactive"):
+            self.assertIn(f'["{status}",', app_source)
+            self.assertIn(f"{status}:", status_source)
+
+        self.assertNotIn('["returned",', app_source)
+        self.assertNotIn("returned:", status_source)
+        self.assertNotIn("damaged:", status_source)
 
     def test_legacy_stock_template_routes_are_not_exposed(self):
         app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
@@ -547,17 +606,24 @@ class ProductAdminStockCountTests(TestCase):
         )
         ProductUnit.objects.create(
             product=self.product,
-            serial_number="RETURNED",
-            status=ProductUnit.STATUS_RETURNED,
+            serial_number="ISSUED",
+            status=ProductUnit.STATUS_ISSUED,
+            isactive=True,
+        )
+        ProductUnit.objects.create(
+            product=self.product,
+            serial_number="REPAIR",
+            status=ProductUnit.STATUS_REPAIR,
             isactive=True,
         )
 
-        self.assertEqual(self.product.total_units, 5)
+        self.assertEqual(self.product.total_units, 6)
         self.assertEqual(self.product.available_units, 2)
         self.assertEqual(self.product.reserved_units, 1)
+        self.assertEqual(self.product.issued_units, 1)
         self.assertEqual(self.product.sold_units, 1)
-        self.assertEqual(self.product.returned_units, 1)
-        self.assertEqual(self.product_admin.total_quantity(self.product), 5)
+        self.assertEqual(self.product.repair_units, 1)
+        self.assertEqual(self.product_admin.total_quantity(self.product), 6)
         self.assertEqual(self.product_admin.available_quantity(self.product), 2)
 
     def test_product_stock_alert_uses_product_thresholds(self):
@@ -1174,6 +1240,9 @@ class BIMPOSAccessTests(TestCase):
             "/operations/deliveries/",
             "/operations/deliveries/new/",
             "/operations/deliveries/1/",
+            "/operations/reservations/",
+            "/operations/reservations/new/",
+            "/operations/reservations/1/",
             "/inventory/",
             "/inventory/products/new/",
             "/inventory/stock-units/new/",
@@ -1337,7 +1406,7 @@ class BIMPOSAccessTests(TestCase):
 
         self.assertTrue(operations_module["enabled"])
         self.assertEqual(operations_module["href"], "/operations/")
-        self.assertEqual(operations_module["count"], 2)
+        self.assertEqual(operations_module["count"], 4)
         self.assertTrue(operations_nav["enabled"])
         self.assertEqual(operations_nav["href"], "/operations/")
         self.assertEqual(operations_response.status_code, 200)
@@ -1545,6 +1614,8 @@ class BIMPOSAccessTests(TestCase):
             Permission.objects.get(codename="add_product"),
             Permission.objects.get(codename="add_productunit"),
             Permission.objects.get(codename="add_deliveryrecord"),
+            Permission.objects.get(codename="add_reservationrecord"),
+            Permission.objects.get(codename="add_issuerecord"),
             Permission.objects.get(codename="change_productunit"),
             Permission.objects.get(codename="view_product"),
         )
@@ -1556,18 +1627,33 @@ class BIMPOSAccessTests(TestCase):
 
         self.assertEqual(
             set(actions_by_label),
-            {"Add Product", "Create Delivery", "Receive Stock", "Add Unit", "Add Supplier", "Add Client"},
+            {
+                "Add Product",
+                "Create Delivery",
+                "Create Reservation",
+                "Create Issue",
+                "Receive Stock",
+                "Add Unit",
+                "Add Supplier",
+                "Add Client",
+            },
         )
         self.assertEqual(actions_by_label["Add Product"]["href"], "/inventory/products/new/")
         self.assertEqual(actions_by_label["Create Delivery"]["href"], "/operations/deliveries/new/")
+        self.assertEqual(actions_by_label["Create Reservation"]["href"], "/operations/reservations/new/")
+        self.assertEqual(actions_by_label["Create Issue"]["href"], "/operations/issues/new/")
         self.assertEqual(actions_by_label["Receive Stock"]["href"], "/operations/receiving/new/")
         self.assertEqual(actions_by_label["Add Unit"]["href"], "/inventory/stock-units/new/")
         self.assertTrue(actions_by_label["Add Product"]["enabled"])
         self.assertTrue(actions_by_label["Create Delivery"]["enabled"])
+        self.assertTrue(actions_by_label["Create Reservation"]["enabled"])
+        self.assertTrue(actions_by_label["Create Issue"]["enabled"])
         self.assertTrue(actions_by_label["Receive Stock"]["enabled"])
         self.assertTrue(actions_by_label["Add Unit"]["enabled"])
         self.assertEqual(actions_by_label["Create Delivery"]["icon"], "delivery")
         self.assertEqual(actions_by_label["Create Delivery"]["tone"], "indigo")
+        self.assertEqual(actions_by_label["Create Issue"]["icon"], "user-check")
+        self.assertEqual(actions_by_label["Create Issue"]["tone"], "indigo")
         self.assertFalse(actions_by_label["Add Supplier"]["enabled"])
         self.assertIsNone(actions_by_label["Add Supplier"]["href"])
         self.assertFalse(actions_by_label["Add Client"]["enabled"])
@@ -1659,6 +1745,8 @@ class BIMPOSAccessTests(TestCase):
             Permission.objects.get(codename="add_product"),
             Permission.objects.get(codename="add_productunit"),
             Permission.objects.get(codename="add_deliveryrecord"),
+            Permission.objects.get(codename="add_reservationrecord"),
+            Permission.objects.get(codename="add_issuerecord"),
             Permission.objects.get(codename="change_productunit"),
             Permission.objects.get(codename="view_product"),
         )
@@ -1670,7 +1758,16 @@ class BIMPOSAccessTests(TestCase):
 
         self.assertEqual(
             set(actions_by_label),
-            {"Add Product", "Create Delivery", "Receive Stock", "Add Unit", "Add Supplier", "Add Client"},
+            {
+                "Add Product",
+                "Create Delivery",
+                "Create Reservation",
+                "Create Issue",
+                "Receive Stock",
+                "Add Unit",
+                "Add Supplier",
+                "Add Client",
+            },
         )
         self.assertFalse(actions_by_label["Add Supplier"]["enabled"])
         self.assertIsNone(actions_by_label["Add Supplier"]["href"])
@@ -2040,6 +2137,19 @@ class ProductUnitStatusBehaviorTests(TestCase):
             model=model,
         )
 
+    def test_product_unit_status_choices_match_office_ready_set(self):
+        self.assertEqual(
+            [choice[0] for choice in ProductUnit.STATUS_CHOICES],
+            [
+                ProductUnit.STATUS_AVAILABLE,
+                ProductUnit.STATUS_RESERVED,
+                ProductUnit.STATUS_ISSUED,
+                ProductUnit.STATUS_SOLD,
+                ProductUnit.STATUS_REPAIR,
+                ProductUnit.STATUS_INACTIVE,
+            ],
+        )
+
     def test_sold_status_sets_sold_date_on_save(self):
         unit = ProductUnit.objects.create(
             product=self.product,
@@ -2073,6 +2183,19 @@ class ProductUnitStatusBehaviorTests(TestCase):
 
         self.assertEqual(unit.status, ProductUnit.STATUS_INACTIVE)
         self.assertIsNone(unit.sold_date)
+
+    def test_issued_and_repair_statuses_clear_sold_date_on_save(self):
+        for status in (ProductUnit.STATUS_ISSUED, ProductUnit.STATUS_REPAIR):
+            with self.subTest(status=status):
+                unit = ProductUnit.objects.create(
+                    product=self.product,
+                    serial_number=f"MODEL-{status.upper()}",
+                    status=status,
+                    sold_date=timezone.localdate(),
+                )
+
+                self.assertEqual(unit.status, status)
+                self.assertIsNone(unit.sold_date)
 
 
 class ReceivingRecordModelTests(TestCase):
@@ -2304,6 +2427,9 @@ class InventoryApiTests(TestCase):
         self.assertEqual(product_data["total_units"], 2)
         self.assertEqual(product_data["available_units"], 1)
         self.assertEqual(product_data["reserved_units"], 1)
+        self.assertIn("issued_units", product_data)
+        self.assertIn("repair_units", product_data)
+        self.assertNotIn("returned_units", product_data)
         self.assertEqual(product_data["reorder_stock_level"], 2)
         self.assertTrue(product_data["is_low_stock"])
         self.assertNotIn("is_critical_stock", product_data)
@@ -2520,6 +2646,578 @@ class InventoryApiTests(TestCase):
 
         self.assertEqual(response.status_code, 403)
 
+    def test_reservation_api_creates_record_and_marks_units_reserved(self):
+        user = self._user_with_permissions(
+            "view_reservationrecord",
+            "add_reservationrecord",
+            "change_productunit",
+        )
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/api/stock/reservations/",
+            {
+                "reserved_for": "Front Office POS refresh",
+                "reason": "Hold for installation",
+                "expected_release_date": str(timezone.localdate()),
+                "notes": "Install window pending",
+                "unit_ids": [unit.pk],
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        unit.refresh_from_db()
+        reservation = ReservationRecord.objects.get(pk=response.json()["id"])
+        self.assertEqual(response.json()["reservation_number"][:9], f"RSV-{timezone.localdate().year}-")
+        self.assertEqual(reservation.status, ReservationRecord.STATUS_ACTIVE)
+        self.assertEqual(reservation.reserved_for, "Front Office POS refresh")
+        self.assertEqual(reservation.reserved_by, user)
+        self.assertIsNotNone(reservation.reserved_at)
+        self.assertEqual(unit.status, ProductUnit.STATUS_RESERVED)
+        item = ReservationItem.objects.get(reservation=reservation, product_unit=unit)
+        self.assertTrue(item.isactive)
+        movement = StockMovement.objects.get(
+            product_unit=unit,
+            movement_type=StockMovement.TYPE_RESERVED,
+        )
+        self.assertEqual(movement.from_status, ProductUnit.STATUS_AVAILABLE)
+        self.assertEqual(movement.to_status, ProductUnit.STATUS_RESERVED)
+        self.assertEqual(movement.reference, reservation.reservation_number)
+        self.assertEqual(movement.performed_by, user)
+
+    def test_reservation_api_rejects_sold_reserved_and_inactive_units(self):
+        user = self._user_with_permissions(
+            "view_reservationrecord",
+            "add_reservationrecord",
+            "change_productunit",
+        )
+        sold_unit = ProductUnit.objects.create(
+            product=self.product,
+            serial_number="RES-SOLD",
+            status=ProductUnit.STATUS_SOLD,
+            isactive=True,
+        )
+        reserved_unit = ProductUnit.objects.get(serial_number="API-RESERVED")
+        inactive_unit = ProductUnit.objects.get(serial_number="API-INACTIVE")
+        self.client.force_login(user)
+
+        for unit in (sold_unit, reserved_unit, inactive_unit):
+            response = self.client.post(
+                "/api/stock/reservations/",
+                {
+                    "reserved_for": "Blocked hold",
+                    "reason": "Not available",
+                    "unit_ids": [unit.pk],
+                },
+                content_type="application/json",
+            )
+            self.assertEqual(response.status_code, 400, response.content)
+
+        self.assertEqual(ReservationRecord.objects.count(), 0)
+        self.assertFalse(StockMovement.objects.filter(movement_type=StockMovement.TYPE_RESERVED).exists())
+
+    def test_reservation_api_returns_list_and_detail(self):
+        user = self._user_with_permissions("view_reservationrecord")
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        reservation = ReservationRecord.objects.create(
+            reserved_for="Service desk",
+            reason="Spare unit hold",
+            reserved_by=user,
+        )
+        ReservationItem.objects.create(
+            reservation=reservation,
+            product=self.product,
+            product_unit=unit,
+            notes="Keep charger attached",
+        )
+        self.client.force_login(user)
+
+        list_response = self.client.get("/api/stock/reservations/", {"q": "Service"})
+        detail_response = self.client.get(f"/api/stock/reservations/{reservation.pk}/")
+
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(len(list_response.json()), 1)
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertEqual(detail_response.json()["reservation_number"], reservation.reservation_number)
+        self.assertEqual(detail_response.json()["reserved_for"], "Service desk")
+        self.assertEqual(detail_response.json()["reserved_by_name"], user.username)
+        self.assertEqual(detail_response.json()["total_units"], 1)
+        self.assertEqual(detail_response.json()["items"][0]["product_unit"], unit.pk)
+        self.assertEqual(detail_response.json()["items"][0]["serial_number"], "API-AVAILABLE")
+        self.assertEqual(detail_response.json()["items"][0]["notes"], "Keep charger attached")
+
+    def test_reservation_api_releases_active_reserved_units(self):
+        user = self._user_with_permissions(
+            "view_reservationrecord",
+            "change_reservationrecord",
+            "change_productunit",
+        )
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        unit.status = ProductUnit.STATUS_RESERVED
+        unit.save(update_fields=("status", "sold_date"))
+        reservation = ReservationRecord.objects.create(
+            reserved_for="Service desk",
+            reason="Spare unit hold",
+            reserved_by=user,
+        )
+        item = ReservationItem.objects.create(
+            reservation=reservation,
+            product=self.product,
+            product_unit=unit,
+        )
+        self.client.force_login(user)
+
+        response = self.client.post(
+            f"/api/stock/reservations/{reservation.pk}/release/",
+            {"release_reason": "No longer needed"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        reservation.refresh_from_db()
+        item.refresh_from_db()
+        unit.refresh_from_db()
+        self.assertEqual(reservation.status, ReservationRecord.STATUS_RELEASED)
+        self.assertEqual(reservation.release_reason, "No longer needed")
+        self.assertEqual(reservation.released_by, user)
+        self.assertIsNotNone(reservation.released_at)
+        self.assertFalse(item.isactive)
+        self.assertEqual(unit.status, ProductUnit.STATUS_AVAILABLE)
+        movement = StockMovement.objects.get(
+            product_unit=unit,
+            movement_type=StockMovement.TYPE_RESERVATION_RELEASED,
+        )
+        self.assertEqual(movement.from_status, ProductUnit.STATUS_RESERVED)
+        self.assertEqual(movement.to_status, ProductUnit.STATUS_AVAILABLE)
+        self.assertEqual(movement.reference, reservation.reservation_number)
+        self.assertEqual(movement.reason, "No longer needed")
+
+    def test_reservation_api_blocks_release_when_unit_was_changed(self):
+        user = self._user_with_permissions(
+            "view_reservationrecord",
+            "change_reservationrecord",
+            "change_productunit",
+        )
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        unit.status = ProductUnit.STATUS_SOLD
+        unit.save(update_fields=("status", "sold_date"))
+        reservation = ReservationRecord.objects.create(
+            reserved_for="Service desk",
+            reason="Spare unit hold",
+            reserved_by=user,
+        )
+        ReservationItem.objects.create(
+            reservation=reservation,
+            product=self.product,
+            product_unit=unit,
+        )
+        self.client.force_login(user)
+
+        response = self.client.post(
+            f"/api/stock/reservations/{reservation.pk}/release/",
+            {"release_reason": "Try release"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        reservation.refresh_from_db()
+        unit.refresh_from_db()
+        self.assertEqual(reservation.status, ReservationRecord.STATUS_ACTIVE)
+        self.assertEqual(unit.status, ProductUnit.STATUS_SOLD)
+        self.assertFalse(
+            StockMovement.objects.filter(
+                product_unit=unit,
+                movement_type=StockMovement.TYPE_RESERVATION_RELEASED,
+            ).exists()
+        )
+
+    def test_reservation_api_can_cancel_active_reservation_to_release_units(self):
+        user = self._user_with_permissions(
+            "view_reservationrecord",
+            "change_reservationrecord",
+            "change_productunit",
+        )
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        unit.status = ProductUnit.STATUS_RESERVED
+        unit.save(update_fields=("status", "sold_date"))
+        reservation = ReservationRecord.objects.create(
+            reserved_for="Service desk",
+            reason="Spare unit hold",
+            reserved_by=user,
+        )
+        ReservationItem.objects.create(
+            reservation=reservation,
+            product=self.product,
+            product_unit=unit,
+        )
+        self.client.force_login(user)
+
+        response = self.client.post(
+            f"/api/stock/reservations/{reservation.pk}/cancel/",
+            {"release_reason": "Wrong unit held"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        reservation.refresh_from_db()
+        unit.refresh_from_db()
+        self.assertEqual(reservation.status, ReservationRecord.STATUS_CANCELLED)
+        self.assertEqual(unit.status, ProductUnit.STATUS_AVAILABLE)
+        self.assertTrue(
+            StockMovement.objects.filter(
+                product_unit=unit,
+                movement_type=StockMovement.TYPE_RESERVATION_RELEASED,
+                reason="Wrong unit held",
+            ).exists()
+        )
+
+    def test_reservation_api_permissions_are_explicit(self):
+        no_view_user = User.objects.create_user(username="reservation-no-view", password="test-pass")
+        no_view_user.user_permissions.add(Permission.objects.get(codename="view_productunit"))
+        no_view_user.groups.clear()
+        self.client.force_login(no_view_user)
+        self.assertEqual(self.client.get("/api/stock/reservations/").status_code, 403)
+
+        create_user = User.objects.create_user(username="reservation-create", password="test-pass")
+        create_user.user_permissions.add(Permission.objects.get(codename="view_reservationrecord"))
+        create_user.user_permissions.add(Permission.objects.get(codename="add_reservationrecord"))
+        create_user.groups.clear()
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        self.client.force_login(create_user)
+        create_response = self.client.post(
+            "/api/stock/reservations/",
+            {
+                "reserved_for": "Missing product-unit permission",
+                "reason": "Blocked",
+                "unit_ids": [unit.pk],
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(create_response.status_code, 403)
+
+        release_user = User.objects.create_user(username="reservation-release", password="test-pass")
+        release_user.user_permissions.add(Permission.objects.get(codename="view_reservationrecord"))
+        release_user.user_permissions.add(Permission.objects.get(codename="change_reservationrecord"))
+        release_user.groups.clear()
+        reservation = ReservationRecord.objects.create(reserved_for="Service desk")
+        self.client.force_login(release_user)
+        release_response = self.client.post(
+            f"/api/stock/reservations/{reservation.pk}/release/",
+            {"release_reason": "Missing product-unit permission"},
+            content_type="application/json",
+        )
+        self.assertEqual(release_response.status_code, 403)
+
+    def test_product_movements_api_includes_reservation_movements(self):
+        user = self._user_with_permissions("view_stockmovement")
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        reservation = ReservationRecord.objects.create(reserved_for="Front desk")
+        StockMovement.objects.create(
+            product=unit.product,
+            product_unit=unit,
+            movement_type=StockMovement.TYPE_RESERVED,
+            from_status=ProductUnit.STATUS_AVAILABLE,
+            to_status=ProductUnit.STATUS_RESERVED,
+            performed_by=user,
+            reservation_record=reservation,
+            reference=reservation.reservation_number,
+        )
+        self.client.force_login(user)
+
+        response = self.client.get(f"/api/stock/products/{self.product.pk}/movements/")
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()[0]["movement_type"], StockMovement.TYPE_RESERVED)
+        self.assertEqual(response.json()[0]["reservation"], reservation.pk)
+        self.assertEqual(response.json()[0]["reservation_number"], reservation.reservation_number)
+
+    def test_issue_api_creates_record_and_marks_units_issued(self):
+        user = self._user_with_permissions(
+            "view_issuerecord",
+            "add_issuerecord",
+            "change_productunit",
+        )
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/api/stock/issues/",
+            {
+                "issued_to": "Technician Team",
+                "department": "IT",
+                "branch_or_site": "Main Branch",
+                "reason": "Temporary setup",
+                "issue_date": str(timezone.localdate()),
+                "expected_return_date": str(timezone.localdate()),
+                "notes": "Return after event",
+                "unit_ids": [unit.pk],
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        unit.refresh_from_db()
+        issue = IssueRecord.objects.get(pk=response.json()["id"])
+        self.assertEqual(response.json()["issue_number"][:9], f"ISS-{timezone.localdate().year}-")
+        self.assertEqual(issue.status, IssueRecord.STATUS_ACTIVE)
+        self.assertEqual(issue.issued_to, "Technician Team")
+        self.assertEqual(issue.issued_by, user)
+        self.assertEqual(unit.status, ProductUnit.STATUS_ISSUED)
+        item = IssueItem.objects.get(issue=issue, product_unit=unit)
+        self.assertTrue(item.isactive)
+        movement = StockMovement.objects.get(
+            product_unit=unit,
+            movement_type=StockMovement.TYPE_ISSUED,
+        )
+        self.assertEqual(movement.from_status, ProductUnit.STATUS_AVAILABLE)
+        self.assertEqual(movement.to_status, ProductUnit.STATUS_ISSUED)
+        self.assertEqual(movement.reference, issue.issue_number)
+        self.assertEqual(movement.issue_record, issue)
+        self.assertEqual(movement.performed_by, user)
+
+    def test_issue_api_rejects_unavailable_units(self):
+        user = self._user_with_permissions(
+            "view_issuerecord",
+            "add_issuerecord",
+            "change_productunit",
+        )
+        unavailable_units = [
+            ProductUnit.objects.get(serial_number="API-RESERVED"),
+            ProductUnit.objects.create(
+                product=self.product,
+                serial_number="ISS-SOLD",
+                status=ProductUnit.STATUS_SOLD,
+                isactive=True,
+            ),
+            ProductUnit.objects.create(
+                product=self.product,
+                serial_number="ISS-REPAIR",
+                status=ProductUnit.STATUS_REPAIR,
+                isactive=True,
+            ),
+            ProductUnit.objects.create(
+                product=self.product,
+                serial_number="ISS-ISSUED",
+                status=ProductUnit.STATUS_ISSUED,
+                isactive=True,
+            ),
+            ProductUnit.objects.get(serial_number="API-INACTIVE"),
+        ]
+        self.client.force_login(user)
+
+        for unit in unavailable_units:
+            response = self.client.post(
+                "/api/stock/issues/",
+                {
+                    "issued_to": "Blocked issue",
+                    "reason": "Not available",
+                    "unit_ids": [unit.pk],
+                },
+                content_type="application/json",
+            )
+            self.assertEqual(response.status_code, 400, response.content)
+
+        self.assertEqual(IssueRecord.objects.count(), 0)
+        self.assertFalse(StockMovement.objects.filter(movement_type=StockMovement.TYPE_ISSUED).exists())
+
+    def test_issue_api_returns_list_and_detail(self):
+        user = self._user_with_permissions("view_issuerecord")
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        issue = IssueRecord.objects.create(
+            issued_to="Technician Team",
+            department="IT",
+            branch_or_site="Main Branch",
+            reason="Temporary setup",
+            issued_by=user,
+        )
+        IssueItem.objects.create(
+            issue=issue,
+            product=self.product,
+            product_unit=unit,
+            notes="Cable attached",
+        )
+        self.client.force_login(user)
+
+        list_response = self.client.get("/api/stock/issues/", {"q": "Technician"})
+        detail_response = self.client.get(f"/api/stock/issues/{issue.pk}/")
+
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(len(list_response.json()), 1)
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertEqual(detail_response.json()["issue_number"], issue.issue_number)
+        self.assertEqual(detail_response.json()["issued_to"], "Technician Team")
+        self.assertEqual(detail_response.json()["issued_by_name"], user.username)
+        self.assertEqual(detail_response.json()["total_units"], 1)
+        self.assertEqual(detail_response.json()["items"][0]["product_unit"], unit.pk)
+        self.assertEqual(detail_response.json()["items"][0]["serial_number"], "API-AVAILABLE")
+
+    def test_issue_api_returns_active_issued_units(self):
+        user = self._user_with_permissions(
+            "view_issuerecord",
+            "change_issuerecord",
+            "change_productunit",
+        )
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        unit.status = ProductUnit.STATUS_ISSUED
+        unit.save(update_fields=("status", "sold_date"))
+        issue = IssueRecord.objects.create(
+            issued_to="Technician Team",
+            reason="Temporary setup",
+            issued_by=user,
+        )
+        item = IssueItem.objects.create(
+            issue=issue,
+            product=self.product,
+            product_unit=unit,
+        )
+        self.client.force_login(user)
+
+        response = self.client.post(
+            f"/api/stock/issues/{issue.pk}/return/",
+            {
+                "return_reason": "Task complete",
+                "returned_date": str(timezone.localdate()),
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        issue.refresh_from_db()
+        item.refresh_from_db()
+        unit.refresh_from_db()
+        self.assertEqual(issue.status, IssueRecord.STATUS_RETURNED)
+        self.assertEqual(issue.return_reason, "Task complete")
+        self.assertEqual(issue.returned_by, user)
+        self.assertIsNotNone(issue.returned_at)
+        self.assertFalse(item.isactive)
+        self.assertEqual(unit.status, ProductUnit.STATUS_AVAILABLE)
+        movement = StockMovement.objects.get(
+            product_unit=unit,
+            movement_type=StockMovement.TYPE_ISSUE_RETURNED,
+        )
+        self.assertEqual(movement.from_status, ProductUnit.STATUS_ISSUED)
+        self.assertEqual(movement.to_status, ProductUnit.STATUS_AVAILABLE)
+        self.assertEqual(movement.reference, issue.issue_number)
+        self.assertEqual(movement.issue_record, issue)
+
+    def test_issue_api_blocks_return_when_unit_was_changed(self):
+        user = self._user_with_permissions(
+            "view_issuerecord",
+            "change_issuerecord",
+            "change_productunit",
+        )
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        unit.status = ProductUnit.STATUS_REPAIR
+        unit.save(update_fields=("status", "sold_date"))
+        issue = IssueRecord.objects.create(issued_to="Technician Team")
+        IssueItem.objects.create(issue=issue, product=self.product, product_unit=unit)
+        self.client.force_login(user)
+
+        response = self.client.post(
+            f"/api/stock/issues/{issue.pk}/return/",
+            {"return_reason": "Try return"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        issue.refresh_from_db()
+        unit.refresh_from_db()
+        self.assertEqual(issue.status, IssueRecord.STATUS_ACTIVE)
+        self.assertEqual(unit.status, ProductUnit.STATUS_REPAIR)
+        self.assertFalse(
+            StockMovement.objects.filter(
+                product_unit=unit,
+                movement_type=StockMovement.TYPE_ISSUE_RETURNED,
+            ).exists()
+        )
+
+    def test_issue_api_blocks_return_when_issue_is_not_active(self):
+        user = self._user_with_permissions(
+            "view_issuerecord",
+            "change_issuerecord",
+            "change_productunit",
+        )
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        unit.status = ProductUnit.STATUS_ISSUED
+        unit.save(update_fields=("status", "sold_date"))
+        issue = IssueRecord.objects.create(
+            issued_to="Technician Team",
+            status=IssueRecord.STATUS_RETURNED,
+        )
+        IssueItem.objects.create(issue=issue, product=self.product, product_unit=unit)
+        self.client.force_login(user)
+
+        response = self.client.post(
+            f"/api/stock/issues/{issue.pk}/return/",
+            {"return_reason": "Duplicate return"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        unit.refresh_from_db()
+        self.assertEqual(unit.status, ProductUnit.STATUS_ISSUED)
+
+    def test_issue_api_permissions_are_explicit(self):
+        no_view_user = User.objects.create_user(username="issue-no-view", password="test-pass")
+        no_view_user.user_permissions.add(Permission.objects.get(codename="view_productunit"))
+        no_view_user.groups.clear()
+        self.client.force_login(no_view_user)
+        self.assertEqual(self.client.get("/api/stock/issues/").status_code, 403)
+
+        create_user = User.objects.create_user(username="issue-create", password="test-pass")
+        create_user.user_permissions.add(Permission.objects.get(codename="view_issuerecord"))
+        create_user.user_permissions.add(Permission.objects.get(codename="add_issuerecord"))
+        create_user.groups.clear()
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        self.client.force_login(create_user)
+        create_response = self.client.post(
+            "/api/stock/issues/",
+            {
+                "issued_to": "Missing product-unit permission",
+                "unit_ids": [unit.pk],
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(create_response.status_code, 403)
+
+        return_user = User.objects.create_user(username="issue-return", password="test-pass")
+        return_user.user_permissions.add(Permission.objects.get(codename="view_issuerecord"))
+        return_user.user_permissions.add(Permission.objects.get(codename="change_issuerecord"))
+        return_user.groups.clear()
+        issue = IssueRecord.objects.create(issued_to="Technician Team")
+        self.client.force_login(return_user)
+        return_response = self.client.post(
+            f"/api/stock/issues/{issue.pk}/return/",
+            {"return_reason": "Missing product-unit permission"},
+            content_type="application/json",
+        )
+        self.assertEqual(return_response.status_code, 403)
+
+    def test_product_movements_api_includes_issue_movements(self):
+        user = self._user_with_permissions("view_stockmovement")
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        issue = IssueRecord.objects.create(issued_to="Technician Team")
+        StockMovement.objects.create(
+            product=unit.product,
+            product_unit=unit,
+            movement_type=StockMovement.TYPE_ISSUED,
+            from_status=ProductUnit.STATUS_AVAILABLE,
+            to_status=ProductUnit.STATUS_ISSUED,
+            performed_by=user,
+            issue_record=issue,
+            reference=issue.issue_number,
+        )
+        self.client.force_login(user)
+
+        response = self.client.get(f"/api/stock/products/{self.product.pk}/movements/")
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()[0]["movement_type"], StockMovement.TYPE_ISSUED)
+        self.assertEqual(response.json()[0]["issue"], issue.pk)
+        self.assertEqual(response.json()[0]["issue_number"], issue.issue_number)
+
     def test_reference_apis_return_lookup_data(self):
         user = self._user_with_permissions(
             "view_product",
@@ -2623,6 +3321,18 @@ class InventoryApiTests(TestCase):
 
     def test_summary_api_returns_inventory_counts(self):
         user = self._user_with_permissions("view_product")
+        ProductUnit.objects.create(
+            product=self.product,
+            serial_number="API-ISSUED",
+            status=ProductUnit.STATUS_ISSUED,
+            isactive=True,
+        )
+        ProductUnit.objects.create(
+            product=self.product,
+            serial_number="API-REPAIR",
+            status=ProductUnit.STATUS_REPAIR,
+            isactive=True,
+        )
         self.client.force_login(user)
 
         response = self.client.get("/api/stock/summary/")
@@ -2631,6 +3341,9 @@ class InventoryApiTests(TestCase):
         self.assertEqual(response.json()["total_products"], 1)
         self.assertEqual(response.json()["available_units"], 1)
         self.assertEqual(response.json()["reserved_units"], 1)
+        self.assertEqual(response.json()["issued_units"], 1)
+        self.assertEqual(response.json()["repair_units"], 1)
+        self.assertNotIn("returned_units", response.json())
         self.assertEqual(response.json()["out_of_stock_products"], 0)
         self.assertEqual(response.json()["low_stock_products"], 1)
         self.assertNotIn("critical_stock_products", response.json())
@@ -2876,7 +3589,7 @@ class InventoryApiTests(TestCase):
             "change_productunit",
         )
         unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
-        unit.status = ProductUnit.STATUS_RETURNED
+        unit.status = ProductUnit.STATUS_REPAIR
         unit.save(update_fields=("status", "sold_date"))
         delivery = DeliveryRecord.objects.create(customer_name="Cancel Customer")
         DeliveryItem.objects.create(
@@ -2896,7 +3609,7 @@ class InventoryApiTests(TestCase):
         delivery.refresh_from_db()
         unit.refresh_from_db()
         self.assertEqual(delivery.status, DeliveryRecord.STATUS_COMPLETED)
-        self.assertEqual(unit.status, ProductUnit.STATUS_RETURNED)
+        self.assertEqual(unit.status, ProductUnit.STATUS_REPAIR)
         self.assertFalse(
             StockMovement.objects.filter(
                 product_unit=unit,
@@ -2960,6 +3673,31 @@ class InventoryApiTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(unit.status, ProductUnit.STATUS_RESERVED)
+
+    def test_delivery_api_rejects_issued_units_directly(self):
+        user = self._user_with_permissions(
+            "add_deliveryrecord",
+            "change_productunit",
+        )
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        unit.status = ProductUnit.STATUS_ISSUED
+        unit.save(update_fields=("status", "sold_date"))
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/api/stock/deliveries/",
+            {
+                "customer_name": "Internal Department",
+                "receiver_name": "Receiver Name",
+                "unit_ids": [unit.pk],
+            },
+            content_type="application/json",
+        )
+
+        unit.refresh_from_db()
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(unit.status, ProductUnit.STATUS_ISSUED)
 
     def test_receiving_api_creates_supplier_record_and_stock_units(self):
         user = self._user_with_permissions(

@@ -7,11 +7,15 @@ from .models import (
     Category,
     DeliveryItem,
     DeliveryRecord,
+    IssueItem,
+    IssueRecord,
     Product,
     ProductModel,
     ProductUnit,
     ReceivingItem,
     ReceivingRecord,
+    ReservationItem,
+    ReservationRecord,
     StockMovement,
     Supplier,
 )
@@ -39,8 +43,9 @@ class ProductAdmin(admin.ModelAdmin):
         "total_quantity",
         "available_quantity",
         "reserved_quantity",
+        "issued_quantity",
         "sold_quantity",
-        "returned_quantity",
+        "repair_quantity",
         "reorder_stock_level",
         "stock_alert",
         "category",
@@ -88,6 +93,13 @@ class ProductAdmin(admin.ModelAdmin):
                     units__isactive=True,
                 ),
             ),
+            issued_unit_count=Count(
+                "units",
+                filter=Q(
+                    units__status=ProductUnit.STATUS_ISSUED,
+                    units__isactive=True,
+                ),
+            ),
             sold_unit_count=Count(
                 "units",
                 filter=Q(
@@ -95,10 +107,10 @@ class ProductAdmin(admin.ModelAdmin):
                     units__isactive=True,
                 ),
             ),
-            returned_unit_count=Count(
+            repair_unit_count=Count(
                 "units",
                 filter=Q(
-                    units__status=ProductUnit.STATUS_RETURNED,
+                    units__status=ProductUnit.STATUS_REPAIR,
                     units__isactive=True,
                 ),
             ),
@@ -122,13 +134,17 @@ class ProductAdmin(admin.ModelAdmin):
     def reserved_quantity(self, obj):
         return self.stock_quantity(obj, "reserved_unit_count", "reserved_units")
 
+    @admin.display(description="Issued Qty", ordering="issued_unit_count")
+    def issued_quantity(self, obj):
+        return self.stock_quantity(obj, "issued_unit_count", "issued_units")
+
     @admin.display(description="Sold Qty", ordering="sold_unit_count")
     def sold_quantity(self, obj):
         return self.stock_quantity(obj, "sold_unit_count", "sold_units")
 
-    @admin.display(description="Returned Qty", ordering="returned_unit_count")
-    def returned_quantity(self, obj):
-        return self.stock_quantity(obj, "returned_unit_count", "returned_units")
+    @admin.display(description="Repair Qty", ordering="repair_unit_count")
+    def repair_quantity(self, obj):
+        return self.stock_quantity(obj, "repair_unit_count", "repair_units")
 
     @admin.display(description="Stock Alert")
     def stock_alert(self, obj):
@@ -276,6 +292,8 @@ class StockMovementAdmin(admin.ModelAdmin):
         "product_unit__serial_number",
         "receiving_record__receiving_number",
         "delivery_record__delivery_number",
+        "reservation_record__reservation_number",
+        "issue_record__issue_number",
     )
     list_select_related = (
         "product",
@@ -283,6 +301,8 @@ class StockMovementAdmin(admin.ModelAdmin):
         "performed_by",
         "receiving_record",
         "delivery_record",
+        "reservation_record",
+        "issue_record",
     )
     readonly_fields = (
         "product_unit",
@@ -296,6 +316,8 @@ class StockMovementAdmin(admin.ModelAdmin):
         "movement_date",
         "receiving_record",
         "delivery_record",
+        "reservation_record",
+        "issue_record",
         "reference",
         "crdate",
         "isactive",
@@ -304,6 +326,176 @@ class StockMovementAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request):
         return False
+
+
+class ReservationItemInline(admin.TabularInline):
+    model = ReservationItem
+    extra = 0
+    autocomplete_fields = ("product_unit",)
+    readonly_fields = ("product", "crdate")
+    fields = ("product_unit", "product", "notes", "isactive", "crdate")
+
+
+@admin.register(ReservationRecord)
+class ReservationRecordAdmin(admin.ModelAdmin):
+    inlines = (ReservationItemInline,)
+    list_display = (
+        "reservation_number",
+        "reserved_for",
+        "status",
+        "expected_release_date",
+        "unit_count",
+        "reserved_by",
+        "released_by",
+        "isactive",
+        "crdate",
+    )
+    search_fields = (
+        "reservation_number",
+        "reserved_for",
+        "reason",
+        "items__product_unit__serial_number",
+        "items__product__descript",
+        "items__product__sku",
+    )
+    list_filter = ("status", "expected_release_date", "isactive")
+    readonly_fields = (
+        "reservation_number",
+        "reserved_at",
+        "released_at",
+        "crdate",
+    )
+    autocomplete_fields = ("reserved_by", "released_by")
+    ordering = ("-reserved_at", "-reservation_number")
+
+    fieldsets = (
+        (
+            "Reservation record",
+            {
+                "fields": (
+                    "reservation_number",
+                    "reserved_for",
+                    "reason",
+                    "expected_release_date",
+                    "status",
+                    "reserved_by",
+                    "reserved_at",
+                    "isactive",
+                )
+            },
+        ),
+        (
+            "Notes",
+            {
+                "fields": (
+                    "notes",
+                    "crdate",
+                )
+            },
+        ),
+        (
+            "Release",
+            {
+                "fields": (
+                    "release_reason",
+                    "released_at",
+                    "released_by",
+                )
+            },
+        ),
+    )
+
+    @admin.display(description="Units")
+    def unit_count(self, obj):
+        return obj.total_units
+
+
+class IssueItemInline(admin.TabularInline):
+    model = IssueItem
+    extra = 0
+    autocomplete_fields = ("product_unit",)
+    readonly_fields = ("product", "crdate")
+    fields = ("product_unit", "product", "notes", "isactive", "crdate")
+
+
+@admin.register(IssueRecord)
+class IssueRecordAdmin(admin.ModelAdmin):
+    inlines = (IssueItemInline,)
+    list_display = (
+        "issue_number",
+        "issued_to",
+        "status",
+        "issue_date",
+        "expected_return_date",
+        "returned_date",
+        "unit_count",
+        "issued_by",
+        "returned_by",
+        "isactive",
+        "crdate",
+    )
+    search_fields = (
+        "issue_number",
+        "issued_to",
+        "department",
+        "branch_or_site",
+        "reason",
+        "items__product_unit__serial_number",
+        "items__product__descript",
+        "items__product__sku",
+    )
+    list_filter = ("status", "issue_date", "expected_return_date", "isactive")
+    readonly_fields = (
+        "issue_number",
+        "returned_at",
+        "crdate",
+    )
+    autocomplete_fields = ("issued_by", "returned_by")
+    ordering = ("-issue_date", "-issue_number")
+
+    fieldsets = (
+        (
+            "Issue record",
+            {
+                "fields": (
+                    "issue_number",
+                    "issued_to",
+                    "department",
+                    "branch_or_site",
+                    "reason",
+                    "issue_date",
+                    "expected_return_date",
+                    "status",
+                    "issued_by",
+                    "isactive",
+                )
+            },
+        ),
+        (
+            "Return",
+            {
+                "fields": (
+                    "returned_date",
+                    "return_reason",
+                    "returned_by",
+                    "returned_at",
+                )
+            },
+        ),
+        (
+            "Notes",
+            {
+                "fields": (
+                    "notes",
+                    "crdate",
+                )
+            },
+        ),
+    )
+
+    @admin.display(description="Units")
+    def unit_count(self, obj):
+        return obj.total_units
 
 
 class DeliveryItemInline(admin.TabularInline):

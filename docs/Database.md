@@ -92,11 +92,15 @@ Statuses:
 
 - `available`
 - `reserved`
+- `issued`
 - `sold`
-- `returned`
+- `repair`
 - `inactive`
 
 When a unit is saved as sold, `sold_date` is filled if empty.
+Reserved units are operational holds and must be released back to available before delivery.
+Issued units are temporary handoffs expected to come back. Repair units physically exist but are not usable while under repair, testing, or decision.
+Client return workflows should later move sold units to available or repair; they should not introduce a permanent returned status.
 
 ### ReceivingRecord
 
@@ -202,6 +206,105 @@ Rules:
 - Item lines preserve the delivered product and product-unit serial relationship for delivery detail views and future stock history.
 - Correction workflows may update line notes. Product, product-unit link, delivered units, and serial number are not directly editable after creation.
 
+### ReservationRecord
+
+Operational hold record for available stock units. This is not a financial commitment, invoice, payment, or ERP reservation.
+
+Fields:
+
+- `reservation_number`
+- `reserved_for`
+- `reason`
+- `expected_release_date`
+- `notes`
+- `status`
+- `reserved_by`
+- `reserved_at`
+- `release_reason`
+- `released_by`
+- `released_at`
+- `crdate`
+- `isactive`
+
+Rules:
+
+- Reservation numbers are generated as `RSV-YYYY-0001`.
+- Status is `active`, `released`, or `cancelled`.
+- Creating a reservation requires active available product units.
+- Creating a reservation marks linked product units reserved.
+- Releasing or cancelling a reservation requires linked units to still be active, reserved, and linked to active items on that reservation.
+- Successful release or cancellation marks reservation items inactive and returns linked product units to available stock.
+- Reserved units cannot be delivered directly by Create Delivery; they must be released first.
+
+### ReservationItem
+
+Connects reserved stock units to a reservation record.
+
+Fields:
+
+- `reservation`
+- `product_unit`
+- `product`
+- `notes`
+- `crdate`
+- `isactive`
+
+Rules:
+
+- Item lines preserve the reserved product and product-unit serial relationship for reservation detail views and movement history.
+- Product, product-unit link, and serial number are not directly editable after creation.
+
+### IssueRecord
+
+Operational issue record for temporary stock handoffs that are expected to come back. This is not a sale, invoice, payment, or ERP posting.
+
+Fields:
+
+- `issue_number`
+- `issued_to`
+- `department`
+- `branch_or_site`
+- `reason`
+- `issue_date`
+- `expected_return_date`
+- `returned_date`
+- `notes`
+- `status`
+- `issued_by`
+- `returned_by`
+- `return_reason`
+- `returned_at`
+- `crdate`
+- `isactive`
+
+Rules:
+
+- Issue numbers are generated as `ISS-YYYY-0001`.
+- Status is `active`, `returned`, or `cancelled`.
+- Creating an issue requires active available product units.
+- Creating an issue marks linked product units issued.
+- Returning an issue requires linked units to still be active, issued, and linked to active items on that issue.
+- Successful return marks issue items inactive and returns linked product units to available stock.
+- Issued units cannot be delivered directly by Create Delivery; they must be returned first.
+
+### IssueItem
+
+Connects issued stock units to an issue record.
+
+Fields:
+
+- `issue`
+- `product_unit`
+- `product`
+- `notes`
+- `crdate`
+- `isactive`
+
+Rules:
+
+- Item lines preserve the issued product and product-unit serial relationship for issue detail views and movement history.
+- Product, product-unit link, and serial number are not directly editable after creation.
+
 ### StockMovement
 
 Durable operational movement ledger for physical product units.
@@ -219,6 +322,8 @@ Fields:
 - `movement_date`
 - `receiving_record`
 - `delivery_record`
+- `reservation_record`
+- `issue_record`
 - `reference`
 - `crdate`
 - `isactive`
@@ -231,6 +336,10 @@ Movement types:
 - `delivery_cancelled`
 - `manual_add`
 - `manual_update`
+- `reserved`
+- `reservation_released`
+- `issued`
+- `issue_returned`
 
 Rules:
 
@@ -240,6 +349,10 @@ Rules:
 - Receiving cancellation writes `receiving_cancelled` rows when linked product units move to inactive.
 - Delivery creation writes `delivered` rows when selected product units move from available to sold.
 - Delivery cancellation writes `delivery_cancelled` rows when linked product units return from sold to available.
+- Reservation creation writes `reserved` rows when selected product units move from available to reserved.
+- Reservation release or cancellation writes `reservation_released` rows when linked product units return from reserved to available.
+- Issue creation writes `issued` rows when selected product units move from available to issued.
+- Issue return writes `issue_returned` rows when linked product units return from issued to available.
 - Manual Add Unit writes `manual_add` rows.
 - Direct product-unit status updates write `manual_update` rows when the status changes.
 - Clean deployments record movements going forward; old local development data is not backfilled automatically.

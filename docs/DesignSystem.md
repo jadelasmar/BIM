@@ -155,6 +155,17 @@ inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold
 
 Do not invent per-page status colors.
 
+Current ProductUnit status badges:
+
+- `available`
+- `reserved`
+- `issued`
+- `sold`
+- `repair`
+- `inactive`
+
+Do not expose `returned` or `damaged` as active stock-unit badge statuses.
+
 ## Cards And Empty States
 
 Reusable components:
