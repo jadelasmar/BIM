@@ -118,6 +118,7 @@ Rules:
 - Supplier is optional for direct/manual receiving.
 - Reference number stores an optional supplier document/reference.
 - Receiving numbers are generated as `RCV-YYYY-0001`.
+- Supplier, reference number, received date, and `isactive` are the header fields expected to support future supplier, document/reference, date-range, and active/cancelled receiving reports.
 
 ### ReceivingItem
 
@@ -140,6 +141,7 @@ Rules:
 - `quantity` supports non-serialized receiving.
 - Serialized receiving creates one item per serial number and links each item to a `ProductUnit`.
 - `cost` is operational/reference cost only; it does not create accounting, invoice, tax, payment, or voucher behavior.
+- Product, serial number, product-unit link, and line `isactive` support future item receiving reports and serial traceability.
 
 ### DeliveryRecord
 

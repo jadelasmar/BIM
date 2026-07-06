@@ -251,6 +251,23 @@ class ReceivingRecordListCreateAPIView(generics.ListCreateAPIView):
         serializer.save()
 
 
+class ReceivingRecordDetailAPIView(generics.RetrieveAPIView):
+    serializer_class = ReceivingRecordSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get_queryset(self):
+        _require_perm(self.request.user, stock_constants.VIEW_RECEIVING_RECORD)
+        return (
+            ReceivingRecord.objects.filter(isactive=True)
+            .select_related("supplier", "created_by")
+            .prefetch_related(
+                "items",
+                "items__product",
+                "items__product_unit",
+            )
+        )
+
+
 class InventorySummaryAPIView(APIView):
     permission_classes = (permissions.IsAuthenticated,)
 

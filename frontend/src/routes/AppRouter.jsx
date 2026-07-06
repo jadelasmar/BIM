@@ -403,7 +403,7 @@ function OperationsPage({ data }) {
   const workflows = [
     {
       title: "Receive Stock",
-      detail: "Record supplier receipts with delivery or invoice references.",
+      detail: "Record supplier receipts with delivery or reference details.",
       href: data.routes.receiveStock,
       enabled: data.quickActions.some((action) => action.label === "Receive Stock" && action.enabled),
       icon: workflowMeta.receive_stock.icon,
@@ -478,6 +478,351 @@ function OperationsPage({ data }) {
   );
 }
 
+function ReceivingRecordsPage({ data }) {
+  const [records, setRecords] = useState([]);
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const params = new URLSearchParams();
+    if (query.trim()) params.set("q", query.trim());
+
+    async function loadReceivingRecords() {
+      setLoading(true);
+      setError("");
+      try {
+        const endpoint = params.toString()
+          ? `${data.api.receivingRecords}?${params.toString()}`
+          : data.api.receivingRecords;
+        const response = await fetch(endpoint, { signal: controller.signal });
+
+        if (!response.ok) {
+          throw new Error("Could not load receiving records.");
+        }
+
+        setRecords(await response.json());
+      } catch (loadError) {
+        if (loadError.name !== "AbortError") {
+          setError(loadError.message);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadReceivingRecords();
+    return () => controller.abort();
+  }, [data.api.receivingRecords, query]);
+
+  const totalQuantity = records.reduce((sum, record) => sum + Number(record.total_quantity || 0), 0);
+  const manualCount = records.filter((record) => !record.supplier_name).length;
+  const recentRecord = records[0];
+  const receivingKpis = [
+    {
+      label: "Receiving Records",
+      value: formatCount(records.length),
+      detail: "stock entry records",
+      icon: "download",
+      tone: "green"
+    },
+    {
+      label: "Received Quantity",
+      value: formatCount(totalQuantity),
+      detail: "items recorded",
+      icon: "layers",
+      tone: "blue"
+    },
+    {
+      label: "Supplier Sources",
+      value: formatCount(records.length - manualCount),
+      detail: `${formatCount(manualCount)} manual entries`,
+      icon: "suppliers",
+      tone: "purple"
+    },
+    {
+      label: "Latest Receipt",
+      value: recentRecord ? formatDate(recentRecord.received_date) : "-",
+      detail: recentRecord?.receiving_number || "no receiving yet",
+      icon: "clock",
+      tone: "neutral"
+    }
+  ];
+
+  return (
+    <Shell data={data}>
+      <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Receiving Records</h1>
+          <p className="mt-1 text-sm text-zinc-400">Review operational stock-entry records.</p>
+        </div>
+        <Button as="a" href={data.routes.receiveStock} variant="primary">
+          <Plus className="h-4 w-4" />
+          Receive Stock
+        </Button>
+      </header>
+
+      <KpiGrid items={receivingKpis} />
+
+      <section className="mt-4 rounded-lg border border-nexus-line bg-nexus-panel p-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <SearchBar
+            className="flex-1"
+            inputClassName="placeholder:text-zinc-500"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search receiving number, supplier, reference, product, or serial..."
+          />
+          <span className="text-xs text-zinc-500">{records.length} records</span>
+        </div>
+      </section>
+
+      <ReceivingRecordsTable records={records} loading={loading} error={error} />
+    </Shell>
+  );
+}
+
+function ReceivingRecordsTable({ records, loading, error }) {
+  return (
+    <section className="mt-4 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-zinc-800/80 text-zinc-400">
+            <tr>
+              <th className="px-4 py-3 font-medium">Receiving</th>
+              <th className="px-4 py-3 font-medium">Source</th>
+              <th className="px-4 py-3 font-medium">Received Date</th>
+              <th className="px-4 py-3 font-medium">Reference</th>
+              <th className="px-4 py-3 font-medium">Items</th>
+              <th className="px-4 py-3 font-medium">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <TableMessage message="Loading receiving records..." />
+            ) : error ? (
+              <TableMessage message={error} />
+            ) : records.length ? (
+              records.map((record) => (
+                <tr key={record.id} className="border-t border-nexus-line hover:bg-zinc-900/70">
+                  <td className="px-4 py-4">
+                    <p className="font-mono text-xs font-bold text-nexus-orange">{record.receiving_number}</p>
+                    <p className="mt-1 text-xs text-zinc-500">Created by {record.created_by_name || "-"}</p>
+                  </td>
+                  <td className="px-4 py-4">
+                    <p className="font-semibold text-white">{record.supplier_name || "Manual source"}</p>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      {record.supplier_name ? "Supplier receiving" : "Direct stock entry"}
+                    </p>
+                  </td>
+                  <td className="px-4 py-4 text-zinc-300">{formatDate(record.received_date)}</td>
+                  <td className="px-4 py-4 font-mono text-xs text-zinc-400">{record.reference_number || "-"}</td>
+                  <td className="px-4 py-4">
+                    <p className="font-bold text-white">{formatCount(record.total_quantity || 0)}</p>
+                    <p className="mt-1 text-xs text-zinc-500">{formatCount(record.items?.length || 0)} lines</p>
+                  </td>
+                  <td className="px-4 py-4">
+                    <Status status={record.isactive ? "Recorded" : "Inactive"} statusClass={record.isactive ? "received" : "inactive"} />
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan="6">
+                  <EmptyState
+                    className="border-t border-nexus-line"
+                    title="No receiving records yet."
+                    description="Use Receive Stock to create the first operational receiving record."
+                  />
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function ReceivingRecordDetailPage({ data }) {
+  const receivingId = (data.currentPath || window.location.pathname).match(/\/operations\/receiving\/(\d+)\//)?.[1];
+  const [record, setRecord] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [notFound, setNotFound] = useState(false);
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadReceivingRecord() {
+      setLoading(true);
+      setError("");
+      setNotFound(false);
+      try {
+        const endpoint = data.api.receivingRecordDetail.replace("{id}", receivingId);
+        const response = await fetch(endpoint, { signal: controller.signal });
+
+        if (response.status === 404) {
+          setNotFound(true);
+          setRecord(null);
+          return;
+        }
+        if (!response.ok) {
+          throw new Error("Could not load receiving record.");
+        }
+
+        setRecord(await response.json());
+      } catch (loadError) {
+        if (loadError.name !== "AbortError") {
+          setError(loadError.message);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadReceivingRecord();
+    return () => controller.abort();
+  }, [data.api.receivingRecordDetail, receivingId]);
+
+  return (
+    <Shell data={data}>
+      <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <a href={data.routes.receivingRecords} className="inline-flex items-center gap-2 text-sm font-semibold text-nexus-orange hover:text-orange-300">
+            <ChevronRight className="h-4 w-4 rotate-180" />
+            Back to Receiving Records
+          </a>
+          <h1 className="mt-3 text-2xl font-bold text-white">Receiving Record</h1>
+          <p className="mt-1 text-sm text-zinc-400">Operational stock-entry detail.</p>
+        </div>
+        {record ? <Status status={record.isactive ? "Recorded" : "Inactive"} statusClass={record.isactive ? "received" : "inactive"} /> : null}
+      </header>
+
+      {loading ? (
+        <section className="rounded-lg border border-nexus-line bg-nexus-panel p-6 text-sm text-zinc-500">
+          Loading receiving record...
+        </section>
+      ) : error ? (
+        <section className="rounded-lg border border-nexus-red/60 bg-red-500/10 p-6 text-sm font-semibold text-red-200">
+          {error}
+        </section>
+      ) : notFound ? (
+        <EmptyState
+          className="rounded-lg border border-nexus-line bg-nexus-panel"
+          title="Receiving record not found."
+          description="The record may have been removed or you may not have access."
+        />
+      ) : record ? (
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="min-w-0 space-y-5">
+            <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
+              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">Receiving Number</p>
+                  <h2 className="mt-2 font-mono text-2xl font-bold text-nexus-orange">{record.receiving_number}</h2>
+                </div>
+                <div className="grid gap-3 text-sm md:min-w-48 md:text-right">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">Received Date</p>
+                    <p className="mt-1 text-zinc-300">{formatDate(record.received_date)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">Reference Number</p>
+                    <p className="mt-1 font-mono text-xs text-zinc-300">{record.reference_number || "No reference"}</p>
+                  </div>
+                </div>
+              </div>
+
+              <dl className="mt-5 grid gap-4 md:grid-cols-2">
+                <DetailRow label="Source" value={record.supplier_name || "Manual source"} strong />
+                <DetailRow label="Received Date" value={formatDate(record.received_date)} />
+                <DetailRow label="Reference Number" value={record.reference_number || "-"} />
+                <DetailRow label="Created By" value={record.created_by_name || "-"} />
+                <DetailRow label="Total Quantity" value={formatCount(record.total_quantity || 0)} highlight />
+                <DetailRow label="Status" value={record.isactive ? "Recorded" : "Inactive"} />
+              </dl>
+
+              {record.notes ? (
+                <div className="mt-5 rounded-lg border border-nexus-line bg-nexus-panel2 p-4">
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">Notes</p>
+                  <p className="mt-2 text-sm text-zinc-300">{record.notes}</p>
+                </div>
+              ) : null}
+            </section>
+
+            <ReceivingItemsTable items={record.items || []} />
+          </div>
+
+          <aside className="rounded-lg border border-nexus-line bg-nexus-panel p-4 xl:sticky xl:top-5 xl:self-start">
+            <h2 className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">Activity</h2>
+            <div className="mt-4 space-y-3 text-sm">
+              <DetailRow label="Record Status" value={record.isactive ? "Recorded" : "Inactive"} highlight />
+              <DetailRow label="Created" value={formatDate(record.crdate)} />
+              <DetailRow label="Item Lines" value={formatCount(record.items?.length || 0)} />
+              <DetailRow label="Reference Cost" value="Reference cost only" />
+            </div>
+          </aside>
+        </div>
+      ) : null}
+    </Shell>
+  );
+}
+
+function ReceivingItemsTable({ items }) {
+  return (
+    <section className="overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
+      <PanelHeader title="Received Items" badge={formatCount(items.length)} />
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-zinc-800/80 text-zinc-400">
+            <tr>
+              <th className="px-4 py-3 font-medium">Product</th>
+              <th className="px-4 py-3 font-medium">Quantity</th>
+              <th className="px-4 py-3 font-medium">Serial / Unit</th>
+              <th className="px-4 py-3 font-medium">Reference Cost</th>
+              <th className="px-4 py-3 font-medium">Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.length ? (
+              items.map((item) => (
+                <tr key={item.id} className="border-t border-nexus-line">
+                  <td className="px-4 py-4">
+                    <p className="font-semibold text-white">{item.product_name}</p>
+                    <p className="mt-1 font-mono text-xs text-zinc-500">{item.product_sku || "-"}</p>
+                  </td>
+                  <td className="px-4 py-4 font-bold text-white">{formatCount(item.quantity || 0)}</td>
+                  <td className="px-4 py-4">
+                    <p className="font-mono text-xs text-zinc-300">{item.serial_number || item.product_unit_serial_number || "-"}</p>
+                    <p className="mt-1 text-xs text-zinc-500">{item.product_unit ? `Unit #${item.product_unit}` : "No unit link"}</p>
+                  </td>
+                  <td className="px-4 py-4">
+                    <p className="font-mono text-xs text-zinc-300">{formatCurrency(item.cost)}</p>
+                    <p className="mt-1 text-xs text-zinc-500">Reference cost only</p>
+                  </td>
+                  <td className="px-4 py-4 text-zinc-400">{item.notes || "-"}</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan="5">
+                  <EmptyState
+                    className="border-t border-nexus-line"
+                    title="No item lines on this record."
+                    description="This receiving record has no active item rows."
+                  />
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 function Header({ data }) {
   const [greeting, setGreeting] = useState(() => browserGreeting(data.hero.greetingName));
 
@@ -507,10 +852,12 @@ function Header({ data }) {
           </span>
         </p>
         <SearchBar
-          className="mt-4 max-w-xl rounded-lg bg-nexus-panel"
-          inputClassName="placeholder:text-zinc-500"
+          className="mt-4 max-w-xl cursor-not-allowed rounded-lg bg-nexus-panel opacity-60"
+          inputClassName="cursor-not-allowed placeholder:text-zinc-500"
           type="search"
-          placeholder={data.hero.searchPlaceholder}
+          disabled
+          title="Global search coming later"
+          placeholder="Global search coming later..."
         />
       </div>
     </header>
@@ -720,7 +1067,12 @@ function InventoryHeader({ actions }) {
         <p className="mt-1 text-sm text-zinc-400">Manage products and stock availability.</p>
       </div>
       <div className="flex items-center gap-3 text-sm">
-        <button className="inline-flex h-9 items-center gap-2 rounded-md px-3 font-semibold text-zinc-200 hover:bg-nexus-panel">
+        <button
+          type="button"
+          disabled
+          title="Export coming later"
+          className="inline-flex h-9 cursor-not-allowed items-center gap-2 rounded-md px-3 font-semibold text-zinc-500"
+        >
           <Icon name="upload" className="h-4 w-4" />
           Export
         </button>
@@ -895,7 +1247,13 @@ function ProductDetail({ product, canAccessAdmin = false }) {
     <aside className="rounded-lg border border-nexus-line bg-nexus-panel xl:sticky xl:top-5 xl:h-[calc(100vh-2.5rem)]">
       <div className="flex items-center justify-between border-b border-nexus-line px-4 py-4">
         <h2 className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">Product Detail</h2>
-        <button className="text-zinc-500 hover:text-zinc-200" type="button">
+        <button
+          aria-label="Close product detail panel coming later"
+          className="cursor-not-allowed text-zinc-600"
+          disabled
+          title="Panel close coming later"
+          type="button"
+        >
           <X className="h-4 w-4" />
         </button>
       </div>
@@ -945,11 +1303,13 @@ function ProductDetail({ product, canAccessAdmin = false }) {
           </a>
         ) : null}
       </div>
-      <CardFooter className="mt-auto grid grid-cols-2 gap-2 p-4">
-        <Button as="a" href={`/admin/bim_stock/product/${product.id}/change/`} variant="outline">
-          <Edit3 className="h-4 w-4" />
-          Edit
-        </Button>
+      <CardFooter className={`mt-auto grid gap-2 p-4 ${canAccessAdmin ? "grid-cols-2" : "grid-cols-1"}`}>
+        {canAccessAdmin ? (
+          <Button as="a" href={`/admin/bim_stock/product/${product.id}/change/`} variant="outline">
+            <Edit3 className="h-4 w-4" />
+            Edit
+          </Button>
+        ) : null}
         <Button as="a" href={`/inventory/products/${product.id}/`} variant="primary">
           <Eye className="h-4 w-4" />
           Full View
@@ -1706,7 +2066,7 @@ function StockEntryPage({ data, mode = "add-unit" }) {
     supplier: "",
     entryDate: today,
     deliveryNote: "",
-    invoiceReference: "",
+    referenceNumber: "",
     notes: ""
   });
   const [products, setProducts] = useState([]);
@@ -1821,6 +2181,118 @@ function StockEntryPage({ data, mode = "add-unit" }) {
     setLines((current) => current.filter((line) => line.key !== key));
   }
 
+  function parseSerials(value) {
+    return value
+      .split(/\r?\n|,/)
+      .map((serial) => serial.trim())
+      .filter(Boolean);
+  }
+
+  function buildGeneratedSerial(line, lineIndex, serialIndex) {
+    const lineToken = String(lineIndex + 1).padStart(2, "0");
+    const serialToken = String(serialIndex + 1).padStart(3, "0");
+    return `${line.product.sku}-${serialBatch}-${lineToken}-${serialToken}`;
+  }
+
+  function buildReceivingSerialNumbers(line, lineIndex) {
+    const quantity = Number(line.quantity) || 0;
+    const serialNumbers = parseSerials(line.serials);
+
+    if (serialNumbers.length > quantity) {
+      throw new Error(`Serial number count cannot exceed quantity for ${line.product.display_name}.`);
+    }
+
+    for (let index = serialNumbers.length; index < quantity; index += 1) {
+      serialNumbers.push(buildGeneratedSerial(line, lineIndex, index));
+    }
+
+    return serialNumbers;
+  }
+
+  function buildReceivingNotes() {
+    return [
+      form.deliveryNote ? `Delivery note: ${form.deliveryNote}` : "",
+      form.notes
+    ]
+      .filter(Boolean)
+      .join(" | ");
+  }
+
+  async function createReceivingRecord() {
+    const itemInputs = lines.map((line, lineIndex) => {
+      const quantity = Number(line.quantity) || 0;
+
+      if (quantity < 1) {
+        throw new Error(`Quantity must be at least 1 for ${line.product.display_name}.`);
+      }
+
+      return {
+        product: line.product.id,
+        quantity,
+        serial_numbers: buildReceivingSerialNumbers(line, lineIndex),
+        cost: line.cost || "0.00"
+      };
+    });
+
+    const response = await fetch(data.api.receivingRecords, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": data.csrfToken
+      },
+      body: JSON.stringify({
+        supplier: form.supplier,
+        received_date: form.entryDate,
+        reference_number: form.referenceNumber || form.deliveryNote,
+        notes: buildReceivingNotes(),
+        item_inputs: itemInputs
+      })
+    });
+
+    if (!response.ok) {
+      const details = await response.json().catch(() => ({}));
+      throw new Error(firstApiError(details) || "Could not create receiving record.");
+    }
+
+    const created = await response.json();
+    window.location.assign(created.id ? `/operations/receiving/${created.id}/` : data.routes.receivingRecords);
+  }
+
+  async function createProductUnits() {
+    for (const line of lines) {
+      const quantity = Number(line.quantity) || 0;
+      const serials = parseSerials(line.serials);
+
+      for (let index = 0; index < quantity; index += 1) {
+        const serialNumber =
+          serials[index] || `${line.product.sku}-${serialBatch}-${String(index + 1).padStart(3, "0")}`;
+        const response = await fetch(data.api.productUnits, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": data.csrfToken
+          },
+          body: JSON.stringify({
+            product: line.product.id,
+            serial_number: serialNumber,
+            status: "available",
+            supplier: null,
+            cost: line.cost || "0.00",
+            purchase_date: form.entryDate,
+            notes: form.notes
+          })
+        });
+
+        if (!response.ok) {
+          const details = await response.json().catch(() => ({}));
+          throw new Error(firstApiError(details) || "Could not create stock unit.");
+        }
+      }
+    }
+
+    window.location.assign(data.routes.inventory);
+  }
+
   async function saveStockUnits() {
     setSaving(true);
     setError("");
@@ -1832,47 +2304,11 @@ function StockEntryPage({ data, mode = "add-unit" }) {
         throw new Error("Supplier is required when receiving stock.");
       }
 
-      for (const line of lines) {
-        const quantity = Number(line.quantity) || 0;
-        const serials = line.serials
-          .split(/\r?\n|,/)
-          .map((serial) => serial.trim())
-          .filter(Boolean);
-
-        for (let index = 0; index < quantity; index += 1) {
-          const serialNumber =
-            serials[index] || `${line.product.sku}-${serialBatch}-${String(index + 1).padStart(3, "0")}`;
-          const response = await fetch(data.api.productUnits, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-CSRFToken": data.csrfToken
-            },
-            body: JSON.stringify({
-              product: line.product.id,
-              serial_number: serialNumber,
-              status: "available",
-              supplier: isReceiving ? form.supplier : null,
-              cost: line.cost || "0.00",
-              purchase_date: form.entryDate,
-              notes: [
-                isReceiving && form.deliveryNote ? `Delivery note: ${form.deliveryNote}` : "",
-                isReceiving && form.invoiceReference ? `Invoice: ${form.invoiceReference}` : "",
-                form.notes
-              ]
-                .filter(Boolean)
-                .join(" | ")
-            })
-          });
-
-          if (!response.ok) {
-            const details = await response.json().catch(() => ({}));
-            throw new Error(firstApiError(details) || "Could not create stock unit.");
-          }
-        }
+      if (isReceiving) {
+        await createReceivingRecord();
+      } else {
+        await createProductUnits();
       }
-
-      window.location.assign(data.routes.inventory);
     } catch (saveError) {
       setError(saveError.message);
     } finally {
@@ -1950,8 +2386,8 @@ function StockEntryPage({ data, mode = "add-unit" }) {
                   <Field label="Delivery Note Number">
                     <TextInput value={form.deliveryNote} onChange={(value) => updateField("deliveryNote", value)} placeholder="Enter delivery note number" />
                   </Field>
-                  <Field label="Invoice Reference">
-                    <TextInput value={form.invoiceReference} onChange={(value) => updateField("invoiceReference", value)} placeholder="Enter invoice reference" />
+                  <Field label="Reference Number">
+                    <TextInput value={form.referenceNumber} onChange={(value) => updateField("referenceNumber", value)} placeholder="Enter supplier reference" />
                   </Field>
                 </>
               ) : null}
@@ -1972,7 +2408,12 @@ function StockEntryPage({ data, mode = "add-unit" }) {
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="Search product by name, SKU, or barcode..."
                 />
-                <button type="button" className="inline-flex h-10 items-center gap-2 rounded-md px-3 text-sm font-semibold text-zinc-300 hover:bg-nexus-panel2">
+                <button
+                  type="button"
+                  disabled
+                  title="Barcode scanning coming later"
+                  className="inline-flex h-10 cursor-not-allowed items-center gap-2 rounded-md px-3 text-sm font-semibold text-zinc-500"
+                >
                   <RefreshCw className="h-4 w-4" />
                   Scan
                 </button>
@@ -2038,7 +2479,7 @@ function StockEntryPage({ data, mode = "add-unit" }) {
           </FormSection>
 
           {isReceiving ? (
-            <FormSection icon="clipboard" title="Attachments" subtitle="Upload invoice, delivery note, or supporting documents.">
+            <FormSection icon="clipboard" title="Attachments" subtitle="Upload delivery notes or supporting documents.">
               <div className="grid min-h-28 place-items-center rounded-lg border border-dashed border-nexus-line bg-black/30 text-center text-sm text-zinc-600">
                 Drop files here or click to upload
                 <br />
@@ -3067,11 +3508,27 @@ const appRoutes = [
     render: (data) => <PlaceholderPage data={data} title="Knowledge Base" />
   },
   {
-    match: (path) => path.startsWith("/operations/receiving"),
-    render: (data) => <PlaceholderPage data={data} title="Receiving Records" />
+    match: (path) => /^\/operations\/receiving\/\d+\//.test(path),
+    render: (data) => <ReceivingRecordDetailPage data={data} />
   },
   {
-    match: (path) => path.startsWith("/operations/deliveries"),
+    match: (path) => path.startsWith("/operations/receiving/new"),
+    render: (data) => <StockEntryPage data={data} mode="receive" />
+  },
+  {
+    match: (path) => path === "/operations/receiving/",
+    render: (data) => <ReceivingRecordsPage data={data} />
+  },
+  {
+    match: (path) => /^\/operations\/deliveries\/\d+\//.test(path),
+    render: (data) => <PlaceholderPage data={data} title="Delivery Record" />
+  },
+  {
+    match: (path) => path.startsWith("/operations/deliveries/new"),
+    render: (data) => <CreateDeliveryPage data={data} />
+  },
+  {
+    match: (path) => path === "/operations/deliveries/",
     render: (data) => <PlaceholderPage data={data} title="Delivery Records" />
   },
   {
@@ -3087,16 +3544,8 @@ const appRoutes = [
     render: (data) => <ProductDetailsPage data={data} />
   },
   {
-    match: (path) => path.startsWith("/inventory/receiving/new"),
-    render: (data) => <StockEntryPage data={data} mode="receive" />
-  },
-  {
     match: (path) => path.startsWith("/inventory/stock-units/new"),
     render: (data) => <StockEntryPage data={data} mode="add-unit" />
-  },
-  {
-    match: (path) => path.startsWith("/inventory/deliveries/new"),
-    render: (data) => <CreateDeliveryPage data={data} />
   },
   {
     match: (path) => path.startsWith("/inventory"),

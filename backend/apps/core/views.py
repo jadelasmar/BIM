@@ -109,6 +109,8 @@ def _command_center_initial_data(
             "productUnits": "/api/stock/product-units/",
             "productUnitDetail": "/api/stock/product-units/{id}/",
             "deliveries": "/api/stock/deliveries/",
+            "receivingRecords": "/api/stock/receiving-records/",
+            "receivingRecordDetail": "/api/stock/receiving-records/{id}/",
             "suppliers": "/api/stock/suppliers/",
             "brands": "/api/stock/brands/",
             "models": "/api/stock/models/",
@@ -121,8 +123,8 @@ def _command_center_initial_data(
             "lowStock": f"{reverse('inventory')}?stock=low",
             "addProduct": reverse("inventory_add_product"),
             "addStockUnit": reverse("inventory_add_stock_unit"),
-            "receiveStock": reverse("inventory_receive_stock"),
-            "createDelivery": reverse("inventory_create_delivery"),
+            "receiveStock": reverse("operations_receive_stock"),
+            "createDelivery": reverse("operations_create_delivery"),
             "suppliers": reverse("suppliers"),
             "receivingRecords": reverse("operations_receiving"),
             "deliveryRecords": reverse("operations_deliveries"),
@@ -217,7 +219,7 @@ def _command_center_initial_data(
             {
                 "value": _format_count(recent_receiving),
                 "detail": "stock entry records",
-                "href": reverse("inventory_receive_stock"),
+                "href": reverse("operations_receiving"),
                 **ui_item("receiving_records"),
             },
             {
@@ -291,7 +293,7 @@ def _build_command_center_initial_data(request, current_path=None):
             "label": "Recent Receiving",
             "value": recent_receiving_count() if can_view_stock else "-",
             "tone": "green",
-            "note": "Using stock units until Receiving exists",
+            "note": "Operational receiving records and legacy stock receipts",
         },
     ]
 
@@ -305,7 +307,7 @@ def _build_command_center_initial_data(request, current_path=None):
             **ui_item("add_product"),
         },
         {
-            "href": reverse("inventory_create_delivery")
+            "href": reverse("operations_create_delivery")
             if user.has_perm(stock_constants.CHANGE_PRODUCT_UNIT)
             else None,
             "enabled": user.has_perm(stock_constants.CHANGE_PRODUCT_UNIT),
@@ -313,7 +315,7 @@ def _build_command_center_initial_data(request, current_path=None):
             **ui_item("create_delivery"),
         },
         {
-            "href": reverse("inventory_receive_stock")
+            "href": reverse("operations_receive_stock")
             if user.has_perm(stock_constants.ADD_PRODUCT_UNIT)
             else None,
             "enabled": user.has_perm(stock_constants.ADD_PRODUCT_UNIT),

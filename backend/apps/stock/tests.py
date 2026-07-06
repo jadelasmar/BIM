@@ -202,6 +202,8 @@ class UIRegistryTests(SimpleTestCase):
         self.assertNotIn("window.location.assign", inventory_table_source)
         self.assertIn('href={`/inventory/products/${product.id}/`}', inline_detail_source)
         self.assertIn("/admin/bim_stock/productunit/?q=${encodeURIComponent(product.sku)}", inline_detail_source)
+        self.assertIn("{canAccessAdmin ? (", inline_detail_source)
+        self.assertIn("Panel close coming later", inline_detail_source)
         self.assertIn("Full View", inline_detail_source)
 
     def test_inventory_page_reuses_command_center_kpi_cards(self):
@@ -215,6 +217,28 @@ class UIRegistryTests(SimpleTestCase):
         self.assertIn("<KpiGrid items={inventoryKpis}", inventory_page_source)
         self.assertNotIn("<InventoryMetric", inventory_page_source)
         self.assertNotIn("function InventoryMetric", app_source)
+
+    def test_visible_future_actions_are_disabled_or_marked_coming_later(self):
+        app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
+
+        header_source = app_source[
+            app_source.index("function Header"):
+            app_source.index("function InventoryPage")
+        ]
+        inventory_header_source = app_source[
+            app_source.index("function InventoryHeader"):
+            app_source.index("function Select")
+        ]
+        stock_entry_source = app_source[
+            app_source.index("function StockEntryPage"):
+            app_source.index("function CreateDeliveryPage")
+        ]
+
+        self.assertIn("Global search coming later", header_source)
+        self.assertIn("disabled", header_source)
+        self.assertIn("Export coming later", inventory_header_source)
+        self.assertIn("disabled", inventory_header_source)
+        self.assertIn("Barcode scanning coming later", stock_entry_source)
 
     def test_add_product_page_can_create_catalogue_lookups_inline(self):
         app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
@@ -318,6 +342,83 @@ class UIRegistryTests(SimpleTestCase):
         self.assertNotIn("form.handledBy", stock_entry_source)
         self.assertNotIn('<Field label={isReceiving ? "Received By" : "Added By"}>', stock_entry_source)
         self.assertNotIn('placeholder="Select active user"', stock_entry_source)
+
+    def test_receive_stock_submits_one_receiving_record_and_preserves_add_unit_api(self):
+        app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
+        stock_entry_source = app_source[
+            app_source.index("function StockEntryPage"):
+            app_source.index("function CreateDeliveryPage")
+        ]
+
+        self.assertIn("async function createReceivingRecord()", stock_entry_source)
+        self.assertIn("async function createProductUnits()", stock_entry_source)
+        self.assertIn("fetch(data.api.receivingRecords", stock_entry_source)
+        self.assertIn("fetch(data.api.productUnits", stock_entry_source)
+        self.assertIn("item_inputs: itemInputs", stock_entry_source)
+        self.assertIn("serial_numbers: buildReceivingSerialNumbers(line, lineIndex)", stock_entry_source)
+        self.assertIn("reference_number: form.referenceNumber || form.deliveryNote", stock_entry_source)
+        self.assertIn('label="Reference Number"', stock_entry_source)
+        self.assertNotIn("`Reference number: ${form.referenceNumber}`", stock_entry_source)
+        self.assertIn("if (isReceiving) {", stock_entry_source)
+        self.assertIn("await createReceivingRecord();", stock_entry_source)
+        self.assertIn("await createProductUnits();", stock_entry_source)
+        self.assertIn(
+            "window.location.assign(created.id ? `/operations/receiving/${created.id}/` : data.routes.receivingRecords)",
+            stock_entry_source,
+        )
+        self.assertNotIn("Invoice Reference", stock_entry_source)
+        self.assertNotIn("invoiceReference", stock_entry_source)
+
+    def test_receiving_records_route_uses_real_api_screen(self):
+        app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
+        receiving_source = app_source[
+            app_source.index("function ReceivingRecordsPage"):
+            app_source.index("function ReceivingRecordDetailPage")
+        ]
+
+        self.assertIn("data.api.receivingRecords", receiving_source)
+        self.assertIn("fetch(endpoint", receiving_source)
+        self.assertIn("Receiving Records", receiving_source)
+        self.assertIn("record.total_quantity", receiving_source)
+        self.assertIn("supplier_name", receiving_source)
+        self.assertIn("reference_number", receiving_source)
+        self.assertIn("<EmptyState", receiving_source)
+        self.assertIn("<ReceivingRecordsPage data={data}", app_source)
+        self.assertNotIn('<PlaceholderPage data={data} title="Receiving Records"', app_source)
+
+    def test_receiving_record_detail_route_uses_real_api_screen(self):
+        app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
+        detail_source = app_source[
+            app_source.index("function ReceivingRecordDetailPage"):
+            app_source.index("function Header")
+        ]
+
+        self.assertIn("data.api.receivingRecordDetail", detail_source)
+        self.assertIn("receivingId", detail_source)
+        self.assertIn("Back to Receiving Records", detail_source)
+        self.assertIn("record.items", detail_source)
+        self.assertIn("Reference cost only", detail_source)
+        self.assertIn("<ReceivingRecordDetailPage data={data}", app_source)
+        self.assertNotIn('<PlaceholderPage data={data} title="Receiving Record"', app_source)
+
+    def test_operations_record_routes_separate_list_and_detail_matches(self):
+        app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
+        routes_source = app_source[app_source.index("const appRoutes = ["):]
+
+        self.assertIn('match: (path) => path === "/operations/receiving/"', routes_source)
+        self.assertIn('match: (path) => path.startsWith("/operations/receiving/new")', routes_source)
+        self.assertIn('match: (path) => /^\\/operations\\/receiving\\/\\d+\\//.test(path)', routes_source)
+        self.assertIn('<StockEntryPage data={data} mode="receive" />', routes_source)
+        self.assertIn("<ReceivingRecordDetailPage data={data}", routes_source)
+        self.assertIn('match: (path) => path === "/operations/deliveries/"', routes_source)
+        self.assertIn('match: (path) => path.startsWith("/operations/deliveries/new")', routes_source)
+        self.assertIn('match: (path) => /^\\/operations\\/deliveries\\/\\d+\\//.test(path)', routes_source)
+        self.assertIn("<CreateDeliveryPage data={data}", routes_source)
+        self.assertIn('<PlaceholderPage data={data} title="Delivery Record"', routes_source)
+        self.assertNotIn('path.startsWith("/inventory/receiving/new")', routes_source)
+        self.assertNotIn('path.startsWith("/inventory/deliveries/new")', routes_source)
+        self.assertNotIn('path.startsWith("/operations/receiving")', routes_source)
+        self.assertNotIn('path.startsWith("/operations/deliveries")', routes_source)
 
     def test_legacy_stock_template_routes_are_not_exposed(self):
         app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
@@ -997,14 +1098,14 @@ class BIMPOSAccessTests(TestCase):
             "/api/command-center/",
             "/operations/",
             "/operations/receiving/",
+            "/operations/receiving/new/",
             "/operations/receiving/1/",
             "/operations/deliveries/",
+            "/operations/deliveries/new/",
             "/operations/deliveries/1/",
             "/inventory/",
             "/inventory/products/new/",
             "/inventory/stock-units/new/",
-            "/inventory/receiving/new/",
-            "/inventory/deliveries/new/",
             "/suppliers/",
             "/clients/",
             "/assets/",
@@ -1098,7 +1199,7 @@ class BIMPOSAccessTests(TestCase):
         overview_by_label = {item["label"]: item for item in overview}
         self.assertEqual(overview_by_label["Suppliers"]["href"], "/suppliers/")
         self.assertEqual(overview_by_label["Receiving Records"]["tone"], "green")
-        self.assertEqual(overview_by_label["Receiving Records"]["href"], "/inventory/receiving/new/")
+        self.assertEqual(overview_by_label["Receiving Records"]["href"], "/operations/receiving/")
         self.assertEqual(overview_by_label["Delivery Records"]["tone"], "indigo")
         self.assertEqual(overview_by_label["Delivery Records"]["href"], "/operations/deliveries/")
         self.assertEqual(overview_by_label["Clients"]["href"], "/clients/")
@@ -1262,7 +1363,7 @@ class BIMPOSAccessTests(TestCase):
         self.assertEqual(activity["related"], "Canon laser printer")
         self.assertEqual(activity["status"], "Received")
         self.assertEqual(activity["status_class"], "received")
-        self.assertEqual(activity["href"], f"/operations/receiving/{unit.pk}/")
+        self.assertEqual(activity["href"], f"/inventory/products/{product.pk}/")
         receiving_panel = response.context["initial_data"]["recentReceiving"][0]
         self.assertEqual(
             receiving_panel["reference"],
@@ -1272,7 +1373,7 @@ class BIMPOSAccessTests(TestCase):
         self.assertEqual(receiving_panel["detail"], "Laser")
         self.assertEqual(
             receiving_panel["href"],
-            f"/operations/receiving/{unit.pk}/",
+            f"/inventory/products/{product.pk}/",
         )
         self.assertNotIn(unit.serial_number, str(receiving_panel))
         self.assertEqual(receiving_panel["status"], "Received")
@@ -1409,8 +1510,8 @@ class BIMPOSAccessTests(TestCase):
             {"Add Product", "Create Delivery", "Receive Stock", "Add Unit", "Add Supplier", "Add Client"},
         )
         self.assertEqual(actions_by_label["Add Product"]["href"], "/inventory/products/new/")
-        self.assertEqual(actions_by_label["Create Delivery"]["href"], "/inventory/deliveries/new/")
-        self.assertEqual(actions_by_label["Receive Stock"]["href"], "/inventory/receiving/new/")
+        self.assertEqual(actions_by_label["Create Delivery"]["href"], "/operations/deliveries/new/")
+        self.assertEqual(actions_by_label["Receive Stock"]["href"], "/operations/receiving/new/")
         self.assertEqual(actions_by_label["Add Unit"]["href"], "/inventory/stock-units/new/")
         self.assertTrue(actions_by_label["Add Product"]["enabled"])
         self.assertTrue(actions_by_label["Create Delivery"]["enabled"])
@@ -1697,20 +1798,45 @@ class BIMPOSAccessTests(TestCase):
         )
         self.client.force_login(user)
 
-        response = self.client.get("/inventory/receiving/new/")
+        response = self.client.get("/operations/receiving/new/")
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "bim/react_app.html")
         self.assertEqual(
             response.context["initial_data"]["currentPath"],
-            "/inventory/receiving/new/",
+            "/operations/receiving/new/",
         )
         receive_stock_action = next(
             action
             for action in response.context["initial_data"]["quickActions"]
             if action["label"] == "Receive Stock"
         )
-        self.assertEqual(receive_stock_action["href"], "/inventory/receiving/new/")
+        self.assertEqual(receive_stock_action["href"], "/operations/receiving/new/")
+
+        old_response = self.client.get("/inventory/receiving/new/")
+        self.assertEqual(old_response.status_code, 404)
+
+    def test_receiving_records_react_page_exposes_receiving_api(self):
+        user = User.objects.create_user(username="receiver", password="test-pass")
+        user.user_permissions.add(Permission.objects.get(codename="view_receivingrecord"))
+        self.client.force_login(user)
+
+        response = self.client.get("/operations/receiving/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, "bim/react_app.html")
+        self.assertEqual(
+            response.context["initial_data"]["currentPath"],
+            "/operations/receiving/",
+        )
+        self.assertEqual(
+            response.context["initial_data"]["api"]["receivingRecords"],
+            "/api/stock/receiving-records/",
+        )
+        self.assertEqual(
+            response.context["initial_data"]["api"]["receivingRecordDetail"].format(id=42),
+            "/api/stock/receiving-records/42/",
+        )
 
     def test_create_delivery_react_page_uses_delivery_route(self):
         user = User.objects.create_user(username="support", password="test-pass")
@@ -1721,20 +1847,23 @@ class BIMPOSAccessTests(TestCase):
         )
         self.client.force_login(user)
 
-        response = self.client.get("/inventory/deliveries/new/")
+        response = self.client.get("/operations/deliveries/new/")
 
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, "bim/react_app.html")
         self.assertEqual(
             response.context["initial_data"]["currentPath"],
-            "/inventory/deliveries/new/",
+            "/operations/deliveries/new/",
         )
         delivery_action = next(
             action
             for action in response.context["initial_data"]["quickActions"]
             if action["label"] == "Create Delivery"
         )
-        self.assertEqual(delivery_action["href"], "/inventory/deliveries/new/")
+        self.assertEqual(delivery_action["href"], "/operations/deliveries/new/")
+
+        old_response = self.client.get("/inventory/deliveries/new/")
+        self.assertEqual(old_response.status_code, 404)
 
     def test_settings_react_page_provides_theme_settings(self):
         user = User.objects.create_user(username="viewer", password="test-pass")
@@ -2475,6 +2604,54 @@ class InventoryApiTests(TestCase):
         self.assertEqual(response.json()["total_quantity"], 4)
         self.assertEqual(response.json()["items"][0]["product"], self.product.pk)
         self.assertIsNone(response.json()["items"][0]["product_unit"])
+
+    def test_receiving_api_returns_single_record_detail(self):
+        user = self._user_with_permissions("view_receivingrecord")
+        from .models import ReceivingRecord, ReceivingItem
+
+        receiving = ReceivingRecord.objects.create(
+            supplier=self.supplier,
+            reference_number="SUP-DETAIL-1",
+            notes="Detail note",
+            created_by=user,
+        )
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        ReceivingItem.objects.create(
+            receiving=receiving,
+            product=self.product,
+            product_unit=unit,
+            quantity=1,
+            serial_number="API-AVAILABLE",
+            cost="50.00",
+            notes="Line note",
+        )
+        self.client.force_login(user)
+
+        response = self.client.get(f"/api/stock/receiving-records/{receiving.pk}/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["id"], receiving.pk)
+        self.assertEqual(response.json()["receiving_number"], receiving.receiving_number)
+        self.assertEqual(response.json()["supplier_name"], self.supplier.name)
+        self.assertEqual(response.json()["reference_number"], "SUP-DETAIL-1")
+        self.assertEqual(response.json()["notes"], "Detail note")
+        self.assertEqual(response.json()["created_by_name"], user.username)
+        self.assertEqual(response.json()["total_quantity"], 1)
+        self.assertEqual(response.json()["items"][0]["product_name"], str(self.product))
+        self.assertEqual(response.json()["items"][0]["product_unit_serial_number"], "API-AVAILABLE")
+        self.assertEqual(response.json()["items"][0]["cost"], "50.00")
+
+    def test_receiving_api_detail_requires_view_permission(self):
+        user = self._user_with_permissions()
+        user.groups.clear()
+        from .models import ReceivingRecord
+
+        receiving = ReceivingRecord.objects.create()
+        self.client.force_login(user)
+
+        response = self.client.get(f"/api/stock/receiving-records/{receiving.pk}/")
+
+        self.assertEqual(response.status_code, 403)
 
     def test_receiving_api_requires_add_permission_to_create(self):
         user = self._user_with_permissions("view_receivingrecord")

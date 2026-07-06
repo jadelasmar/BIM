@@ -8,11 +8,13 @@ This roadmap documents product direction, not implementation history.
 - BIM Stock inventory list
 - Product Details
 - Add Product
-- Receive Stock using `ProductUnit`
+- Receive Stock using `ReceivingRecord`
 - Add Unit
 - Create Delivery
 - Delivery records API
 - Receiving records backend API
+- Receiving Records list frontend
+- Receiving Record detail frontend
 - Suppliers lookup API
 - Django admin for stock and users
 - Login and password setup
@@ -23,11 +25,11 @@ This roadmap documents product direction, not implementation history.
 
 Build full Receiving Records frontend workflows.
 
-The backend now has operational receiving records. The current receiving UI still creates `ProductUnit` records directly and should move to the receiving record API when the list/detail workflow is built.
+The receiving records list, detail screen, and Receive Stock form now use the operational receiving records API under `/operations/receiving/`. Manual Add Unit remains a direct stock unit workflow under inventory.
 
 ## Near-Term Modules
 
-- Receiving Records list/detail
+- Receiving record edit/correction workflow
 - Delivery Records list/detail
 - Supplier page
 - Product edit workflow

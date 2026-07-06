@@ -84,10 +84,12 @@ Stock API views:
 
 - product list/create/detail/update
 - product unit list/create/detail/update
-- receiving record list/create
+- receiving record list/create/detail
 - delivery list/create
 - inventory summary
 - lookup endpoints for categories, brands, models, suppliers
+
+Receiving record list search currently supports receiving number, supplier name, reference number, product description/SKU, receiving item serial number, and linked product-unit serial number. Future reporting should reuse the `ReceivingRecord` header fields and `ReceivingItem` product/unit relationships instead of querying generated frontend data.
 
 ## Selectors
 

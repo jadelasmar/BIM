@@ -47,13 +47,13 @@ Important routes:
 - `/inventory/`
 - `/inventory/products/new/`
 - `/inventory/products/<id>/`
-- `/inventory/receiving/new/`
 - `/inventory/stock-units/new/`
-- `/inventory/deliveries/new/`
 - `/operations/`
 - `/operations/receiving/`
+- `/operations/receiving/new/`
 - `/operations/receiving/<id>/`
 - `/operations/deliveries/`
+- `/operations/deliveries/new/`
 - `/operations/deliveries/<id>/`
 - `/suppliers/`
 - `/clients/`
@@ -102,6 +102,7 @@ Important API routes:
 - `/api/stock/product-units/`
 - `/api/stock/product-units/<id>/`
 - `/api/stock/receiving-records/`
+- `/api/stock/receiving-records/<id>/`
 - `/api/stock/deliveries/`
 - `/api/stock/suppliers/`
 - `/api/stock/brands/`
@@ -154,7 +155,9 @@ Current main operational UI implementation:
 - Inventory
 - Product Details
 - Add Product
-- Receive Stock/Add Unit
+- Receive Stock through receiving records
+- Add Unit through direct stock unit entry
+- Receiving Records list
 - Create Delivery
 - placeholder pages
 - shared UI pieces not yet split out
@@ -241,6 +244,7 @@ React Add Product page
 
 ```text
 React Create Delivery page
+  -> GET /operations/deliveries/new/
   -> POST /api/stock/deliveries/
   -> DeliveryRecordSerializer.create()
   -> creates DeliveryRecord and DeliveryItem rows
@@ -250,7 +254,8 @@ React Create Delivery page
 ### Receiving Creation
 
 ```text
-Receiving API
+React Receive Stock page
+  -> GET /operations/receiving/new/
   -> POST /api/stock/receiving-records/
   -> ReceivingRecordSerializer.create()
   -> services.create_receiving_record()
@@ -258,11 +263,40 @@ Receiving API
   -> creates/links ProductUnit rows when serial numbers are supplied
 ```
 
+Manual Add Unit remains separate:
+
+```text
+React Add Unit page
+  -> POST /api/stock/product-units/
+  -> ProductUnitSerializer
+  -> creates ProductUnit rows directly
+```
+
+### Receiving Records List
+
+```text
+GET /operations/receiving/
+  -> apps.core.views.module_launcher
+  -> React AppRouter renders ReceivingRecordsPage
+  -> GET /api/stock/receiving-records/
+  -> ReceivingRecordSerializer returns records and items
+```
+
+### Receiving Record Detail
+
+```text
+GET /operations/receiving/<id>/
+  -> apps.core.views.module_launcher
+  -> React AppRouter renders ReceivingRecordDetailPage
+  -> GET /api/stock/receiving-records/<id>/
+  -> ReceivingRecordSerializer returns one record and item lines
+```
+
 ## Main Technical Debt
 
 - `frontend/src/routes/AppRouter.jsx` is still large.
 - Frontend API calls are inline.
 - More UI patterns should move into `components/ui/` only when repeated by current screens.
-- Receiving Records frontend list/detail pages are still placeholders.
+- Receiving edit is not implemented yet.
 - Supplier/client/assets/report modules are placeholders or partial.
 - `Product.image` still uploads to `products_images/`.

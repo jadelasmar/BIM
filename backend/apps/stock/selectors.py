@@ -149,7 +149,7 @@ def recent_stock_activity():
             reference = operational_reference("RCV", activity_date, unit.pk)
             status_label = "Received"
             status_class = "received"
-            href = reverse("operations_receiving_detail", kwargs={"pk": unit.pk})
+            href = reverse("inventory_product_detail", kwargs={"pk": unit.product_id})
 
         activity.append(
             {
@@ -264,7 +264,7 @@ def recent_receiving(limit=4):
             ),
             "title": str(unit.product),
             "detail": unit.product.category.name if unit.product.category_id else "",
-            "href": reverse("operations_receiving_detail", kwargs={"pk": unit.pk}),
+            "href": reverse("inventory_product_detail", kwargs={"pk": unit.product_id}),
             "date": unit.purchase_date or unit.crdate,
             "status": "Received",
             "status_class": "received",

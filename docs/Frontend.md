@@ -37,13 +37,13 @@ Important rendered routes:
 - `/inventory/` Inventory list
 - `/inventory/products/new/` Add Product
 - `/inventory/products/<id>/` Product Details
-- `/inventory/receiving/new/` Receive Stock
 - `/inventory/stock-units/new/` Add Unit
-- `/inventory/deliveries/new/` Create Delivery
 - `/operations/` Operations hub
-- `/operations/receiving/` Receiving Records placeholder
-- `/operations/receiving/<id>/` Receiving Record detail placeholder
+- `/operations/receiving/` Receiving Records list
+- `/operations/receiving/new/` Receive Stock
+- `/operations/receiving/<id>/` Receiving Record detail
 - `/operations/deliveries/` Delivery Records placeholder
+- `/operations/deliveries/new/` Create Delivery
 - `/operations/deliveries/<id>/` Delivery Record detail placeholder
 - `/settings/` Settings
 - `/accounts/login/` Login
@@ -65,6 +65,7 @@ Good future page split targets:
 - `pages/inventory/AddProductPage.jsx`
 - `pages/inventory/StockEntryPage.jsx`
 - `pages/inventory/CreateDeliveryPage.jsx`
+- `pages/operations/ReceivingRecordsPage.jsx`
 
 ## Components
 
@@ -114,3 +115,16 @@ Add context only when state is genuinely shared across separate feature areas.
 API URLs are provided through Django `initial_data.api`. Current fetch calls are inline in `AppRouter.jsx`.
 
 Create a service layer when fetch logic becomes shared across multiple pages.
+
+Current Receiving Records integration:
+
+- `/operations/receiving/new/` submits Receive Stock through `initial_data.api.receivingRecords`.
+- Receive Stock creates one operational receiving record with item inputs, quantity-matched serial numbers, supplier/date/reference details, and reference-only costs.
+- On success, Receive Stock redirects to `/operations/receiving/<id>/` when the API returns an id, otherwise back to the receiving records list.
+- `/inventory/stock-units/new/` remains the manual Add Unit flow and still creates `ProductUnit` rows directly.
+- `/operations/receiving/` renders a real list screen from `AppRouter.jsx`.
+- The screen fetches `/api/stock/receiving-records/` through `initial_data.api.receivingRecords`.
+- It shows operational receiving numbers, supplier/manual source, received date, reference number, item totals, and recorded status.
+- Loading, empty, and error states reuse the existing table and empty-state patterns.
+- `/operations/receiving/<id>/` fetches one record through `initial_data.api.receivingRecordDetail`.
+- The detail screen shows source, dates, reference, status, creator, notes, item lines, serial/unit links, and reference-only costs.
