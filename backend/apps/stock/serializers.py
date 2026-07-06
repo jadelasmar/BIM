@@ -15,8 +15,10 @@ from .models import (
     Supplier,
 )
 from .services import (
+    cancel_delivery_record,
     cancel_receiving_record,
     create_receiving_record,
+    update_delivery_record_header,
     update_receiving_record_header,
 )
 
@@ -283,6 +285,14 @@ class DeliveryItemSerializer(serializers.ModelSerializer):
         source="product_unit.serial_number",
         read_only=True,
     )
+    product_unit_status = serializers.CharField(
+        source="product_unit.status",
+        read_only=True,
+    )
+    product_unit_status_label = serializers.CharField(
+        source="product_unit.get_status_display",
+        read_only=True,
+    )
 
     class Meta:
         model = DeliveryItem
@@ -293,6 +303,8 @@ class DeliveryItemSerializer(serializers.ModelSerializer):
             "product_sku",
             "product_unit",
             "serial_number",
+            "product_unit_status",
+            "product_unit_status_label",
             "notes",
             "crdate",
             "isactive",
@@ -327,6 +339,9 @@ class DeliveryRecordSerializer(serializers.ModelSerializer):
             "delivery_date",
             "notes",
             "status",
+            "cancel_reason",
+            "cancelled_at",
+            "cancelled_by",
             "created_by",
             "created_by_name",
             "total_units",
@@ -337,6 +352,9 @@ class DeliveryRecordSerializer(serializers.ModelSerializer):
         )
         read_only_fields = (
             "delivery_number",
+            "cancel_reason",
+            "cancelled_at",
+            "cancelled_by",
             "created_by",
             "created_by_name",
             "total_units",
@@ -392,6 +410,72 @@ class DeliveryRecordSerializer(serializers.ModelSerializer):
                 unit.save(update_fields=("status", "sold_date"))
 
         return delivery
+
+
+class DeliveryItemCorrectionSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    notes = serializers.CharField(required=False, allow_blank=True)
+
+
+class DeliveryRecordCorrectionSerializer(serializers.ModelSerializer):
+    items = DeliveryItemCorrectionSerializer(many=True, required=False)
+
+    class Meta:
+        model = DeliveryRecord
+        fields = (
+            "customer_name",
+            "receiver_name",
+            "delivery_date",
+            "notes",
+            "items",
+        )
+        extra_kwargs = {
+            "customer_name": {"required": False, "allow_blank": False},
+            "receiver_name": {"required": False, "allow_blank": True},
+            "delivery_date": {"required": False},
+            "notes": {"required": False, "allow_blank": True},
+        }
+
+    def update(self, instance, validated_data):
+        item_updates = validated_data.pop("items", [])
+        try:
+            return update_delivery_record_header(
+                instance,
+                customer_name=validated_data.get("customer_name")
+                if "customer_name" in validated_data
+                else instance.customer_name,
+                receiver_name=validated_data.get("receiver_name")
+                if "receiver_name" in validated_data
+                else instance.receiver_name,
+                delivery_date=validated_data.get("delivery_date")
+                if "delivery_date" in validated_data
+                else instance.delivery_date,
+                notes=validated_data.get("notes")
+                if "notes" in validated_data
+                else instance.notes,
+                items=item_updates,
+            )
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc
+
+    def to_representation(self, instance):
+        return DeliveryRecordSerializer(instance, context=self.context).data
+
+
+class DeliveryRecordCancelSerializer(serializers.Serializer):
+    cancel_reason = serializers.CharField(required=True, allow_blank=False)
+
+    def save(self, **kwargs):
+        delivery = self.context["delivery"]
+        request = self.context.get("request")
+        try:
+            return cancel_delivery_record(
+                delivery,
+                cancelled_by=request.user if request else None,
+                cancel_reason=self.validated_data["cancel_reason"],
+            )
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc
 
 
 class ReceivingItemSerializer(serializers.ModelSerializer):

@@ -283,8 +283,8 @@ class DeliveryRecordAdmin(admin.ModelAdmin):
         "items__product__sku",
     )
     list_filter = ("status", "delivery_date", "isactive")
-    readonly_fields = ("delivery_number", "crdate")
-    autocomplete_fields = ("created_by",)
+    readonly_fields = ("delivery_number", "cancelled_at", "crdate")
+    autocomplete_fields = ("created_by", "cancelled_by")
     ordering = ("-delivery_date", "-delivery_number")
 
     fieldsets = (
@@ -308,6 +308,16 @@ class DeliveryRecordAdmin(admin.ModelAdmin):
                 "fields": (
                     "notes",
                     "crdate",
+                )
+            },
+        ),
+        (
+            "Cancellation",
+            {
+                "fields": (
+                    "cancel_reason",
+                    "cancelled_at",
+                    "cancelled_by",
                 )
             },
         ),

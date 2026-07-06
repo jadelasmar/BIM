@@ -19,6 +19,8 @@ from .models import (
 from .serializers import (
     BrandSerializer,
     CategorySerializer,
+    DeliveryRecordCancelSerializer,
+    DeliveryRecordCorrectionSerializer,
     DeliveryRecordSerializer,
     ProductModelSerializer,
     ProductSerializer,
@@ -187,9 +189,9 @@ class DeliveryRecordListCreateAPIView(generics.ListCreateAPIView):
     permission_classes = (permissions.IsAuthenticated,)
 
     def get_queryset(self):
-        _require_perm(self.request.user, stock_constants.VIEW_PRODUCT_UNIT)
+        _require_perm(self.request.user, stock_constants.VIEW_DELIVERY_RECORD)
         queryset = (
-            DeliveryRecord.objects.filter(isactive=True)
+            DeliveryRecord.objects.all()
             .select_related("created_by")
             .prefetch_related(
                 "items",
@@ -213,8 +215,59 @@ class DeliveryRecordListCreateAPIView(generics.ListCreateAPIView):
         return queryset
 
     def perform_create(self, serializer):
+        _require_perm(self.request.user, stock_constants.ADD_DELIVERY_RECORD)
         _require_perm(self.request.user, stock_constants.CHANGE_PRODUCT_UNIT)
         serializer.save()
+
+
+class DeliveryRecordDetailAPIView(generics.RetrieveUpdateAPIView):
+    serializer_class = DeliveryRecordSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get_serializer_class(self):
+        if self.request.method in ("PUT", "PATCH"):
+            return DeliveryRecordCorrectionSerializer
+        return DeliveryRecordSerializer
+
+    def get_queryset(self):
+        _require_perm(self.request.user, stock_constants.VIEW_DELIVERY_RECORD)
+        return (
+            DeliveryRecord.objects.all()
+            .select_related("created_by")
+            .prefetch_related(
+                "items",
+                "items__product",
+                "items__product_unit",
+            )
+        )
+
+    def perform_update(self, serializer):
+        _require_perm(self.request.user, stock_constants.CHANGE_DELIVERY_RECORD)
+        serializer.save()
+
+
+class DeliveryRecordCancelAPIView(APIView):
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def post(self, request, pk):
+        _require_perm(request.user, stock_constants.CHANGE_DELIVERY_RECORD)
+        _require_perm(request.user, stock_constants.CHANGE_PRODUCT_UNIT)
+        delivery = get_object_or_404(
+            DeliveryRecord.objects.select_related("created_by").prefetch_related(
+                "items",
+                "items__product",
+                "items__product_unit",
+            ),
+            pk=pk,
+        )
+
+        serializer = DeliveryRecordCancelSerializer(
+            data=request.data,
+            context={"request": request, "delivery": delivery},
+        )
+        serializer.is_valid(raise_exception=True)
+        delivery = serializer.save()
+        return Response(DeliveryRecordSerializer(delivery).data)
 
 
 class ReceivingRecordListCreateAPIView(generics.ListCreateAPIView):

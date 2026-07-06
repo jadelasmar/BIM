@@ -44,6 +44,7 @@ from .admin import ProductAdmin, ProductUnitAdmin, ProductUnitPurchaseForm
 from .models import (
     Brand,
     Category,
+    DeliveryItem,
     DeliveryRecord,
     Product,
     ProductModel,
@@ -403,6 +404,66 @@ class UIRegistryTests(SimpleTestCase):
         self.assertIn("<ReceivingRecordDetailPage data={data}", app_source)
         self.assertNotIn('<PlaceholderPage data={data} title="Receiving Record"', app_source)
 
+    def test_delivery_records_route_uses_real_api_screen(self):
+        app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
+        delivery_source = app_source[
+            app_source.index("function DeliveryRecordsPage"):
+            app_source.index("function DeliveryRecordDetailPage")
+        ]
+
+        self.assertIn("data.api.deliveries", delivery_source)
+        self.assertIn("fetch(endpoint", delivery_source)
+        self.assertIn("Delivery Records", delivery_source)
+        self.assertIn("record.total_units", delivery_source)
+        self.assertIn("customer_name", delivery_source)
+        self.assertIn("receiver_name", delivery_source)
+        self.assertIn("<EmptyState", delivery_source)
+        self.assertIn("<DeliveryRecordsPage data={data}", app_source)
+        self.assertNotIn('<PlaceholderPage data={data} title="Delivery Records"', app_source)
+
+    def test_delivery_record_detail_route_uses_real_api_screen(self):
+        app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
+        detail_source = app_source[
+            app_source.index("function DeliveryRecordDetailPage"):
+            app_source.index("function CreateDeliveryPage")
+        ]
+
+        self.assertIn("data.api.deliveryDetail", detail_source)
+        self.assertIn("deliveryId", detail_source)
+        self.assertIn("Back to Delivery Records", detail_source)
+        self.assertIn("record.items", detail_source)
+        self.assertIn("Delivered Items", detail_source)
+        self.assertIn("<DeliveryRecordDetailPage data={data}", app_source)
+        self.assertNotIn('<PlaceholderPage data={data} title="Delivery Record"', app_source)
+
+    def test_delivery_record_detail_has_office_safe_correction_actions(self):
+        app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
+        detail_source = app_source[
+            app_source.index("function DeliveryRecordDetailPage"):
+            app_source.index("function CreateDeliveryPage")
+        ]
+
+        self.assertIn("Edit Details", detail_source)
+        self.assertIn("Cancel Record", detail_source)
+        self.assertIn("customer_name", detail_source)
+        self.assertIn("receiver_name", detail_source)
+        self.assertIn("delivery_date", detail_source)
+        self.assertIn("cancel_reason", detail_source)
+        self.assertIn("Wrong unit, product, or serial entries should be cancelled and recreated when safe.", detail_source)
+
+    def test_create_delivery_redirects_to_delivery_detail(self):
+        app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
+        delivery_source = app_source[
+            app_source.index("function CreateDeliveryPage"):
+            app_source.index("function AddProductHeader")
+        ]
+
+        self.assertIn(
+            "window.location.assign(created.id ? `/operations/deliveries/${created.id}/` : data.routes.deliveryRecords)",
+            delivery_source,
+        )
+        self.assertNotIn("window.location.assign(data.routes.inventory)", delivery_source)
+
     def test_operations_record_routes_separate_list_and_detail_matches(self):
         app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
         routes_source = app_source[app_source.index("const appRoutes = ["):]
@@ -416,7 +477,8 @@ class UIRegistryTests(SimpleTestCase):
         self.assertIn('match: (path) => path.startsWith("/operations/deliveries/new")', routes_source)
         self.assertIn('match: (path) => /^\\/operations\\/deliveries\\/\\d+\\//.test(path)', routes_source)
         self.assertIn("<CreateDeliveryPage data={data}", routes_source)
-        self.assertIn('<PlaceholderPage data={data} title="Delivery Record"', routes_source)
+        self.assertIn("<DeliveryRecordsPage data={data}", routes_source)
+        self.assertIn("<DeliveryRecordDetailPage data={data}", routes_source)
         self.assertNotIn('path.startsWith("/inventory/receiving/new")', routes_source)
         self.assertNotIn('path.startsWith("/inventory/deliveries/new")', routes_source)
         self.assertNotIn('path.startsWith("/operations/receiving")', routes_source)
@@ -1300,7 +1362,7 @@ class BIMPOSAccessTests(TestCase):
         ):
             self.assertNotIn(demo_value, initial_data)
 
-    def test_command_center_recent_activity_labels_sold_units_as_delivered(self):
+    def test_command_center_ignores_sold_units_without_delivery_records(self):
         user = User.objects.create_user(username="viewer", password="test-pass")
         user.user_permissions.add(Permission.objects.get(codename="view_product"))
         category = Category.objects.create(name="Laser")
@@ -1320,16 +1382,11 @@ class BIMPOSAccessTests(TestCase):
         self.client.force_login(user)
 
         response = self.client.get("/")
-        activity = response.context["initial_data"]["recentActivity"][0]
+        initial_data = response.context["initial_data"]
 
-        self.assertEqual(activity["type"], "Delivery")
-        self.assertEqual(
-            activity["reference"],
-            f"DLV-{timezone.localdate().year}-{unit.pk:04d}",
-        )
-        self.assertEqual(activity["related"], "Canon laser printer")
-        self.assertEqual(activity["status"], "Delivered")
-        self.assertEqual(activity["status_class"], "delivered")
+        self.assertEqual(initial_data["recentActivity"], [])
+        self.assertNotIn(unit.serial_number, str(initial_data["recentActivity"]))
+        self.assertNotIn("DLV-", str(initial_data["recentActivity"]))
 
     def test_command_center_ignores_product_unit_only_receiving_history(self):
         user = User.objects.create_user(username="viewer", password="test-pass")
@@ -1481,6 +1538,7 @@ class BIMPOSAccessTests(TestCase):
         user.user_permissions.add(
             Permission.objects.get(codename="add_product"),
             Permission.objects.get(codename="add_productunit"),
+            Permission.objects.get(codename="add_deliveryrecord"),
             Permission.objects.get(codename="change_productunit"),
             Permission.objects.get(codename="view_product"),
         )
@@ -1508,6 +1566,21 @@ class BIMPOSAccessTests(TestCase):
         self.assertIsNone(actions_by_label["Add Supplier"]["href"])
         self.assertFalse(actions_by_label["Add Client"]["enabled"])
         self.assertIsNone(actions_by_label["Add Client"]["href"])
+
+    def test_command_center_create_delivery_requires_add_delivery_permission(self):
+        user = User.objects.create_user(username="operator", password="test-pass")
+        user.user_permissions.add(Permission.objects.get(codename="change_productunit"))
+        user.groups.clear()
+        self.client.force_login(user)
+
+        response = self.client.get("/")
+        actions_by_label = {
+            action["label"]: action
+            for action in response.context["initial_data"]["quickActions"]
+        }
+
+        self.assertFalse(actions_by_label["Create Delivery"]["enabled"])
+        self.assertIsNone(actions_by_label["Create Delivery"]["href"])
 
     def test_command_center_stock_alert_kpis_use_inventory_counts(self):
         user = User.objects.create_user(username="viewer", password="test-pass")
@@ -1579,6 +1652,7 @@ class BIMPOSAccessTests(TestCase):
         user.user_permissions.add(
             Permission.objects.get(codename="add_product"),
             Permission.objects.get(codename="add_productunit"),
+            Permission.objects.get(codename="add_deliveryrecord"),
             Permission.objects.get(codename="change_productunit"),
             Permission.objects.get(codename="view_product"),
         )
@@ -1828,6 +1902,7 @@ class BIMPOSAccessTests(TestCase):
         user.user_permissions.add(
             Permission.objects.get(codename="view_product"),
             Permission.objects.get(codename="view_productunit"),
+            Permission.objects.get(codename="add_deliveryrecord"),
             Permission.objects.get(codename="change_productunit"),
         )
         self.client.force_login(user)
@@ -1849,6 +1924,23 @@ class BIMPOSAccessTests(TestCase):
 
         old_response = self.client.get("/inventory/deliveries/new/")
         self.assertEqual(old_response.status_code, 404)
+
+    def test_delivery_records_shell_exposes_delivery_detail_api(self):
+        user = User.objects.create_user(username="dispatcher", password="test-pass")
+        user.user_permissions.add(Permission.objects.get(codename="view_deliveryrecord"))
+        self.client.force_login(user)
+
+        response = self.client.get("/operations/deliveries/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.context["initial_data"]["api"]["deliveries"],
+            "/api/stock/deliveries/",
+        )
+        self.assertEqual(
+            response.context["initial_data"]["api"]["deliveryDetail"].format(id=42),
+            "/api/stock/deliveries/42/",
+        )
 
     def test_settings_react_page_provides_theme_settings(self):
         user = User.objects.create_user(username="viewer", password="test-pass")
@@ -2459,8 +2551,7 @@ class InventoryApiTests(TestCase):
 
     def test_delivery_api_creates_record_and_marks_units_sold(self):
         user = self._user_with_permissions(
-            "view_product",
-            "view_productunit",
+            "add_deliveryrecord",
             "change_productunit",
         )
         unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
@@ -2493,10 +2584,238 @@ class InventoryApiTests(TestCase):
             ).exists()
         )
 
+    def test_delivery_api_requires_add_delivery_permission_to_create(self):
+        user = self._user_with_permissions(
+            "view_deliveryrecord",
+            "change_productunit",
+        )
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/api/stock/deliveries/",
+            {
+                "customer_name": "Internal Department",
+                "unit_ids": [unit.pk],
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_delivery_api_requires_view_delivery_permission_to_list(self):
+        user = self._user_with_permissions("view_productunit")
+        user.groups.clear()
+        self.client.force_login(user)
+
+        response = self.client.get("/api/stock/deliveries/")
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_delivery_api_returns_single_record_detail(self):
+        user = self._user_with_permissions("view_deliveryrecord")
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        unit.status = ProductUnit.STATUS_SOLD
+        unit.sold_date = timezone.localdate()
+        unit.save(update_fields=("status", "sold_date"))
+        delivery = DeliveryRecord.objects.create(
+            customer_name="Internal Department",
+            receiver_name="Receiver Name",
+            notes="For staff handover",
+            created_by=user,
+        )
+        DeliveryItem.objects.create(
+            delivery=delivery,
+            product=self.product,
+            product_unit=unit,
+            notes="Delivered with charger",
+        )
+        self.client.force_login(user)
+
+        response = self.client.get(f"/api/stock/deliveries/{delivery.pk}/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["id"], delivery.pk)
+        self.assertEqual(response.json()["delivery_number"], delivery.delivery_number)
+        self.assertEqual(response.json()["customer_name"], "Internal Department")
+        self.assertEqual(response.json()["receiver_name"], "Receiver Name")
+        self.assertEqual(response.json()["created_by_name"], user.username)
+        self.assertEqual(response.json()["total_units"], 1)
+        self.assertEqual(response.json()["items"][0]["product"], self.product.pk)
+        self.assertEqual(response.json()["items"][0]["product_name"], "Canon laser printer")
+        self.assertEqual(response.json()["items"][0]["product_sku"], "LAS-CAN-L100")
+        self.assertEqual(response.json()["items"][0]["product_unit"], unit.pk)
+        self.assertEqual(response.json()["items"][0]["serial_number"], "API-AVAILABLE")
+        self.assertEqual(response.json()["items"][0]["product_unit_status"], ProductUnit.STATUS_SOLD)
+        self.assertEqual(response.json()["items"][0]["product_unit_status_label"], "Sold")
+        self.assertEqual(response.json()["items"][0]["notes"], "Delivered with charger")
+
+    def test_delivery_api_updates_safe_header_fields_and_item_notes(self):
+        user = self._user_with_permissions(
+            "view_deliveryrecord",
+            "change_deliveryrecord",
+        )
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        unit.status = ProductUnit.STATUS_SOLD
+        unit.sold_date = timezone.localdate()
+        unit.save(update_fields=("status", "sold_date"))
+        delivery = DeliveryRecord.objects.create(
+            customer_name="Old Customer",
+            receiver_name="Old Receiver",
+            notes="Old notes",
+            created_by=user,
+        )
+        item = DeliveryItem.objects.create(
+            delivery=delivery,
+            product=self.product,
+            product_unit=unit,
+            notes="Old item note",
+        )
+        self.client.force_login(user)
+
+        response = self.client.patch(
+            f"/api/stock/deliveries/{delivery.pk}/",
+            {
+                "customer_name": "New Customer",
+                "receiver_name": "New Receiver",
+                "delivery_date": "2026-07-05",
+                "notes": "Updated notes",
+                "delivery_number": "DLV-1999-9999",
+                "created_by": None,
+                "items": [
+                    {
+                        "id": item.pk,
+                        "product": self.product.pk + 1000,
+                        "product_unit": unit.pk + 1000,
+                        "notes": "Updated item note",
+                    }
+                ],
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        delivery.refresh_from_db()
+        item.refresh_from_db()
+        unit.refresh_from_db()
+        self.assertEqual(delivery.customer_name, "New Customer")
+        self.assertEqual(delivery.receiver_name, "New Receiver")
+        self.assertEqual(str(delivery.delivery_date), "2026-07-05")
+        self.assertEqual(delivery.notes, "Updated notes")
+        self.assertNotEqual(delivery.delivery_number, "DLV-1999-9999")
+        self.assertEqual(delivery.created_by, user)
+        self.assertEqual(item.product, self.product)
+        self.assertEqual(item.product_unit, unit)
+        self.assertEqual(item.notes, "Updated item note")
+        self.assertEqual(unit.status, ProductUnit.STATUS_SOLD)
+        self.assertEqual(str(unit.sold_date), "2026-07-05")
+
+    def test_delivery_api_cancels_when_linked_units_are_untouched_sold_units(self):
+        user = self._user_with_permissions(
+            "view_deliveryrecord",
+            "change_deliveryrecord",
+            "change_productunit",
+        )
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        unit.status = ProductUnit.STATUS_SOLD
+        unit.sold_date = timezone.localdate()
+        unit.save(update_fields=("status", "sold_date"))
+        delivery = DeliveryRecord.objects.create(
+            customer_name="Cancel Customer",
+            created_by=user,
+        )
+        item = DeliveryItem.objects.create(
+            delivery=delivery,
+            product=self.product,
+            product_unit=unit,
+        )
+        self.client.force_login(user)
+
+        response = self.client.post(
+            f"/api/stock/deliveries/{delivery.pk}/cancel/",
+            {"cancel_reason": "Wrong unit selected"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        delivery.refresh_from_db()
+        item.refresh_from_db()
+        unit.refresh_from_db()
+        self.assertEqual(delivery.status, DeliveryRecord.STATUS_CANCELLED)
+        self.assertEqual(delivery.cancel_reason, "Wrong unit selected")
+        self.assertEqual(delivery.cancelled_by, user)
+        self.assertIsNotNone(delivery.cancelled_at)
+        self.assertFalse(item.isactive)
+        self.assertEqual(unit.status, ProductUnit.STATUS_AVAILABLE)
+        self.assertIsNone(unit.sold_date)
+        self.assertTrue(unit.isactive)
+
+    def test_delivery_api_blocks_cancel_when_linked_unit_is_no_longer_sold(self):
+        user = self._user_with_permissions(
+            "view_deliveryrecord",
+            "change_deliveryrecord",
+            "change_productunit",
+        )
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        unit.status = ProductUnit.STATUS_RETURNED
+        unit.save(update_fields=("status", "sold_date"))
+        delivery = DeliveryRecord.objects.create(customer_name="Cancel Customer")
+        DeliveryItem.objects.create(
+            delivery=delivery,
+            product=self.product,
+            product_unit=unit,
+        )
+        self.client.force_login(user)
+
+        response = self.client.post(
+            f"/api/stock/deliveries/{delivery.pk}/cancel/",
+            {"cancel_reason": "Wrong unit selected"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        delivery.refresh_from_db()
+        unit.refresh_from_db()
+        self.assertEqual(delivery.status, DeliveryRecord.STATUS_COMPLETED)
+        self.assertEqual(unit.status, ProductUnit.STATUS_RETURNED)
+
+    def test_delivery_api_cancel_requires_product_unit_change_permission(self):
+        user = self._user_with_permissions(
+            "view_deliveryrecord",
+            "change_deliveryrecord",
+        )
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        unit.status = ProductUnit.STATUS_SOLD
+        unit.save(update_fields=("status", "sold_date"))
+        delivery = DeliveryRecord.objects.create(customer_name="Cancel Customer")
+        DeliveryItem.objects.create(
+            delivery=delivery,
+            product=self.product,
+            product_unit=unit,
+        )
+        self.client.force_login(user)
+
+        response = self.client.post(
+            f"/api/stock/deliveries/{delivery.pk}/cancel/",
+            {"cancel_reason": "No product unit permission"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_delivery_api_detail_requires_view_delivery_permission(self):
+        user = self._user_with_permissions("view_productunit")
+        user.groups.clear()
+        delivery = DeliveryRecord.objects.create(customer_name="Internal Department")
+        self.client.force_login(user)
+
+        response = self.client.get(f"/api/stock/deliveries/{delivery.pk}/")
+
+        self.assertEqual(response.status_code, 403)
+
     def test_delivery_api_rejects_unavailable_units(self):
         user = self._user_with_permissions(
-            "view_product",
-            "view_productunit",
+            "add_deliveryrecord",
             "change_productunit",
         )
         unit = ProductUnit.objects.get(serial_number="API-RESERVED")

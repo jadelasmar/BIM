@@ -12,6 +12,9 @@ This roadmap documents product direction, not implementation history.
 - Add Unit
 - Create Delivery
 - Delivery records API
+- Delivery Records list frontend
+- Delivery Record detail frontend
+- Delivery record edit/cancel correction workflow
 - Receiving records backend API
 - Receiving Records list frontend
 - Receiving Record detail frontend
@@ -24,13 +27,12 @@ This roadmap documents product direction, not implementation history.
 
 ## Current Product Focus
 
-Build Delivery Records list/detail workflows.
+Complete office-ready stock workflow polish before moving to secondary modules.
 
-The receiving records list, detail screen, Receive Stock form, and safe correction actions use operational receiving records under `/operations/receiving/`. Manual Add Unit remains a direct stock unit workflow under inventory.
+Receiving and delivery records now have operational create/list/detail workflows under `/operations/...`. Manual Add Unit remains a direct stock unit workflow under inventory.
 
 ## Near-Term Modules
 
-- Delivery Records list/detail
 - Supplier page
 - Product edit workflow
 - Better stock history views

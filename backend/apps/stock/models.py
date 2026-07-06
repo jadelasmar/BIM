@@ -335,6 +335,15 @@ class DeliveryRecord(models.Model):
         choices=STATUS_CHOICES,
         default=STATUS_COMPLETED,
     )
+    cancel_reason = models.TextField(blank=True)
+    cancelled_at = models.DateTimeField(blank=True, null=True)
+    cancelled_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="cancelled_stock_delivery_records",
+    )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

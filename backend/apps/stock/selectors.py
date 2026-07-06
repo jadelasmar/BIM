@@ -1,6 +1,5 @@
 from datetime import timedelta
 
-from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
 
@@ -115,33 +114,6 @@ def recent_stock_activity():
             }
         )
 
-    fallback_units = (
-        ProductUnit.objects.filter(isactive=True)
-        .select_related("product", "supplier")
-        .filter(
-            Q(crdate__isnull=False)
-            | Q(sold_date__isnull=False)
-        )
-        .filter(delivery_item__isnull=True)
-        .filter(receiving_item__isnull=True)
-        .filter(status=ProductUnit.STATUS_SOLD)
-        .order_by("-crdate")[:8]
-    )
-    for unit in fallback_units:
-        activity_date = unit.sold_date or unit.crdate
-        activity.append(
-            {
-                "type": "Delivery",
-                "reference": operational_reference("DLV", activity_date, unit.pk),
-                "related": str(unit.product),
-                "user": "",
-                "date": activity_date,
-                "status": "Delivered",
-                "status_class": "delivered",
-                "href": reverse("operations_delivery_detail", kwargs={"pk": unit.pk}),
-            }
-        )
-
     return sorted(
         activity,
         key=lambda item: str(item["date"] or ""),
@@ -220,11 +192,6 @@ def recent_receiving(limit=4):
         for receiving in records
     ]
     return items
-
-
-def operational_reference(prefix, activity_date, number):
-    year = getattr(activity_date, "year", timezone.localdate().year)
-    return f"{prefix}-{year}-{number:04d}"
 
 
 def delivery_record_summary(delivery):

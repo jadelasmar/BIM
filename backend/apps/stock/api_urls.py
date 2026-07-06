@@ -28,6 +28,16 @@ urlpatterns = [
         name="deliveries",
     ),
     path(
+        "deliveries/<int:pk>/cancel/",
+        api_views.DeliveryRecordCancelAPIView.as_view(),
+        name="delivery-cancel",
+    ),
+    path(
+        "deliveries/<int:pk>/",
+        api_views.DeliveryRecordDetailAPIView.as_view(),
+        name="delivery-detail",
+    ),
+    path(
         "receiving-records/",
         api_views.ReceivingRecordListCreateAPIView.as_view(),
         name="receiving-records",

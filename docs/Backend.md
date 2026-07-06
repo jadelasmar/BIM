@@ -86,9 +86,22 @@ Stock API views:
 - product unit list/create/detail/update
 - receiving record list/create/detail/update
 - receiving record cancel
-- delivery list/create
+- delivery list/create/detail/update
+- delivery cancel
 - inventory summary
 - lookup endpoints for categories, brands, models, suppliers
+
+Delivery record list search currently supports delivery number, customer name, receiver name, product-unit serial number, product description, and product SKU. Delivery list/detail access uses the delivery record view permission. Creating a delivery requires both the delivery record add permission and product-unit change permission because selected stock units are marked sold.
+
+Delivery correction is intentionally limited:
+
+- Safe header updates may change customer name, receiver name, delivery date, and notes.
+- Safe line updates may change delivery item notes only.
+- Product-unit links, products, delivered units, serial numbers, and delivered quantity are not editable through the delivery correction API.
+- Changing the delivery date is blocked unless every linked stock unit is still active, sold, and linked to this delivery item.
+- Cancellation requires the delivery record change permission and product-unit change permission.
+- Cancellation is blocked when any linked product unit is no longer an untouched sold unit for that delivery.
+- Successful cancellation marks the delivery record cancelled, stores cancellation audit fields, marks delivery items inactive, and returns linked product units to available stock.
 
 Receiving record list search currently supports receiving number, supplier name, reference number, product description/SKU, receiving item serial number, and linked product-unit serial number. Future reporting should reuse the `ReceivingRecord` header fields and `ReceivingItem` product/unit relationships instead of querying generated frontend data.
 
@@ -110,6 +123,8 @@ Use selectors for reusable read logic that feeds dashboards, summaries, and app-
 
 Dashboard receiving counts and recent receiving panels are based on real active `ReceivingRecord` rows. ProductUnit-only rows from manual Add Unit are inventory maintenance records, not receiving records.
 
+Recent delivery panels and delivery activity are based on real active `DeliveryRecord` rows. Sold `ProductUnit` rows that are not linked to a delivery item are not shown as delivery records and must not generate fake delivery detail links.
+
 ## Services
 
 Stock write workflows that span multiple models live in `backend/apps/stock/services.py`.
@@ -119,8 +134,10 @@ Current services:
 - `create_receiving_record`: creates operational receiving records and items, and creates/links `ProductUnit` rows when serial numbers are supplied.
 - `update_receiving_record_header`: updates safe receiving header fields and line cost/notes, synchronizing available linked stock-unit purchase metadata.
 - `cancel_receiving_record`: cancels a receiving record only while linked stock units are still unused and available.
+- `update_delivery_record_header`: updates safe delivery header fields and delivery item notes, synchronizing sold dates only for untouched sold units.
+- `cancel_delivery_record`: cancels a delivery record only while linked stock units are still untouched sold units for that delivery.
 
-Keep views thin. Add services when delivery cancellation, returns, adjustments, or stock movement logic becomes more complex.
+Keep views thin. Add services when returns, adjustments, or broader stock movement logic becomes more complex.
 
 ## Admin
 

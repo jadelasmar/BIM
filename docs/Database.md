@@ -165,6 +165,9 @@ Fields:
 - `delivery_date`
 - `notes`
 - `status`
+- `cancel_reason`
+- `cancelled_at`
+- `cancelled_by`
 - `created_by`
 - `crdate`
 - `isactive`
@@ -173,6 +176,12 @@ Rules:
 
 - Delivery numbers are generated as `DLV-YYYY-0001`.
 - Current default status is completed.
+- Creating a delivery is operational only; it marks selected active available product units sold and sets their sold date to the delivery date.
+- Cancellation is operational only and does not create accounting, invoice, payment, tax, voucher, or financial posting behavior.
+- Cancelling a delivery record requires all linked product units to still be active, sold, and linked to this delivery.
+- Successful cancellation marks the delivery record cancelled, stores cancellation audit fields, marks related delivery items inactive, and returns linked product units to available stock.
+- Customer name, receiver name, delivery date, notes, and `isactive` are the header fields expected to support future customer, receiver, date-range, and active/cancelled delivery reports.
+- Delivery records do not create accounting, invoice, payment, tax, voucher, or financial posting behavior.
 
 ### DeliveryItem
 
@@ -190,6 +199,8 @@ Fields:
 Rules:
 
 - `product_unit` is one-to-one to prevent one physical unit from being delivered more than once.
+- Item lines preserve the delivered product and product-unit serial relationship for delivery detail views and future stock history.
+- Correction workflows may update line notes. Product, product-unit link, delivered units, and serial number are not directly editable after creation.
 
 ## Migration Strategy
 

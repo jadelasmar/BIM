@@ -1106,6 +1106,636 @@ function ReceivingItemsTable({ items }) {
   );
 }
 
+function DeliveryRecordsPage({ data }) {
+  const [records, setRecords] = useState([]);
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const params = new URLSearchParams();
+    if (query.trim()) params.set("q", query.trim());
+
+    async function loadDeliveryRecords() {
+      setLoading(true);
+      setError("");
+      try {
+        const endpoint = params.toString()
+          ? `${data.api.deliveries}?${params.toString()}`
+          : data.api.deliveries;
+        const response = await fetch(endpoint, { signal: controller.signal });
+
+        if (!response.ok) {
+          throw new Error("Could not load delivery records.");
+        }
+
+        setRecords(await response.json());
+      } catch (loadError) {
+        if (loadError.name !== "AbortError") {
+          setError(loadError.message);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadDeliveryRecords();
+    return () => controller.abort();
+  }, [data.api.deliveries, query]);
+
+  const totalUnits = records.reduce((sum, record) => sum + Number(record.total_units || 0), 0);
+  const recentRecord = records[0];
+  const completedCount = records.filter((record) => record.status === "completed").length;
+  const deliveryKpis = [
+    {
+      label: "Delivery Records",
+      value: formatCount(records.length),
+      detail: "stock exit records",
+      icon: "delivery",
+      tone: "indigo"
+    },
+    {
+      label: "Delivered Units",
+      value: formatCount(totalUnits),
+      detail: "physical units issued",
+      icon: "box",
+      tone: "blue"
+    },
+    {
+      label: "Completed",
+      value: formatCount(completedCount),
+      detail: "operational delivery records",
+      icon: "check-circle-2",
+      tone: "green"
+    },
+    {
+      label: "Latest Delivery",
+      value: recentRecord ? formatDate(recentRecord.delivery_date) : "-",
+      detail: recentRecord?.delivery_number || "no deliveries yet",
+      icon: "clock-3",
+      tone: "neutral"
+    }
+  ];
+
+  return (
+    <Shell data={data}>
+      <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Delivery Records</h1>
+          <p className="mt-1 text-sm text-zinc-400">Review operational stock-out records.</p>
+        </div>
+        <Button as="a" href={data.routes.createDelivery} variant="primary">
+          <Plus className="h-4 w-4" />
+          Create Delivery
+        </Button>
+      </header>
+
+      <KpiGrid items={deliveryKpis} />
+
+      <section className="mt-4 rounded-lg border border-nexus-line bg-nexus-panel p-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <SearchBar
+            className="flex-1"
+            inputClassName="placeholder:text-zinc-500"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search delivery number, customer, receiver, product, or serial..."
+          />
+          <span className="text-xs text-zinc-500">{records.length} records</span>
+        </div>
+      </section>
+
+      <DeliveryRecordsTable records={records} loading={loading} error={error} />
+    </Shell>
+  );
+}
+
+function DeliveryRecordsTable({ records, loading, error }) {
+  return (
+    <section className="mt-4 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-zinc-800/80 text-zinc-400">
+            <tr>
+              <th className="px-4 py-3 font-medium">Delivery</th>
+              <th className="px-4 py-3 font-medium">Customer</th>
+              <th className="px-4 py-3 font-medium">Receiver</th>
+              <th className="px-4 py-3 font-medium">Delivery Date</th>
+              <th className="px-4 py-3 font-medium">Units</th>
+              <th className="px-4 py-3 font-medium">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <TableMessage message="Loading delivery records..." />
+            ) : error ? (
+              <TableMessage message={error} />
+            ) : records.length ? (
+              records.map((record) => (
+                <tr key={record.id} className="border-t border-nexus-line hover:bg-zinc-900/70">
+                  <td className="px-4 py-4">
+                    <a href={`/operations/deliveries/${record.id}/`} className="font-mono text-xs font-bold text-nexus-orange hover:text-orange-300">
+                      {record.delivery_number}
+                    </a>
+                    <p className="mt-1 text-xs text-zinc-500">Created by {record.created_by_name || "-"}</p>
+                  </td>
+                  <td className="px-4 py-4">
+                    <p className="font-semibold text-white">{record.customer_name || "-"}</p>
+                    <p className="mt-1 text-xs text-zinc-500">Stock exit</p>
+                  </td>
+                  <td className="px-4 py-4 text-zinc-300">{record.receiver_name || "-"}</td>
+                  <td className="px-4 py-4 text-zinc-300">{formatDate(record.delivery_date)}</td>
+                  <td className="px-4 py-4">
+                    <p className="font-bold text-white">{formatCount(record.total_units || 0)}</p>
+                    <p className="mt-1 text-xs text-zinc-500">{formatCount(record.items?.length || 0)} lines</p>
+                  </td>
+                  <td className="px-4 py-4">
+                    <Status status={deliveryStatusLabel(record)} statusClass={deliveryStatusClass(record)} />
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan="6">
+                  <EmptyState
+                    className="border-t border-nexus-line"
+                    title="No delivery records yet."
+                    description="Create Delivery will create the first operational stock-out record."
+                  />
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function DeliveryRecordDetailPage({ data }) {
+  const deliveryId = (data.currentPath || window.location.pathname).match(/\/operations\/deliveries\/(\d+)\//)?.[1];
+  const [record, setRecord] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [notFound, setNotFound] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [editing, setEditing] = useState(false);
+  const [savingCorrection, setSavingCorrection] = useState(false);
+  const [correctionError, setCorrectionError] = useState("");
+  const [correctionMessage, setCorrectionMessage] = useState("");
+  const [correctionForm, setCorrectionForm] = useState({
+    customerName: "",
+    receiverName: "",
+    deliveryDate: "",
+    notes: "",
+    items: []
+  });
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState("");
+
+  const isCancelled = record?.status === "cancelled" || record?.isactive === false;
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadDeliveryRecord() {
+      setLoading(true);
+      setError("");
+      setNotFound(false);
+      try {
+        const endpoint = data.api.deliveryDetail.replace("{id}", deliveryId);
+        const response = await fetch(endpoint, { signal: controller.signal });
+
+        if (response.status === 404) {
+          setNotFound(true);
+          setRecord(null);
+          return;
+        }
+        if (!response.ok) {
+          throw new Error("Could not load delivery record.");
+        }
+
+        setRecord(await response.json());
+      } catch (loadError) {
+        if (loadError.name !== "AbortError") {
+          setError(loadError.message);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadDeliveryRecord();
+    return () => controller.abort();
+  }, [data.api.deliveryDetail, deliveryId, reloadKey]);
+
+  useEffect(() => {
+    if (!record) return;
+    setCorrectionForm({
+      customerName: record.customer_name || "",
+      receiverName: record.receiver_name || "",
+      deliveryDate: record.delivery_date || "",
+      notes: record.notes || "",
+      items: (record.items || []).map((item) => ({
+        id: item.id,
+        notes: item.notes || ""
+      }))
+    });
+  }, [record]);
+
+  function updateCorrectionField(field, value) {
+    setCorrectionForm((current) => ({ ...current, [field]: value }));
+  }
+
+  function updateCorrectionItem(itemId, value) {
+    setCorrectionForm((current) => ({
+      ...current,
+      items: current.items.map((item) =>
+        item.id === itemId ? { ...item, notes: value } : item
+      )
+    }));
+  }
+
+  async function saveDeliveryCorrection() {
+    setSavingCorrection(true);
+    setCorrectionError("");
+    setCorrectionMessage("");
+    try {
+      const endpoint = data.api.deliveryDetail.replace("{id}", deliveryId);
+      const response = await fetch(endpoint, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": data.csrfToken
+        },
+        body: JSON.stringify({
+          customer_name: correctionForm.customerName,
+          receiver_name: correctionForm.receiverName,
+          delivery_date: correctionForm.deliveryDate,
+          notes: correctionForm.notes,
+          items: correctionForm.items.map((item) => ({
+            id: item.id,
+            notes: item.notes || ""
+          }))
+        })
+      });
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        throw new Error(firstApiError(details) || "Could not update delivery record.");
+      }
+      setEditing(false);
+      setCorrectionMessage("Delivery details updated.");
+      setReloadKey((current) => current + 1);
+    } catch (saveError) {
+      setCorrectionError(saveError.message);
+    } finally {
+      setSavingCorrection(false);
+    }
+  }
+
+  async function cancelDeliveryRecord() {
+    setCancelling(true);
+    setCancelError("");
+    setCorrectionMessage("");
+    try {
+      if (!cancelReason.trim()) {
+        throw new Error("Enter a cancellation reason.");
+      }
+      const endpoint = data.api.deliveryDetail.replace("{id}", deliveryId).replace(/\/$/, "/cancel/");
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": data.csrfToken
+        },
+        body: JSON.stringify({ cancel_reason: cancelReason })
+      });
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        throw new Error(firstApiError(details) || "Could not cancel delivery record.");
+      }
+      setCancelOpen(false);
+      setCancelReason("");
+      setCorrectionMessage("Delivery record cancelled. Linked untouched sold units were returned to available stock.");
+      setReloadKey((current) => current + 1);
+    } catch (cancelSaveError) {
+      setCancelError(cancelSaveError.message);
+    } finally {
+      setCancelling(false);
+    }
+  }
+
+  return (
+    <Shell data={data}>
+      <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <a href={data.routes.deliveryRecords} className="inline-flex items-center gap-2 text-sm font-semibold text-nexus-orange hover:text-orange-300">
+            <ChevronRight className="h-4 w-4 rotate-180" />
+            Back to Delivery Records
+          </a>
+          <h1 className="mt-3 text-2xl font-bold text-white">Delivery Record</h1>
+          <p className="mt-1 text-sm text-zinc-400">Operational stock-out detail.</p>
+        </div>
+        {record ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <Status status={deliveryStatusLabel(record)} statusClass={deliveryStatusClass(record)} />
+            {!isCancelled ? (
+              <>
+                <Button type="button" variant="outline" onClick={() => setEditing((current) => !current)}>
+                  <Edit3 className="h-4 w-4" />
+                  Edit Details
+                </Button>
+                <Button type="button" variant="secondary" onClick={() => setCancelOpen((current) => !current)}>
+                  <RotateCcw className="h-4 w-4" />
+                  Cancel Record
+                </Button>
+              </>
+            ) : null}
+          </div>
+        ) : null}
+      </header>
+
+      {correctionMessage ? (
+        <section className="mb-4 rounded-lg border border-nexus-green/50 bg-green-500/10 px-4 py-3 text-sm font-semibold text-green-200">
+          {correctionMessage}
+        </section>
+      ) : null}
+
+      {loading ? (
+        <section className="rounded-lg border border-nexus-line bg-nexus-panel p-6 text-sm text-zinc-500">
+          Loading delivery record...
+        </section>
+      ) : error ? (
+        <section className="rounded-lg border border-nexus-red/60 bg-red-500/10 p-6 text-sm font-semibold text-red-200">
+          {error}
+        </section>
+      ) : notFound ? (
+        <EmptyState
+          className="rounded-lg border border-nexus-line bg-nexus-panel"
+          title="Delivery record not found."
+          description="The record may have been removed or you may not have access."
+        />
+      ) : record ? (
+        <>
+        {editing ? (
+          <DeliveryCorrectionPanel
+            form={correctionForm}
+            items={record.items || []}
+            saving={savingCorrection}
+            error={correctionError}
+            onFieldChange={updateCorrectionField}
+            onItemChange={updateCorrectionItem}
+            onCancel={() => {
+              setEditing(false);
+              setCorrectionError("");
+            }}
+            onSave={saveDeliveryCorrection}
+          />
+        ) : null}
+
+        {cancelOpen ? (
+          <section className="mb-5 rounded-lg border border-nexus-red/60 bg-red-500/10 p-5">
+            <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <h2 className="text-sm font-bold text-red-100">Cancel delivery record</h2>
+                <p className="mt-1 text-sm text-red-200/80">
+                  Cancellation is only allowed while linked units are still active, sold, and untouched. Wrong unit, product, or serial entries should be cancelled and recreated when safe.
+                </p>
+              </div>
+              <Button type="button" variant="ghost" onClick={() => setCancelOpen(false)}>
+                <X className="h-4 w-4" />
+                Close
+              </Button>
+            </div>
+            <div className="mt-4">
+              <Field label="Cancellation reason" required>
+                <TextInput value={cancelReason} onChange={setCancelReason} placeholder="Explain the delivery mistake" />
+              </Field>
+            </div>
+            {cancelError ? <p className="mt-3 text-sm font-semibold text-red-200">{cancelError}</p> : null}
+            <div className="mt-4 flex flex-wrap gap-3">
+              <Button type="button" variant="danger" loading={cancelling} onClick={cancelDeliveryRecord}>
+                <RotateCcw className="h-4 w-4" />
+                Confirm Cancel
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => setCancelOpen(false)}>
+                Keep Record
+              </Button>
+            </div>
+          </section>
+        ) : null}
+
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="min-w-0 space-y-5">
+            <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
+              <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">Delivery Number</p>
+                  <h2 className="mt-2 font-mono text-2xl font-bold text-nexus-orange">{record.delivery_number}</h2>
+                </div>
+                <div className="grid gap-3 text-sm md:min-w-48 md:text-right">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">Delivery Date</p>
+                    <p className="mt-1 text-zinc-300">{formatDate(record.delivery_date)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">Status</p>
+                    <p className="mt-1 text-zinc-300">{deliveryStatusLabel(record)}</p>
+                  </div>
+                </div>
+              </div>
+
+              <dl className="mt-5 grid gap-4 md:grid-cols-2">
+                <DetailRow label="Customer" value={record.customer_name || "-"} strong />
+                <DetailRow label="Receiver" value={record.receiver_name || "-"} />
+                <DetailRow label="Delivery Date" value={formatDate(record.delivery_date)} />
+                <DetailRow label="Created By" value={record.created_by_name || "-"} />
+                <DetailRow label="Total Units" value={formatCount(record.total_units || 0)} highlight />
+                <DetailRow label="Status" value={deliveryStatusLabel(record)} />
+              </dl>
+
+              {record.notes ? (
+                <div className="mt-5 rounded-lg border border-nexus-line bg-nexus-panel2 p-4">
+                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">Notes</p>
+                  <p className="mt-2 text-sm text-zinc-300">{record.notes}</p>
+                </div>
+              ) : null}
+            </section>
+
+            <DeliveryItemsTable items={record.items || []} />
+          </div>
+
+          <aside className="rounded-lg border border-nexus-line bg-nexus-panel p-4 xl:sticky xl:top-5 xl:self-start">
+            <h2 className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">Activity</h2>
+            <div className="mt-4 space-y-3 text-sm">
+              <DetailRow label="Record Status" value={deliveryStatusLabel(record)} highlight />
+              <DetailRow label="Created" value={formatDate(record.crdate)} />
+              <DetailRow label="Item Lines" value={formatCount(record.items?.length || 0)} />
+              <DetailRow label="Delivery Type" value="Operational stock exit" />
+              {isCancelled ? (
+                <>
+                  <DetailRow label="Cancelled" value={formatDate(record.cancelled_at)} />
+                  <DetailRow label="Reason" value={record.cancel_reason || "-"} />
+                </>
+              ) : null}
+            </div>
+          </aside>
+        </div>
+        </>
+      ) : null}
+    </Shell>
+  );
+}
+
+function DeliveryCorrectionPanel({
+  form,
+  items,
+  saving,
+  error,
+  onFieldChange,
+  onItemChange,
+  onCancel,
+  onSave
+}) {
+  return (
+    <section className="mb-5 rounded-lg border border-nexus-line bg-nexus-panel p-5">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h2 className="text-sm font-bold text-white">Edit delivery details</h2>
+          <p className="mt-1 text-sm text-zinc-400">
+            Safe edits are limited to customer, receiver, delivery date, notes, and item notes.
+          </p>
+        </div>
+        <Button type="button" variant="ghost" onClick={onCancel}>
+          <X className="h-4 w-4" />
+          Close
+        </Button>
+      </div>
+
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
+        <Field label="Customer" required>
+          <TextInput value={form.customerName} onChange={(value) => onFieldChange("customerName", value)} />
+        </Field>
+        <Field label="Receiver">
+          <TextInput value={form.receiverName} onChange={(value) => onFieldChange("receiverName", value)} />
+        </Field>
+        <Field label="Delivery Date" required>
+          <TextInput type="date" value={form.deliveryDate} onChange={(value) => onFieldChange("deliveryDate", value)} />
+        </Field>
+        <Field label="Notes">
+          <TextInput value={form.notes} onChange={(value) => onFieldChange("notes", value)} />
+        </Field>
+      </div>
+
+      <div className="mt-5 rounded-lg border border-nexus-line bg-nexus-panel2">
+        <PanelHeader title="Item Notes" badge={formatCount(items.length)} />
+        <div className="divide-y divide-nexus-line">
+          {items.length ? (
+            items.map((item) => {
+              const formItem = form.items.find((entry) => entry.id === item.id);
+              return (
+                <div key={item.id} className="grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_minmax(220px,0.8fr)]">
+                  <div>
+                    <p className="font-semibold text-white">{item.product_name}</p>
+                    <p className="mt-1 font-mono text-xs text-zinc-500">{item.serial_number || "-"}</p>
+                  </div>
+                  <Field label="Line Notes">
+                    <TextInput value={formItem?.notes || ""} onChange={(value) => onItemChange(item.id, value)} />
+                  </Field>
+                </div>
+              );
+            })
+          ) : (
+            <EmptyState
+              className="border-t border-nexus-line"
+              title="No item lines on this record."
+              description="There are no item notes to edit."
+            />
+          )}
+        </div>
+      </div>
+
+      {error ? <p className="mt-3 text-sm font-semibold text-red-200">{error}</p> : null}
+      <div className="mt-5 flex flex-wrap gap-3">
+        <Button type="button" variant="primary" loading={saving} onClick={onSave}>
+          <Save className="h-4 w-4" />
+          Save Details
+        </Button>
+        <Button type="button" variant="secondary" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </section>
+  );
+}
+
+function DeliveryItemsTable({ items }) {
+  return (
+    <section className="overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
+      <PanelHeader title="Delivered Items" badge={formatCount(items.length)} />
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-zinc-800/80 text-zinc-400">
+            <tr>
+              <th className="px-4 py-3 font-medium">Product</th>
+              <th className="px-4 py-3 font-medium">Unit</th>
+              <th className="px-4 py-3 font-medium">Serial Number</th>
+              <th className="px-4 py-3 font-medium">Unit Status</th>
+              <th className="px-4 py-3 font-medium">Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.length ? (
+              items.map((item) => (
+                <tr key={item.id} className="border-t border-nexus-line">
+                  <td className="px-4 py-4">
+                    <p className="font-semibold text-white">{item.product_name}</p>
+                    <p className="mt-1 font-mono text-xs text-zinc-500">{item.product_sku || "-"}</p>
+                  </td>
+                  <td className="px-4 py-4">
+                    <p className="font-mono text-xs text-zinc-300">{item.product_unit ? `Unit #${item.product_unit}` : "-"}</p>
+                    <p className="mt-1 text-xs text-zinc-500">Product #{item.product || "-"}</p>
+                  </td>
+                  <td className="px-4 py-4 font-mono text-xs text-zinc-300">{item.serial_number || "-"}</td>
+                  <td className="px-4 py-4">
+                    <Status status={item.product_unit_status_label || item.product_unit_status || "-"} statusClass={item.product_unit_status || "inactive"} />
+                  </td>
+                  <td className="px-4 py-4 text-zinc-400">{item.notes || "-"}</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan="5">
+                  <EmptyState
+                    className="border-t border-nexus-line"
+                    title="No item lines on this record."
+                    description="This delivery record has no active delivered item rows."
+                  />
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function deliveryStatusLabel(record) {
+  if (record.status === "cancelled" || record.isactive === false) return "Cancelled";
+  if (record.status === "draft") return "Draft";
+  return "Delivered";
+}
+
+function deliveryStatusClass(record) {
+  if (record.status === "cancelled" || record.isactive === false) return "inactive";
+  if (record.status === "draft") return "reserved";
+  return "delivered";
+}
+
 function Header({ data }) {
   const [greeting, setGreeting] = useState(() => browserGreeting(data.hero.greetingName));
 
@@ -2890,7 +3520,8 @@ function CreateDeliveryPage({ data }) {
         throw new Error(firstApiError(details) || "Could not complete delivery.");
       }
 
-      window.location.assign(data.routes.inventory);
+      const created = await response.json();
+      window.location.assign(created.id ? `/operations/deliveries/${created.id}/` : data.routes.deliveryRecords);
     } catch (saveError) {
       setError(saveError.message);
     } finally {
@@ -3807,7 +4438,7 @@ const appRoutes = [
   },
   {
     match: (path) => /^\/operations\/deliveries\/\d+\//.test(path),
-    render: (data) => <PlaceholderPage data={data} title="Delivery Record" />
+    render: (data) => <DeliveryRecordDetailPage data={data} />
   },
   {
     match: (path) => path.startsWith("/operations/deliveries/new"),
@@ -3815,7 +4446,7 @@ const appRoutes = [
   },
   {
     match: (path) => path === "/operations/deliveries/",
-    render: (data) => <PlaceholderPage data={data} title="Delivery Records" />
+    render: (data) => <DeliveryRecordsPage data={data} />
   },
   {
     match: (path) => path.startsWith("/operations"),

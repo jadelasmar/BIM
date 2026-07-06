@@ -109,6 +109,7 @@ def _command_center_initial_data(
             "productUnits": "/api/stock/product-units/",
             "productUnitDetail": "/api/stock/product-units/{id}/",
             "deliveries": "/api/stock/deliveries/",
+            "deliveryDetail": "/api/stock/deliveries/{id}/",
             "receivingRecords": "/api/stock/receiving-records/",
             "receivingRecordDetail": "/api/stock/receiving-records/{id}/",
             "suppliers": "/api/stock/suppliers/",
@@ -263,6 +264,9 @@ def _build_command_center_initial_data(request, current_path=None):
     can_view_stock = user_can_view_stock(user)
     can_use_operations = user_can_use_stock_operations(user)
     low_stock_count, out_of_stock_count = low_stock_counts() if can_view_stock else ("-", 0)
+    can_create_delivery = user.has_perm(
+        stock_constants.ADD_DELIVERY_RECORD
+    ) and user.has_perm(stock_constants.CHANGE_PRODUCT_UNIT)
 
     metrics = [
         {
@@ -308,9 +312,9 @@ def _build_command_center_initial_data(request, current_path=None):
         },
         {
             "href": reverse("operations_create_delivery")
-            if user.has_perm(stock_constants.CHANGE_PRODUCT_UNIT)
+            if can_create_delivery
             else None,
-            "enabled": user.has_perm(stock_constants.CHANGE_PRODUCT_UNIT),
+            "enabled": can_create_delivery,
             "description": "Initiate outbound delivery order",
             **ui_item("create_delivery"),
         },

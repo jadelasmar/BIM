@@ -105,6 +105,8 @@ Important API routes:
 - `/api/stock/receiving-records/<id>/`
 - `/api/stock/receiving-records/<id>/cancel/`
 - `/api/stock/deliveries/`
+- `/api/stock/deliveries/<id>/`
+- `/api/stock/deliveries/<id>/cancel/`
 - `/api/stock/suppliers/`
 - `/api/stock/brands/`
 - `/api/stock/models/`
@@ -160,6 +162,8 @@ Current main operational UI implementation:
 - Add Unit through direct stock unit entry
 - Receiving Records list
 - Create Delivery
+- Delivery Records list
+- Delivery Record detail
 - placeholder pages
 - shared UI pieces not yet split out
 
@@ -250,6 +254,52 @@ React Create Delivery page
   -> DeliveryRecordSerializer.create()
   -> creates DeliveryRecord and DeliveryItem rows
   -> marks selected ProductUnit rows sold
+  -> redirects to /operations/deliveries/<id>/ when an id is returned
+```
+
+### Delivery Record Detail API
+
+```text
+GET /api/stock/deliveries/<id>/
+  -> DeliveryRecordDetailAPIView
+  -> DeliveryRecordSerializer
+  -> returns delivery header and delivered item lines
+```
+
+### Delivery Correction
+
+```text
+React Delivery Record detail
+  -> PATCH /api/stock/deliveries/<id>/
+  -> DeliveryRecordCorrectionSerializer.update()
+  -> services.update_delivery_record_header()
+  -> updates safe header fields and item notes only
+
+React Delivery Record detail
+  -> POST /api/stock/deliveries/<id>/cancel/
+  -> DeliveryRecordCancelSerializer.save()
+  -> services.cancel_delivery_record()
+  -> cancels only when linked ProductUnit rows are still active, sold, and linked to this delivery
+```
+
+### Delivery Records List
+
+```text
+GET /operations/deliveries/
+  -> apps.core.views.module_launcher
+  -> React AppRouter renders DeliveryRecordsPage
+  -> GET /api/stock/deliveries/
+  -> DeliveryRecordSerializer returns records and items
+```
+
+### Delivery Record Detail
+
+```text
+GET /operations/deliveries/<id>/
+  -> apps.core.views.module_launcher
+  -> React AppRouter renders DeliveryRecordDetailPage
+  -> GET /api/stock/deliveries/<id>/
+  -> DeliveryRecordSerializer returns one record and delivered item lines
 ```
 
 ### Receiving Creation
@@ -315,5 +365,6 @@ GET /operations/receiving/<id>/
 - Frontend API calls are inline.
 - More UI patterns should move into `components/ui/` only when repeated by current screens.
 - Receiving edit/cancel is intentionally limited to office-safe correction fields.
+- Delivery edit/cancel is intentionally limited to office-safe correction fields.
 - Supplier/client/assets/report modules are placeholders or partial.
 - `Product.image` still uploads to `products_images/`.

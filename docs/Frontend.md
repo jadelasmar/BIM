@@ -42,9 +42,9 @@ Important rendered routes:
 - `/operations/receiving/` Receiving Records list
 - `/operations/receiving/new/` Receive Stock
 - `/operations/receiving/<id>/` Receiving Record detail
-- `/operations/deliveries/` Delivery Records placeholder
+- `/operations/deliveries/` Delivery Records list
 - `/operations/deliveries/new/` Create Delivery
-- `/operations/deliveries/<id>/` Delivery Record detail placeholder
+- `/operations/deliveries/<id>/` Delivery Record detail
 - `/settings/` Settings
 - `/accounts/login/` Login
 - `/accounts/setup/<uid>/<token>/` Password setup
@@ -134,3 +134,19 @@ Current Receiving Records integration:
   - Cancel Record requires a cancellation reason and uses the receiving cancel API.
   - Product, quantity, and serial mistakes are handled by cancelling and recreating the record when linked units are still unused.
 - If cancellation is blocked because a linked stock unit is already used, the detail screen shows the backend operational message.
+
+Current Delivery Records integration:
+
+- `/operations/deliveries/new/` submits Create Delivery through `initial_data.api.deliveries`.
+- On success, Create Delivery redirects to `/operations/deliveries/<id>/` when the API returns an id, otherwise back to the delivery records list.
+- `/operations/deliveries/` renders a real list screen from `AppRouter.jsx`.
+- The screen fetches `/api/stock/deliveries/` through `initial_data.api.deliveries`.
+- It shows delivery number, customer, receiver, delivery date, unit totals, and status.
+- Loading, empty, and error states reuse the existing table and empty-state patterns.
+- `/operations/deliveries/<id>/` fetches one record through `initial_data.api.deliveryDetail`.
+- The detail screen shows customer, receiver, delivery date, status, creator, notes, total units, and delivered item lines with product, SKU, unit id, serial number, unit status, and notes.
+- The detail screen supports safe correction actions only:
+  - Edit Details updates customer, receiver, delivery date, notes, and item notes.
+  - Cancel Record requires a cancellation reason and uses the delivery cancel API.
+  - Wrong delivered unit, product, or serial mistakes are handled by cancelling and recreating the record when linked units are still untouched sold units.
+- If cancellation is blocked because a linked stock unit is no longer an untouched sold unit, the detail screen shows the backend operational message.

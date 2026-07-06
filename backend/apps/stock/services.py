@@ -2,7 +2,13 @@ from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from .models import ProductUnit, ReceivingItem, ReceivingRecord
+from .models import (
+    DeliveryItem,
+    DeliveryRecord,
+    ProductUnit,
+    ReceivingItem,
+    ReceivingRecord,
+)
 
 
 def _clean_serial_numbers(serial_numbers):
@@ -131,6 +137,21 @@ def _unit_can_be_corrected(unit):
     )
 
 
+def _delivery_unit_can_be_corrected(item):
+    unit = item.product_unit
+    if not item.isactive or not unit:
+        return False
+    try:
+        current_delivery_item = unit.delivery_item
+    except ObjectDoesNotExist:
+        return False
+    return (
+        unit.isactive
+        and unit.status == ProductUnit.STATUS_SOLD
+        and current_delivery_item.pk == item.pk
+    )
+
+
 @transaction.atomic
 def update_receiving_record_header(
     receiving,
@@ -235,3 +256,112 @@ def cancel_receiving_record(receiving, *, cancelled_by=None, cancel_reason=""):
         unit.save(update_fields=("status", "isactive", "sold_date"))
 
     return receiving
+
+
+@transaction.atomic
+def update_delivery_record_header(
+    delivery,
+    *,
+    customer_name=None,
+    receiver_name=None,
+    delivery_date=None,
+    notes=None,
+    items=None,
+):
+    if delivery.status == DeliveryRecord.STATUS_CANCELLED:
+        raise ValidationError("Cancelled delivery records cannot be edited.")
+
+    item_rows = list(delivery.items.select_related("product_unit"))
+    if delivery_date is not None:
+        blocked_units = [
+            item.product_unit.serial_number
+            for item in item_rows
+            if not _delivery_unit_can_be_corrected(item)
+        ]
+        if blocked_units:
+            raise ValidationError(
+                "Cannot change delivery date because these stock units are no longer untouched sold units: "
+                + ", ".join(sorted(blocked_units))
+            )
+
+    if customer_name is not None:
+        delivery.customer_name = customer_name.strip()
+    if receiver_name is not None:
+        delivery.receiver_name = receiver_name.strip()
+    if delivery_date is not None:
+        delivery.delivery_date = delivery_date
+    if notes is not None:
+        delivery.notes = notes
+    delivery.save(
+        update_fields=(
+            "customer_name",
+            "receiver_name",
+            "delivery_date",
+            "notes",
+        )
+    )
+
+    for item_data in items or []:
+        item_id = item_data.get("id")
+        if not item_id:
+            continue
+        try:
+            item = delivery.items.get(pk=item_id)
+        except DeliveryItem.DoesNotExist:
+            continue
+        if "notes" in item_data:
+            item.notes = item_data["notes"]
+            item.save(update_fields=("notes",))
+
+    if delivery_date is not None:
+        for item in item_rows:
+            unit = item.product_unit
+            if unit and _delivery_unit_can_be_corrected(item):
+                unit.sold_date = delivery.delivery_date
+                unit.save(update_fields=("sold_date",))
+
+    return delivery
+
+
+@transaction.atomic
+def cancel_delivery_record(delivery, *, cancelled_by=None, cancel_reason=""):
+    if delivery.status == DeliveryRecord.STATUS_CANCELLED:
+        return delivery
+
+    items = list(delivery.items.select_related("product_unit"))
+    blocked_units = [
+        item.product_unit.serial_number
+        for item in items
+        if not _delivery_unit_can_be_corrected(item)
+    ]
+    if blocked_units:
+        raise ValidationError(
+            "Cannot cancel delivery record because these stock units are no longer untouched sold units: "
+            + ", ".join(sorted(blocked_units))
+        )
+
+    delivery.status = DeliveryRecord.STATUS_CANCELLED
+    delivery.cancel_reason = (cancel_reason or "").strip()
+    delivery.cancelled_at = timezone.now()
+    delivery.cancelled_by = cancelled_by
+    delivery.save(
+        update_fields=(
+            "status",
+            "cancel_reason",
+            "cancelled_at",
+            "cancelled_by",
+        )
+    )
+
+    for item in items:
+        if item.isactive:
+            item.isactive = False
+            item.save(update_fields=("isactive",))
+
+    for item in items:
+        unit = item.product_unit
+        unit.status = ProductUnit.STATUS_AVAILABLE
+        unit.sold_date = None
+        unit.save(update_fields=("status", "sold_date"))
+
+    return delivery

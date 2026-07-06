@@ -12,6 +12,10 @@ VIEW_RECEIVING_RECORD = f"{APP_LABEL}.view_receivingrecord"
 ADD_RECEIVING_RECORD = f"{APP_LABEL}.add_receivingrecord"
 CHANGE_RECEIVING_RECORD = f"{APP_LABEL}.change_receivingrecord"
 
+VIEW_DELIVERY_RECORD = f"{APP_LABEL}.view_deliveryrecord"
+ADD_DELIVERY_RECORD = f"{APP_LABEL}.add_deliveryrecord"
+CHANGE_DELIVERY_RECORD = f"{APP_LABEL}.change_deliveryrecord"
+
 ADD_CATEGORY = f"{APP_LABEL}.add_category"
 ADD_BRAND = f"{APP_LABEL}.add_brand"
 
