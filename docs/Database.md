@@ -100,7 +100,7 @@ Statuses:
 When a unit is saved as sold, `sold_date` is filled if empty.
 Reserved units are operational holds and must be released back to available before delivery.
 Issued units are temporary handoffs expected to come back. Repair units physically exist but are not usable while under repair, testing, or decision.
-Client return workflows should later move sold units to available or repair; they should not introduce a permanent returned status.
+Client Return moves sold units to available or repair; it does not introduce a permanent returned status.
 
 ### ReceivingRecord
 
@@ -338,7 +338,7 @@ Rules:
 - Resolving a repair requires linked units to still be active, repair, and linked to active items on that repair.
 - Resolution supports only repair to available or repair to inactive in v1.
 - Inactive resolution marks linked product units inactive.
-- Reserved units must be released/cancelled first, issued units must be returned first, and sold units require a future client return workflow before repair.
+- Reserved units must be released/cancelled first, issued units must be returned first, and sold units require Client Return before repair.
 
 ### RepairItem
 
@@ -358,6 +358,52 @@ Rules:
 
 - Item lines preserve the repaired product and product-unit serial relationship for repair detail views and movement history.
 - Product, product-unit link, and serial number are not directly editable after creation.
+
+### ClientReturnRecord
+
+Operational return record for sold units that came back from a client. This is not delivery cancellation and not a refund, credit note, invoice, payment, tax, voucher, or financial posting.
+
+Fields:
+
+- `return_number`
+- `delivery`
+- `customer_name`
+- `received_from`
+- `return_date`
+- `reason`
+- `resolution`
+- `notes`
+- `received_by`
+- `crdate`
+- `isactive`
+
+Rules:
+
+- Return numbers are generated as `RET-YYYY-0001`.
+- Resolution is `available` or `repair`.
+- Creating a client return requires active sold product units linked to active items on completed delivery records.
+- Creating a client return moves linked product units from sold to available or repair and clears `sold_date`.
+- The original delivery record remains completed; delivery cancellation remains a separate correction workflow.
+- A unit cannot be returned twice while an active client return item already exists for that unit.
+
+### ClientReturnItem
+
+Connects returned stock units to a client return record and the original delivery item.
+
+Fields:
+
+- `client_return`
+- `delivery_item`
+- `product_unit`
+- `product`
+- `notes`
+- `crdate`
+- `isactive`
+
+Rules:
+
+- Item lines preserve the original delivery item, returned product, and product-unit serial relationship for traceability.
+- Product, product-unit link, delivery-item link, and serial number are not directly editable after creation.
 
 ### StockMovement
 
@@ -379,6 +425,7 @@ Fields:
 - `reservation_record`
 - `issue_record`
 - `repair_record`
+- `client_return_record`
 - `reference`
 - `crdate`
 - `isactive`
@@ -398,6 +445,8 @@ Movement types:
 - `sent_to_repair`
 - `repair_resolved`
 - `repair_deactivated`
+- `client_returned_available`
+- `client_returned_repair`
 
 Rules:
 
@@ -414,6 +463,8 @@ Rules:
 - Repair creation writes `sent_to_repair` rows when selected product units move from available to repair.
 - Repair resolution writes `repair_resolved` rows when linked product units move from repair to available.
 - Repair deactivation writes `repair_deactivated` rows when linked product units move from repair to inactive.
+- Client Return writes `client_returned_available` rows when sold units move to available.
+- Client Return writes `client_returned_repair` rows when sold units move to repair.
 - Manual Add Unit writes `manual_add` rows.
 - Direct product-unit status updates write `manual_update` rows when the status changes.
 - Clean deployments record movements going forward; old local development data is not backfilled automatically.

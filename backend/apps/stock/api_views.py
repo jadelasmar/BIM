@@ -11,6 +11,7 @@ from . import constants as stock_constants
 from .models import (
     Brand,
     Category,
+    ClientReturnRecord,
     DeliveryRecord,
     IssueRecord,
     Product,
@@ -25,6 +26,7 @@ from .models import (
 from .serializers import (
     BrandSerializer,
     CategorySerializer,
+    ClientReturnRecordSerializer,
     DeliveryRecordCancelSerializer,
     DeliveryRecordCorrectionSerializer,
     DeliveryRecordSerializer,
@@ -247,8 +249,68 @@ class ProductStockMovementListAPIView(generics.ListAPIView):
                 "reservation_record",
                 "issue_record",
                 "repair_record",
+                "client_return_record",
             )
             .order_by("-movement_date", "-crdate", "-pk")[:50]
+        )
+
+
+class ClientReturnRecordListCreateAPIView(generics.ListCreateAPIView):
+    serializer_class = ClientReturnRecordSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get_queryset(self):
+        _require_perm(self.request.user, stock_constants.VIEW_CLIENT_RETURN_RECORD)
+        queryset = (
+            ClientReturnRecord.objects.all()
+            .select_related("delivery", "received_by")
+            .prefetch_related(
+                "items",
+                "items__delivery_item",
+                "items__delivery_item__delivery",
+                "items__product",
+                "items__product_unit",
+            )
+            .order_by("-return_date", "-return_number")
+        )
+        query = self.request.query_params.get("q", "").strip()
+
+        if query:
+            queryset = queryset.filter(
+                Q(return_number__icontains=query)
+                | Q(delivery__delivery_number__icontains=query)
+                | Q(customer_name__icontains=query)
+                | Q(received_from__icontains=query)
+                | Q(reason__icontains=query)
+                | Q(items__product_unit__serial_number__icontains=query)
+                | Q(items__product__descript__icontains=query)
+                | Q(items__product__sku__icontains=query)
+            ).distinct()
+
+        return queryset
+
+    def perform_create(self, serializer):
+        _require_perm(self.request.user, stock_constants.ADD_CLIENT_RETURN_RECORD)
+        _require_perm(self.request.user, stock_constants.CHANGE_PRODUCT_UNIT)
+        serializer.save()
+
+
+class ClientReturnRecordDetailAPIView(generics.RetrieveAPIView):
+    serializer_class = ClientReturnRecordSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get_queryset(self):
+        _require_perm(self.request.user, stock_constants.VIEW_CLIENT_RETURN_RECORD)
+        return (
+            ClientReturnRecord.objects.all()
+            .select_related("delivery", "received_by")
+            .prefetch_related(
+                "items",
+                "items__delivery_item",
+                "items__delivery_item__delivery",
+                "items__product",
+                "items__product_unit",
+            )
         )
 
 

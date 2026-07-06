@@ -54,6 +54,9 @@ Important rendered routes:
 - `/operations/repairs/` Repair Records list
 - `/operations/repairs/new/` Create Repair
 - `/operations/repairs/<id>/` Repair Record detail
+- `/operations/client-returns/` Client Return Records list
+- `/operations/client-returns/new/` Create Client Return
+- `/operations/client-returns/<id>/` Client Return Record detail
 - `/settings/` Settings
 - `/accounts/login/` Login
 - `/accounts/setup/<uid>/<token>/` Password setup
@@ -191,7 +194,21 @@ Current Repair Records integration:
 - `/operations/repairs/<id>/` fetches one record through `initial_data.api.repairDetail`.
 - The detail screen shows repair metadata, repair item lines, and a Resolve Repair action.
 - Resolving a repair requires resolution notes and moves linked untouched repair units either back to available or to inactive.
-- Reserved units must be released/cancelled first, issued units must be returned first, and sold units must wait for a future client return workflow before repair.
+- Reserved units must be released/cancelled first, issued units must be returned first, and sold units must go through Client Return before repair.
+
+Current Client Return integration:
+
+- `/operations/client-returns/new/` submits Create Client Return through `initial_data.api.clientReturns`.
+- The create screen loads active sold stock units and lets the user choose either Return to available or Send to repair.
+- The backend still requires selected units to be linked to active items on completed delivery records.
+- On success, Create Client Return redirects to `/operations/client-returns/<id>/` when the API returns an id, otherwise back to the client return records list.
+- `/operations/client-returns/` renders a real list screen from `AppRouter.jsx`.
+- The screen fetches `/api/stock/client-returns/` through `initial_data.api.clientReturns`.
+- It shows return number, original delivery number when available, customer, received-from text, return date, unit totals, and resolution.
+- `/operations/client-returns/<id>/` fetches one record through `initial_data.api.clientReturnDetail`.
+- The detail screen shows return metadata and returned item lines with original delivery number, product, SKU, serial number, current unit status, and notes.
+- Delivery detail includes a Create Client Return action that opens the create screen with the delivery id in the URL.
+- Client Return is clearly labelled as not delivery cancellation and not a financial refund or credit.
 
 Current Delivery Records integration:
 

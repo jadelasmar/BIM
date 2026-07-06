@@ -748,6 +748,109 @@ class RepairItem(models.Model):
         return f"{self.repair} - {self.product_unit.serial_number}"
 
 
+class ClientReturnRecord(models.Model):
+    RESOLUTION_AVAILABLE = ProductUnit.STATUS_AVAILABLE
+    RESOLUTION_REPAIR = ProductUnit.STATUS_REPAIR
+
+    RESOLUTION_CHOICES = [
+        (RESOLUTION_AVAILABLE, "Available"),
+        (RESOLUTION_REPAIR, "Repair"),
+    ]
+
+    return_number = models.CharField(
+        max_length=32,
+        unique=True,
+        blank=True,
+        editable=False,
+    )
+    delivery = models.ForeignKey(
+        DeliveryRecord,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="client_returns",
+    )
+    customer_name = models.CharField(max_length=150)
+    received_from = models.CharField(max_length=150, blank=True)
+    return_date = models.DateField(default=timezone.localdate)
+    reason = models.CharField(max_length=150, blank=True)
+    resolution = models.CharField(max_length=20, choices=RESOLUTION_CHOICES)
+    notes = models.TextField(blank=True)
+    received_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="stock_client_return_records",
+    )
+    crdate = models.DateTimeField(auto_now_add=True)
+    isactive = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("-return_date", "-return_number")
+
+    def save(self, *args, **kwargs):
+        if not self.return_number:
+            year = (self.return_date or timezone.localdate()).year
+            prefix = f"RET-{year}-"
+            latest = (
+                ClientReturnRecord.objects.filter(return_number__startswith=prefix)
+                .order_by("-return_number")
+                .first()
+            )
+            next_number = 1
+            if latest:
+                try:
+                    next_number = int(latest.return_number.rsplit("-", 1)[1]) + 1
+                except (IndexError, ValueError):
+                    next_number = latest.pk + 1
+            self.return_number = f"{prefix}{next_number:04d}"
+        super().save(*args, **kwargs)
+
+    @property
+    def total_units(self):
+        return self.items.filter(isactive=True).count()
+
+    def __str__(self):
+        return self.return_number or "Client Return"
+
+
+class ClientReturnItem(models.Model):
+    client_return = models.ForeignKey(
+        ClientReturnRecord,
+        on_delete=models.CASCADE,
+        related_name="items",
+    )
+    delivery_item = models.ForeignKey(
+        DeliveryItem,
+        on_delete=models.PROTECT,
+        related_name="client_return_items",
+    )
+    product_unit = models.ForeignKey(
+        ProductUnit,
+        on_delete=models.PROTECT,
+        related_name="client_return_items",
+    )
+    product = models.ForeignKey(Product, on_delete=models.PROTECT)
+    notes = models.TextField(blank=True)
+    crdate = models.DateTimeField(auto_now_add=True)
+    isactive = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("product__descript", "product_unit__serial_number")
+
+    def save(self, *args, **kwargs):
+        if self.delivery_item_id:
+            self.product_unit = self.delivery_item.product_unit
+            self.product = self.delivery_item.product
+        elif self.product_unit_id and not self.product_id:
+            self.product = self.product_unit.product
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.client_return} - {self.product_unit.serial_number}"
+
+
 class StockMovement(models.Model):
     TYPE_RECEIVED = "received"
     TYPE_RECEIVING_CANCELLED = "receiving_cancelled"
@@ -762,6 +865,8 @@ class StockMovement(models.Model):
     TYPE_SENT_TO_REPAIR = "sent_to_repair"
     TYPE_REPAIR_RESOLVED = "repair_resolved"
     TYPE_REPAIR_DEACTIVATED = "repair_deactivated"
+    TYPE_CLIENT_RETURNED_AVAILABLE = "client_returned_available"
+    TYPE_CLIENT_RETURNED_REPAIR = "client_returned_repair"
 
     MOVEMENT_TYPE_CHOICES = [
         (TYPE_RECEIVED, "Received"),
@@ -777,6 +882,8 @@ class StockMovement(models.Model):
         (TYPE_SENT_TO_REPAIR, "Sent To Repair"),
         (TYPE_REPAIR_RESOLVED, "Repair Resolved"),
         (TYPE_REPAIR_DEACTIVATED, "Repair Deactivated"),
+        (TYPE_CLIENT_RETURNED_AVAILABLE, "Client Returned Available"),
+        (TYPE_CLIENT_RETURNED_REPAIR, "Client Returned Repair"),
     ]
 
     product_unit = models.ForeignKey(
@@ -832,6 +939,13 @@ class StockMovement(models.Model):
     )
     repair_record = models.ForeignKey(
         RepairRecord,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="stock_movements",
+    )
+    client_return_record = models.ForeignKey(
+        ClientReturnRecord,
         on_delete=models.SET_NULL,
         blank=True,
         null=True,

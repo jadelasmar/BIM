@@ -93,6 +93,16 @@ urlpatterns = [
         name="repair-detail",
     ),
     path(
+        "client-returns/",
+        api_views.ClientReturnRecordListCreateAPIView.as_view(),
+        name="client-returns",
+    ),
+    path(
+        "client-returns/<int:pk>/",
+        api_views.ClientReturnRecordDetailAPIView.as_view(),
+        name="client-return-detail",
+    ),
+    path(
         "receiving-records/",
         api_views.ReceivingRecordListCreateAPIView.as_view(),
         name="receiving-records",

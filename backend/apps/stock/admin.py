@@ -5,6 +5,8 @@ from django.utils import timezone
 from .models import (
     Brand,
     Category,
+    ClientReturnItem,
+    ClientReturnRecord,
     DeliveryItem,
     DeliveryRecord,
     IssueItem,
@@ -297,6 +299,7 @@ class StockMovementAdmin(admin.ModelAdmin):
         "reservation_record__reservation_number",
         "issue_record__issue_number",
         "repair_record__repair_number",
+        "client_return_record__return_number",
     )
     list_select_related = (
         "product",
@@ -307,6 +310,7 @@ class StockMovementAdmin(admin.ModelAdmin):
         "reservation_record",
         "issue_record",
         "repair_record",
+        "client_return_record",
     )
     readonly_fields = (
         "product_unit",
@@ -323,6 +327,7 @@ class StockMovementAdmin(admin.ModelAdmin):
         "reservation_record",
         "issue_record",
         "repair_record",
+        "client_return_record",
         "reference",
         "crdate",
         "isactive",
@@ -588,6 +593,77 @@ class RepairRecordAdmin(admin.ModelAdmin):
                     "resolution_notes",
                     "resolved_by",
                     "resolved_at",
+                )
+            },
+        ),
+        (
+            "Notes",
+            {
+                "fields": (
+                    "notes",
+                    "crdate",
+                )
+            },
+        ),
+    )
+
+    @admin.display(description="Units")
+    def unit_count(self, obj):
+        return obj.total_units
+
+
+class ClientReturnItemInline(admin.TabularInline):
+    model = ClientReturnItem
+    extra = 0
+    autocomplete_fields = ("product_unit",)
+    readonly_fields = ("product", "crdate")
+    fields = ("delivery_item", "product_unit", "product", "notes", "isactive", "crdate")
+
+
+@admin.register(ClientReturnRecord)
+class ClientReturnRecordAdmin(admin.ModelAdmin):
+    inlines = (ClientReturnItemInline,)
+    list_display = (
+        "return_number",
+        "customer_name",
+        "received_from",
+        "return_date",
+        "resolution",
+        "unit_count",
+        "delivery",
+        "received_by",
+        "isactive",
+        "crdate",
+    )
+    search_fields = (
+        "return_number",
+        "customer_name",
+        "received_from",
+        "reason",
+        "delivery__delivery_number",
+        "items__product_unit__serial_number",
+        "items__product__descript",
+        "items__product__sku",
+    )
+    list_filter = ("resolution", "return_date", "isactive")
+    readonly_fields = ("return_number", "crdate")
+    autocomplete_fields = ("delivery", "received_by")
+    ordering = ("-return_date", "-return_number")
+
+    fieldsets = (
+        (
+            "Client return record",
+            {
+                "fields": (
+                    "return_number",
+                    "delivery",
+                    "customer_name",
+                    "received_from",
+                    "return_date",
+                    "reason",
+                    "resolution",
+                    "received_by",
+                    "isactive",
                 )
             },
         ),

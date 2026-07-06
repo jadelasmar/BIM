@@ -45,6 +45,8 @@ from .admin import ProductAdmin, ProductUnitAdmin, ProductUnitPurchaseForm
 from .models import (
     Brand,
     Category,
+    ClientReturnItem,
+    ClientReturnRecord,
     DeliveryItem,
     DeliveryRecord,
     IssueItem,
@@ -120,6 +122,7 @@ class UIRegistryTests(SimpleTestCase):
             "create_delivery",
             "create_reservation",
             "create_repair",
+            "create_client_return",
         ):
             token = UI_TOKENS[key]
 
@@ -142,6 +145,8 @@ class UIRegistryTests(SimpleTestCase):
         create_reservation = UI_TOKENS["create_reservation"]
         repair_records = UI_TOKENS["repair_records"]
         create_repair = UI_TOKENS["create_repair"]
+        client_return_records = UI_TOKENS["client_return_records"]
+        create_client_return = UI_TOKENS["create_client_return"]
 
         self.assertEqual(create_delivery["icon"], delivery_records["icon"])
         self.assertEqual(create_delivery["tone"], delivery_records["tone"])
@@ -155,6 +160,10 @@ class UIRegistryTests(SimpleTestCase):
         self.assertEqual(create_repair["tone"], repair_records["tone"])
         self.assertEqual(create_repair["icon"], "wrench")
         self.assertEqual(create_repair["tone"], "danger")
+        self.assertEqual(create_client_return["icon"], client_return_records["icon"])
+        self.assertEqual(create_client_return["tone"], client_return_records["tone"])
+        self.assertEqual(create_client_return["icon"], "reset")
+        self.assertEqual(create_client_return["tone"], "green")
 
     def test_frontend_uses_registry_for_workflow_icons(self):
         app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
@@ -525,6 +534,12 @@ class UIRegistryTests(SimpleTestCase):
         self.assertIn("<CreateRepairPage data={data}", routes_source)
         self.assertIn("<RepairRecordsPage data={data}", routes_source)
         self.assertIn("<RepairRecordDetailPage data={data}", routes_source)
+        self.assertIn('match: (path) => path === "/operations/client-returns/"', routes_source)
+        self.assertIn('match: (path) => path.startsWith("/operations/client-returns/new")', routes_source)
+        self.assertIn('match: (path) => /^\\/operations\\/client-returns\\/\\d+\\//.test(path)', routes_source)
+        self.assertIn("<CreateClientReturnPage data={data}", routes_source)
+        self.assertIn("<ClientReturnRecordsPage data={data}", routes_source)
+        self.assertIn("<ClientReturnRecordDetailPage data={data}", routes_source)
         self.assertNotIn('path.startsWith("/inventory/receiving/new")', routes_source)
         self.assertNotIn('path.startsWith("/inventory/deliveries/new")', routes_source)
         self.assertNotIn('path.startsWith("/operations/receiving")', routes_source)
@@ -562,6 +577,19 @@ class UIRegistryTests(SimpleTestCase):
         self.assertIn("data.api.repairDetail", app_source)
         self.assertIn("Resolve Repair", app_source)
         self.assertIn("Reserved, issued, and sold units must use their own workflows before repair.", app_source)
+
+    def test_frontend_has_client_return_list_detail_and_create_screens(self):
+        app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
+
+        self.assertIn("function ClientReturnRecordsPage", app_source)
+        self.assertIn("function ClientReturnRecordDetailPage", app_source)
+        self.assertIn("function CreateClientReturnPage", app_source)
+        self.assertIn("data.api.clientReturns", app_source)
+        self.assertIn("data.api.clientReturnDetail", app_source)
+        self.assertIn("Return to available", app_source)
+        self.assertIn("Send to repair", app_source)
+        self.assertIn("not a delivery cancellation", app_source)
+        self.assertIn("not a financial refund or credit", app_source)
 
     def test_frontend_inventory_status_vocabulary_matches_product_unit_statuses(self):
         app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
@@ -1432,7 +1460,7 @@ class BIMPOSAccessTests(TestCase):
 
         self.assertTrue(operations_module["enabled"])
         self.assertEqual(operations_module["href"], "/operations/")
-        self.assertEqual(operations_module["count"], 5)
+        self.assertEqual(operations_module["count"], 6)
         self.assertTrue(operations_nav["enabled"])
         self.assertEqual(operations_nav["href"], "/operations/")
         self.assertEqual(operations_response.status_code, 200)
@@ -1643,6 +1671,7 @@ class BIMPOSAccessTests(TestCase):
             Permission.objects.get(codename="add_reservationrecord"),
             Permission.objects.get(codename="add_issuerecord"),
             Permission.objects.get(codename="add_repairrecord"),
+            Permission.objects.get(codename="add_clientreturnrecord"),
             Permission.objects.get(codename="change_productunit"),
             Permission.objects.get(codename="view_product"),
         )
@@ -1660,6 +1689,7 @@ class BIMPOSAccessTests(TestCase):
                 "Create Reservation",
                 "Create Issue",
                 "Create Repair",
+                "Create Client Return",
                 "Receive Stock",
                 "Add Unit",
                 "Add Supplier",
@@ -1671,6 +1701,7 @@ class BIMPOSAccessTests(TestCase):
         self.assertEqual(actions_by_label["Create Reservation"]["href"], "/operations/reservations/new/")
         self.assertEqual(actions_by_label["Create Issue"]["href"], "/operations/issues/new/")
         self.assertEqual(actions_by_label["Create Repair"]["href"], "/operations/repairs/new/")
+        self.assertEqual(actions_by_label["Create Client Return"]["href"], "/operations/client-returns/new/")
         self.assertEqual(actions_by_label["Receive Stock"]["href"], "/operations/receiving/new/")
         self.assertEqual(actions_by_label["Add Unit"]["href"], "/inventory/stock-units/new/")
         self.assertTrue(actions_by_label["Add Product"]["enabled"])
@@ -1678,6 +1709,7 @@ class BIMPOSAccessTests(TestCase):
         self.assertTrue(actions_by_label["Create Reservation"]["enabled"])
         self.assertTrue(actions_by_label["Create Issue"]["enabled"])
         self.assertTrue(actions_by_label["Create Repair"]["enabled"])
+        self.assertTrue(actions_by_label["Create Client Return"]["enabled"])
         self.assertTrue(actions_by_label["Receive Stock"]["enabled"])
         self.assertTrue(actions_by_label["Add Unit"]["enabled"])
         self.assertEqual(actions_by_label["Create Delivery"]["icon"], "delivery")
@@ -1686,6 +1718,8 @@ class BIMPOSAccessTests(TestCase):
         self.assertEqual(actions_by_label["Create Issue"]["tone"], "indigo")
         self.assertEqual(actions_by_label["Create Repair"]["icon"], "wrench")
         self.assertEqual(actions_by_label["Create Repair"]["tone"], "danger")
+        self.assertEqual(actions_by_label["Create Client Return"]["icon"], "reset")
+        self.assertEqual(actions_by_label["Create Client Return"]["tone"], "green")
         self.assertFalse(actions_by_label["Add Supplier"]["enabled"])
         self.assertIsNone(actions_by_label["Add Supplier"]["href"])
         self.assertFalse(actions_by_label["Add Client"]["enabled"])
@@ -1780,6 +1814,7 @@ class BIMPOSAccessTests(TestCase):
             Permission.objects.get(codename="add_reservationrecord"),
             Permission.objects.get(codename="add_issuerecord"),
             Permission.objects.get(codename="add_repairrecord"),
+            Permission.objects.get(codename="add_clientreturnrecord"),
             Permission.objects.get(codename="change_productunit"),
             Permission.objects.get(codename="view_product"),
         )
@@ -1797,6 +1832,7 @@ class BIMPOSAccessTests(TestCase):
                 "Create Reservation",
                 "Create Issue",
                 "Create Repair",
+                "Create Client Return",
                 "Receive Stock",
                 "Add Unit",
                 "Add Supplier",
@@ -2432,6 +2468,24 @@ class InventoryApiTests(TestCase):
         for codename in codenames:
             user.user_permissions.add(Permission.objects.get(codename=codename))
         return user
+
+    def _sold_unit_with_delivery(self, serial_number="API-AVAILABLE", customer_name="Retail Client"):
+        unit = ProductUnit.objects.get(serial_number=serial_number)
+        unit.status = ProductUnit.STATUS_SOLD
+        unit.sold_date = timezone.localdate()
+        unit.save(update_fields=("status", "sold_date"))
+        delivery = DeliveryRecord.objects.create(
+            customer_name=customer_name,
+            receiver_name="Client Receiver",
+            delivery_date=timezone.localdate(),
+        )
+        delivery_item = DeliveryItem.objects.create(
+            delivery=delivery,
+            product=self.product,
+            product_unit=unit,
+            notes="Original delivered unit",
+        )
+        return unit, delivery, delivery_item
 
     def test_inventory_api_requires_login(self):
         response = self.client.get("/api/stock/products/")
@@ -4062,6 +4116,250 @@ class InventoryApiTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(unit.status, ProductUnit.STATUS_ISSUED)
+
+    def test_client_return_api_moves_sold_delivery_unit_to_available(self):
+        user = self._user_with_permissions(
+            "view_clientreturnrecord",
+            "add_clientreturnrecord",
+            "change_productunit",
+        )
+        unit, delivery, delivery_item = self._sold_unit_with_delivery()
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/api/stock/client-returns/",
+            {
+                "delivery": delivery.pk,
+                "customer_name": "Retail Client",
+                "received_from": "Client Receiver",
+                "return_date": str(timezone.localdate()),
+                "reason": "Returned after replacement",
+                "resolution": ProductUnit.STATUS_AVAILABLE,
+                "notes": "Checked at counter",
+                "unit_ids": [unit.pk],
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        unit.refresh_from_db()
+        delivery.refresh_from_db()
+        delivery_item.refresh_from_db()
+        client_return = ClientReturnRecord.objects.get(pk=response.json()["id"])
+        item = ClientReturnItem.objects.get(client_return=client_return, product_unit=unit)
+        self.assertEqual(response.json()["return_number"][:9], f"RET-{timezone.localdate().year}-")
+        self.assertEqual(client_return.delivery, delivery)
+        self.assertEqual(client_return.customer_name, "Retail Client")
+        self.assertEqual(client_return.received_by, user)
+        self.assertEqual(client_return.total_units, 1)
+        self.assertEqual(item.delivery_item, delivery_item)
+        self.assertEqual(item.product, self.product)
+        self.assertEqual(unit.status, ProductUnit.STATUS_AVAILABLE)
+        self.assertIsNone(unit.sold_date)
+        self.assertEqual(delivery.status, DeliveryRecord.STATUS_COMPLETED)
+        self.assertTrue(delivery_item.isactive)
+        movement = StockMovement.objects.get(
+            product_unit=unit,
+            movement_type=StockMovement.TYPE_CLIENT_RETURNED_AVAILABLE,
+        )
+        self.assertEqual(movement.from_status, ProductUnit.STATUS_SOLD)
+        self.assertEqual(movement.to_status, ProductUnit.STATUS_AVAILABLE)
+        self.assertEqual(movement.delivery_record, delivery)
+        self.assertEqual(movement.client_return_record, client_return)
+        self.assertEqual(movement.performed_by, user)
+
+    def test_client_return_api_moves_sold_delivery_unit_to_repair(self):
+        user = self._user_with_permissions(
+            "view_clientreturnrecord",
+            "add_clientreturnrecord",
+            "change_productunit",
+        )
+        unit, delivery, _delivery_item = self._sold_unit_with_delivery()
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/api/stock/client-returns/",
+            {
+                "delivery": delivery.pk,
+                "customer_name": "Retail Client",
+                "received_from": "Client Receiver",
+                "return_date": str(timezone.localdate()),
+                "reason": "Needs testing",
+                "resolution": ProductUnit.STATUS_REPAIR,
+                "unit_ids": [unit.pk],
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        unit.refresh_from_db()
+        self.assertEqual(unit.status, ProductUnit.STATUS_REPAIR)
+        self.assertIsNone(unit.sold_date)
+        movement = StockMovement.objects.get(
+            product_unit=unit,
+            movement_type=StockMovement.TYPE_CLIENT_RETURNED_REPAIR,
+        )
+        self.assertEqual(movement.from_status, ProductUnit.STATUS_SOLD)
+        self.assertEqual(movement.to_status, ProductUnit.STATUS_REPAIR)
+
+    def test_client_return_api_rejects_units_without_active_completed_delivery_item(self):
+        user = self._user_with_permissions(
+            "view_clientreturnrecord",
+            "add_clientreturnrecord",
+            "change_productunit",
+        )
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        unit.status = ProductUnit.STATUS_SOLD
+        unit.sold_date = timezone.localdate()
+        unit.save(update_fields=("status", "sold_date"))
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/api/stock/client-returns/",
+            {
+                "customer_name": "Retail Client",
+                "resolution": ProductUnit.STATUS_AVAILABLE,
+                "unit_ids": [unit.pk],
+            },
+            content_type="application/json",
+        )
+
+        unit.refresh_from_db()
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(unit.status, ProductUnit.STATUS_SOLD)
+        self.assertFalse(ClientReturnRecord.objects.exists())
+        self.assertFalse(
+            StockMovement.objects.filter(
+                product_unit=unit,
+                movement_type=StockMovement.TYPE_CLIENT_RETURNED_AVAILABLE,
+            ).exists()
+        )
+
+    def test_client_return_api_blocks_duplicate_or_changed_units(self):
+        user = self._user_with_permissions(
+            "view_clientreturnrecord",
+            "add_clientreturnrecord",
+            "change_productunit",
+        )
+        unit, delivery, delivery_item = self._sold_unit_with_delivery()
+        existing_return = ClientReturnRecord.objects.create(
+            delivery=delivery,
+            customer_name="Retail Client",
+            resolution=ProductUnit.STATUS_AVAILABLE,
+        )
+        ClientReturnItem.objects.create(
+            client_return=existing_return,
+            delivery_item=delivery_item,
+            product=self.product,
+            product_unit=unit,
+        )
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/api/stock/client-returns/",
+            {
+                "delivery": delivery.pk,
+                "customer_name": "Retail Client",
+                "resolution": ProductUnit.STATUS_AVAILABLE,
+                "unit_ids": [unit.pk],
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(ClientReturnRecord.objects.count(), 1)
+        self.assertFalse(
+            StockMovement.objects.filter(
+                product_unit=unit,
+                movement_type=StockMovement.TYPE_CLIENT_RETURNED_AVAILABLE,
+            ).exists()
+        )
+
+    def test_client_return_api_permissions_are_explicit(self):
+        no_view_user = self._user_with_permissions("view_productunit")
+        no_view_user.groups.clear()
+        self.client.force_login(no_view_user)
+
+        list_response = self.client.get("/api/stock/client-returns/")
+
+        self.assertEqual(list_response.status_code, 403)
+
+        create_user = User.objects.create_user(username="client-return-create", password="test-pass")
+        create_user.user_permissions.add(
+            Permission.objects.get(codename="view_clientreturnrecord"),
+            Permission.objects.get(codename="add_clientreturnrecord"),
+        )
+        create_user.groups.clear()
+        unit, delivery, _delivery_item = self._sold_unit_with_delivery()
+        self.client.force_login(create_user)
+
+        create_response = self.client.post(
+            "/api/stock/client-returns/",
+            {
+                "delivery": delivery.pk,
+                "customer_name": "Retail Client",
+                "resolution": ProductUnit.STATUS_AVAILABLE,
+                "unit_ids": [unit.pk],
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(create_response.status_code, 403)
+
+    def test_client_return_api_returns_list_detail_and_movement_history(self):
+        user = self._user_with_permissions(
+            "view_clientreturnrecord",
+            "view_stockmovement",
+        )
+        unit, delivery, delivery_item = self._sold_unit_with_delivery()
+        client_return = ClientReturnRecord.objects.create(
+            delivery=delivery,
+            customer_name="Retail Client",
+            received_from="Client Receiver",
+            reason="Returned after replacement",
+            resolution=ProductUnit.STATUS_AVAILABLE,
+            received_by=user,
+        )
+        ClientReturnItem.objects.create(
+            client_return=client_return,
+            delivery_item=delivery_item,
+            product=self.product,
+            product_unit=unit,
+        )
+        StockMovement.objects.create(
+            product=self.product,
+            product_unit=unit,
+            movement_type=StockMovement.TYPE_CLIENT_RETURNED_AVAILABLE,
+            from_status=ProductUnit.STATUS_SOLD,
+            to_status=ProductUnit.STATUS_AVAILABLE,
+            performed_by=user,
+            delivery_record=delivery,
+            client_return_record=client_return,
+            reference=client_return.return_number,
+        )
+        self.client.force_login(user)
+
+        list_response = self.client.get("/api/stock/client-returns/", {"q": "Retail"})
+        detail_response = self.client.get(f"/api/stock/client-returns/{client_return.pk}/")
+        movements_response = self.client.get(f"/api/stock/products/{self.product.pk}/movements/")
+
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(list_response.json()[0]["return_number"], client_return.return_number)
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertEqual(detail_response.json()["delivery"], delivery.pk)
+        self.assertEqual(detail_response.json()["delivery_number"], delivery.delivery_number)
+        self.assertEqual(detail_response.json()["items"][0]["delivery_item"], delivery_item.pk)
+        self.assertEqual(detail_response.json()["items"][0]["serial_number"], "API-AVAILABLE")
+        self.assertEqual(movements_response.status_code, 200)
+        self.assertEqual(
+            movements_response.json()[0]["movement_type"],
+            StockMovement.TYPE_CLIENT_RETURNED_AVAILABLE,
+        )
+        self.assertEqual(movements_response.json()[0]["client_return"], client_return.pk)
+        self.assertEqual(
+            movements_response.json()[0]["client_return_number"],
+            client_return.return_number,
+        )
 
     def test_receiving_api_creates_supplier_record_and_stock_units(self):
         user = self._user_with_permissions(

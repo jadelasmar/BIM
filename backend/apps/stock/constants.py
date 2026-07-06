@@ -28,6 +28,10 @@ VIEW_REPAIR_RECORD = f"{APP_LABEL}.view_repairrecord"
 ADD_REPAIR_RECORD = f"{APP_LABEL}.add_repairrecord"
 CHANGE_REPAIR_RECORD = f"{APP_LABEL}.change_repairrecord"
 
+VIEW_CLIENT_RETURN_RECORD = f"{APP_LABEL}.view_clientreturnrecord"
+ADD_CLIENT_RETURN_RECORD = f"{APP_LABEL}.add_clientreturnrecord"
+CHANGE_CLIENT_RETURN_RECORD = f"{APP_LABEL}.change_clientreturnrecord"
+
 VIEW_STOCK_MOVEMENT = f"{APP_LABEL}.view_stockmovement"
 
 ADD_CATEGORY = f"{APP_LABEL}.add_category"

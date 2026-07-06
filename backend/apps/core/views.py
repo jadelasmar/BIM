@@ -117,6 +117,8 @@ def _command_center_initial_data(
             "issueDetail": "/api/stock/issues/{id}/",
             "repairs": "/api/stock/repairs/",
             "repairDetail": "/api/stock/repairs/{id}/",
+            "clientReturns": "/api/stock/client-returns/",
+            "clientReturnDetail": "/api/stock/client-returns/{id}/",
             "receivingRecords": "/api/stock/receiving-records/",
             "receivingRecordDetail": "/api/stock/receiving-records/{id}/",
             "suppliers": "/api/stock/suppliers/",
@@ -136,12 +138,14 @@ def _command_center_initial_data(
             "createReservation": reverse("operations_create_reservation"),
             "createIssue": reverse("operations_create_issue"),
             "createRepair": reverse("operations_create_repair"),
+            "createClientReturn": reverse("operations_create_client_return"),
             "suppliers": reverse("suppliers"),
             "receivingRecords": reverse("operations_receiving"),
             "deliveryRecords": reverse("operations_deliveries"),
             "reservationRecords": reverse("operations_reservations"),
             "issueRecords": reverse("operations_issues"),
             "repairRecords": reverse("operations_repairs"),
+            "clientReturnRecords": reverse("operations_client_returns"),
             "clients": reverse("clients"),
             "assets": reverse("assets"),
             "knowledgeBase": reverse("knowledge_base"),
@@ -289,6 +293,9 @@ def _build_command_center_initial_data(request, current_path=None):
     can_create_repair = user.has_perm(
         stock_constants.ADD_REPAIR_RECORD
     ) and user.has_perm(stock_constants.CHANGE_PRODUCT_UNIT)
+    can_create_client_return = user.has_perm(
+        stock_constants.ADD_CLIENT_RETURN_RECORD
+    ) and user.has_perm(stock_constants.CHANGE_PRODUCT_UNIT)
 
     metrics = [
         {
@@ -365,6 +372,14 @@ def _build_command_center_initial_data(request, current_path=None):
             **ui_item("create_repair"),
         },
         {
+            "href": reverse("operations_create_client_return")
+            if can_create_client_return
+            else None,
+            "enabled": can_create_client_return,
+            "description": "Record sold stock returned by a client",
+            **ui_item("create_client_return"),
+        },
+        {
             "href": reverse("operations_receive_stock")
             if user.has_perm(stock_constants.ADD_PRODUCT_UNIT)
             else None,
@@ -404,10 +419,10 @@ def _build_command_center_initial_data(request, current_path=None):
             **ui_item("inventory"),
         },
         {
-            "description": "Receiving, delivery, reservation, issue, repair, stock history",
+            "description": "Receiving, delivery, reservation, issue, repair, client returns, stock history",
             "href": reverse("operations") if can_use_operations else None,
             "enabled": can_use_operations,
-            "count": 5,
+            "count": 6,
             "meta": "active workflows",
             **ui_item("operations"),
         },

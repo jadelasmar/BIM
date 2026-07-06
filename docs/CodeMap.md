@@ -192,6 +192,9 @@ Current main operational UI implementation:
 - Repair Records list
 - Repair Record detail
 - Create Repair
+- Client Return Records list
+- Client Return Record detail
+- Create Client Return
 - placeholder pages
 - shared UI pieces not yet split out
 
@@ -468,6 +471,42 @@ GET /operations/repairs/<id>/
   -> React AppRouter renders RepairRecordDetailPage
   -> GET /api/stock/repairs/<id>/
   -> RepairRecordSerializer returns one record and repair item lines
+```
+
+### Client Return Creation
+
+```text
+React Create Client Return page
+  -> GET /operations/client-returns/new/
+  -> POST /api/stock/client-returns/
+  -> ClientReturnRecordSerializer.create()
+  -> services.create_client_return_record()
+  -> creates ClientReturnRecord and ClientReturnItem rows
+  -> validates selected ProductUnit rows are active sold units linked to completed delivery items
+  -> marks selected ProductUnit rows available or repair
+  -> clears sold_date
+  -> writes StockMovement client_returned_available or client_returned_repair rows
+  -> redirects to /operations/client-returns/<id>/ when the API responds with an id
+```
+
+### Client Return Records List
+
+```text
+GET /operations/client-returns/
+  -> apps.core.views.module_launcher
+  -> React AppRouter renders ClientReturnRecordsPage
+  -> GET /api/stock/client-returns/
+  -> ClientReturnRecordSerializer returns records and items
+```
+
+### Client Return Record Detail
+
+```text
+GET /operations/client-returns/<id>/
+  -> apps.core.views.module_launcher
+  -> React AppRouter renders ClientReturnRecordDetailPage
+  -> GET /api/stock/client-returns/<id>/
+  -> ClientReturnRecordSerializer returns one record and returned item lines
 ```
 
 ### Delivery Record Detail

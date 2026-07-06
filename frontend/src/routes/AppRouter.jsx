@@ -450,6 +450,14 @@ function OperationsPage({ data }) {
       tone: workflowMeta.create_repair.tone
     },
     {
+      title: "Create Client Return",
+      detail: "Record sold stock that came back from a client.",
+      href: data.routes.createClientReturn,
+      enabled: data.quickActions.some((action) => action.label === "Create Client Return" && action.enabled),
+      icon: workflowMeta.create_client_return.icon,
+      tone: workflowMeta.create_client_return.tone
+    },
+    {
       title: "Stock Movement",
       detail: "Manual adjustments and exceptions.",
       href: null,
@@ -847,6 +855,10 @@ function ReceivingRecordDetailPage({ data }) {
             <Status status={isCancelled ? "Cancelled" : "Recorded"} statusClass={isCancelled ? "inactive" : "received"} />
             {!isCancelled ? (
               <>
+                <Button as="a" href={`/operations/client-returns/new/?delivery=${record.id}`} variant="outline">
+                  <Icon name="reset" className="h-4 w-4" />
+                  Create Client Return
+                </Button>
                 <Button type="button" variant="outline" onClick={() => setEditing((current) => !current)}>
                   <Edit3 className="h-4 w-4" />
                   Edit Details
@@ -2899,6 +2911,525 @@ function issueStatusLabel(record) {
 function reservationStatusLabel(record) {
   if (!record?.status) return "-";
   return record.status.charAt(0).toUpperCase() + record.status.slice(1);
+}
+
+function ClientReturnRecordsPage({ data }) {
+  const [records, setRecords] = useState([]);
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadClientReturns() {
+      setLoading(true);
+      setError("");
+      try {
+        const params = new URLSearchParams();
+        if (query.trim()) params.set("q", query.trim());
+        const endpoint = params.toString()
+          ? `${data.api.clientReturns}?${params.toString()}`
+          : data.api.clientReturns;
+        const response = await fetch(endpoint, { signal: controller.signal });
+        if (!response.ok) {
+          throw new Error("Could not load client return records.");
+        }
+        setRecords(await response.json());
+      } catch (loadError) {
+        if (loadError.name !== "AbortError") {
+          setError(loadError.message);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadClientReturns();
+    return () => controller.abort();
+  }, [data.api.clientReturns, query]);
+
+  const totalUnits = records.reduce((sum, record) => sum + Number(record.total_units || 0), 0);
+  const repairCount = records.filter((record) => record.resolution === "repair").length;
+  const latestRecord = records[0];
+  const returnKpis = [
+    {
+      label: "Client Returns",
+      value: formatCount(records.length),
+      detail: "operational return records",
+      icon: "reset",
+      tone: "green"
+    },
+    {
+      label: "Returned Units",
+      value: formatCount(totalUnits),
+      detail: "sold units brought back",
+      icon: "layers",
+      tone: "blue"
+    },
+    {
+      label: "Sent To Repair",
+      value: formatCount(repairCount),
+      detail: "records resolved to repair",
+      icon: "wrench",
+      tone: "danger"
+    },
+    {
+      label: "Latest Return",
+      value: latestRecord ? formatDate(latestRecord.return_date) : "-",
+      detail: latestRecord?.return_number || "no returns yet",
+      icon: "clock-3",
+      tone: "neutral"
+    }
+  ];
+
+  return (
+    <Shell data={data}>
+      <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Client Returns</h1>
+          <p className="mt-1 text-sm text-zinc-400">Record sold units that came back from a client.</p>
+        </div>
+        <Button as="a" href={data.routes.createClientReturn} variant="primary">
+          <Plus className="h-4 w-4" />
+          Create Client Return
+        </Button>
+      </header>
+
+      <KpiGrid items={returnKpis} />
+
+      <section className="mt-4 rounded-lg border border-nexus-line bg-nexus-panel p-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <SearchBar
+            className="flex-1"
+            inputClassName="placeholder:text-zinc-500"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search return number, delivery, customer, received from, reason, product, or serial..."
+          />
+          <span className="text-xs text-zinc-500">{records.length} records</span>
+        </div>
+      </section>
+
+      <ClientReturnRecordsTable records={records} loading={loading} error={error} />
+    </Shell>
+  );
+}
+
+function ClientReturnRecordsTable({ records, loading, error }) {
+  return (
+    <section className="mt-4 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-zinc-800/80 text-zinc-400">
+            <tr>
+              <th className="px-4 py-3 font-medium">Return</th>
+              <th className="px-4 py-3 font-medium">Customer</th>
+              <th className="px-4 py-3 font-medium">Received From</th>
+              <th className="px-4 py-3 font-medium">Return Date</th>
+              <th className="px-4 py-3 font-medium">Units</th>
+              <th className="px-4 py-3 font-medium">Resolution</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <TableMessage message="Loading client return records..." />
+            ) : error ? (
+              <TableMessage message={error} />
+            ) : records.length ? (
+              records.map((record) => (
+                <tr key={record.id} className="border-t border-nexus-line hover:bg-zinc-900/70">
+                  <td className="px-4 py-4">
+                    <a href={`/operations/client-returns/${record.id}/`} className="font-mono text-xs font-bold text-nexus-orange hover:text-orange-300">
+                      {record.return_number}
+                    </a>
+                    <p className="mt-1 text-xs text-zinc-500">{record.delivery_number || "delivery linked by item"}</p>
+                  </td>
+                  <td className="px-4 py-4 font-semibold text-white">{record.customer_name || "-"}</td>
+                  <td className="px-4 py-4 text-zinc-300">{record.received_from || "-"}</td>
+                  <td className="px-4 py-4 text-zinc-300">{formatDate(record.return_date)}</td>
+                  <td className="px-4 py-4">
+                    <p className="font-bold text-white">{formatCount(record.total_units || 0)}</p>
+                    <p className="mt-1 text-xs text-zinc-500">{formatCount(record.items?.length || 0)} lines</p>
+                  </td>
+                  <td className="px-4 py-4">
+                    <Status status={clientReturnResolutionLabel(record.resolution)} statusClass={record.resolution} />
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan="6">
+                  <EmptyState
+                    className="border-t border-nexus-line"
+                    title="No client returns yet."
+                    description="Create Client Return records sold stock that came back without changing the original delivery."
+                  />
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function ClientReturnRecordDetailPage({ data }) {
+  const returnId = (data.currentPath || window.location.pathname).match(/\/operations\/client-returns\/(\d+)\//)?.[1];
+  const [record, setRecord] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadClientReturn() {
+      setLoading(true);
+      setError("");
+      try {
+        const endpoint = data.api.clientReturnDetail.replace("{id}", returnId);
+        const response = await fetch(endpoint, { signal: controller.signal });
+        if (!response.ok) {
+          throw new Error(response.status === 404 ? "Client return record was not found." : "Could not load client return record.");
+        }
+        setRecord(await response.json());
+      } catch (loadError) {
+        if (loadError.name !== "AbortError") {
+          setError(loadError.message);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadClientReturn();
+    return () => controller.abort();
+  }, [data.api.clientReturnDetail, returnId]);
+
+  if (loading) {
+    return (
+      <Shell data={data}>
+        <div className="rounded-lg border border-nexus-line bg-nexus-panel p-6 text-zinc-400">
+          Loading client return record...
+        </div>
+      </Shell>
+    );
+  }
+
+  if (error || !record) {
+    return (
+      <Shell data={data}>
+        <div className="rounded-lg border border-nexus-red/60 bg-red-500/10 p-6 text-red-200">
+          {error || "Client return record was not found."}
+        </div>
+      </Shell>
+    );
+  }
+
+  return (
+    <Shell data={data}>
+      <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <a href={data.routes.clientReturnRecords} className="mb-2 inline-flex text-sm font-semibold text-nexus-orange hover:text-orange-300">
+            Back to client returns
+          </a>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-bold text-white">{record.return_number}</h1>
+            <Status status={clientReturnResolutionLabel(record.resolution)} statusClass={record.resolution} />
+          </div>
+          <p className="mt-1 text-sm text-zinc-400">
+            Client return is not a delivery cancellation and not a financial refund or credit.
+          </p>
+        </div>
+      </header>
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="space-y-5">
+          <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
+            <SectionTitle title="Return Details" />
+            <dl className="mt-4 divide-y divide-nexus-line">
+              <DetailRow label="Original Delivery" value={record.delivery_number || "-"} />
+              <DetailRow label="Customer" value={record.customer_name || "-"} />
+              <DetailRow label="Received From" value={record.received_from || "-"} />
+              <DetailRow label="Return Date" value={formatDate(record.return_date)} />
+              <DetailRow label="Reason" value={record.reason || "-"} />
+              <DetailRow label="Resolution" value={clientReturnResolutionLabel(record.resolution)} />
+              <DetailRow label="Received By" value={record.received_by_name || "-"} />
+              <DetailRow label="Notes" value={record.notes || "-"} />
+            </dl>
+          </section>
+
+          <ClientReturnItemsTable items={record.items || []} />
+        </div>
+
+        <aside className="space-y-4">
+          <section className="rounded-lg border border-nexus-line bg-nexus-panel">
+            <PanelHeader title="Return Summary" />
+            <dl className="divide-y divide-nexus-line p-4">
+              <DetailRow label="Reference" value={record.return_number} />
+              <DetailRow label="Resolution" value={clientReturnResolutionLabel(record.resolution)} />
+              <DetailRow label="Units" value={record.total_units || 0} strong />
+            </dl>
+          </section>
+        </aside>
+      </div>
+    </Shell>
+  );
+}
+
+function ClientReturnItemsTable({ items }) {
+  return (
+    <section className="overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
+      <PanelHeader title="Returned Units" badge={`${formatCount(items.length)} units`} />
+      {items.length ? (
+        <div className="overflow-x-auto border-t border-nexus-line">
+          <table className="min-w-full text-left text-sm">
+            <thead className="bg-zinc-800/80 text-zinc-400">
+              <tr>
+                <th className="px-4 py-3 font-medium">Product</th>
+                <th className="px-4 py-3 font-medium">SKU</th>
+                <th className="px-4 py-3 font-medium">Original Delivery</th>
+                <th className="px-4 py-3 font-medium">Serial</th>
+                <th className="px-4 py-3 font-medium">Current Status</th>
+                <th className="px-4 py-3 font-medium">Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={item.id} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
+                  <td className="px-4 py-3 font-semibold text-white">{item.product_name}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-nexus-orange">{item.product_sku || "-"}</td>
+                  <td className="px-4 py-3 text-zinc-400">{item.delivery_number || "-"}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-zinc-300">{item.serial_number || "-"}</td>
+                  <td className="px-4 py-3">
+                    <Status status={item.product_unit_status_label || item.product_unit_status} statusClass={item.product_unit_status} />
+                  </td>
+                  <td className="px-4 py-3 text-zinc-400">{item.notes || "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="border-t border-nexus-line px-4 py-5 text-sm text-zinc-500">
+          No returned units are linked to this record.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function CreateClientReturnPage({ data }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const deliveryId = new URLSearchParams(window.location.search).get("delivery") || "";
+  const [form, setForm] = useState({
+    customerName: "",
+    receivedFrom: "",
+    returnDate: today,
+    reason: "",
+    resolution: "available",
+    notes: ""
+  });
+  const [units, setUnits] = useState([]);
+  const [query, setQuery] = useState("");
+  const [selectedUnits, setSelectedUnits] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadUnits() {
+      const response = await fetch(`${data.api.productUnits}?status=sold`, {
+        signal: controller.signal
+      });
+      setUnits(response.ok ? await response.json() : []);
+    }
+
+    loadUnits().catch((loadError) => {
+      if (loadError.name !== "AbortError") {
+        setError("Could not load sold stock units.");
+      }
+    });
+
+    return () => controller.abort();
+  }, [data.api.productUnits]);
+
+  const selectedIds = new Set(selectedUnits.map((unit) => unit.id));
+  const filteredUnits = units
+    .filter((unit) => !selectedIds.has(unit.id))
+    .filter((unit) => {
+      const text = `${unit.product_name} ${unit.product_sku} ${unit.product_barcode || ""} ${unit.serial_number}`.toLowerCase();
+      return query && text.includes(query.toLowerCase());
+    })
+    .slice(0, 8);
+
+  function updateField(name, value) {
+    setForm((current) => ({ ...current, [name]: value }));
+  }
+
+  function addUnit(unit) {
+    setSelectedUnits((current) => [...current, unit]);
+    setQuery("");
+  }
+
+  function removeUnit(unitId) {
+    setSelectedUnits((current) => current.filter((unit) => unit.id !== unitId));
+  }
+
+  async function saveClientReturn() {
+    setSaving(true);
+    setError("");
+    try {
+      if (!form.customerName.trim() || !selectedUnits.length) {
+        throw new Error("Customer name and at least one sold stock unit are required.");
+      }
+
+      const payload = {
+        customer_name: form.customerName,
+        received_from: form.receivedFrom,
+        return_date: form.returnDate || null,
+        reason: form.reason,
+        resolution: form.resolution,
+        notes: form.notes,
+        unit_ids: selectedUnits.map((unit) => unit.id)
+      };
+      if (deliveryId) {
+        payload.delivery = Number(deliveryId);
+      }
+
+      const response = await fetch(data.api.clientReturns, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": data.csrfToken
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        throw new Error(firstApiError(details) || "Could not create client return.");
+      }
+
+      const created = await response.json();
+      window.location.assign(created.id ? `/operations/client-returns/${created.id}/` : data.routes.clientReturnRecords);
+    } catch (saveError) {
+      setError(saveError.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Shell data={data}>
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="min-w-0">
+          <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-white">Create Client Return</h1>
+              <p className="mt-1 text-sm text-zinc-400">
+                Record sold stock returned by a client. This is not a delivery cancellation and not a financial refund or credit.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-3 text-sm">
+              <a href="/operations/client-returns/" className="inline-flex h-9 items-center gap-2 rounded-md px-3 font-semibold text-zinc-200 hover:bg-nexus-panel">
+                <X className="h-4 w-4" />
+                Cancel
+              </a>
+              <button disabled={saving} onClick={saveClientReturn} type="button" className="inline-flex h-9 items-center gap-2 rounded-md bg-nexus-orange px-4 font-semibold text-black">
+                <Icon name="reset" className="h-4 w-4" />
+                Save Client Return
+              </button>
+            </div>
+          </header>
+
+          {error ? (
+            <div className="mb-4 rounded-lg border border-nexus-red/60 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-200">
+              {error}
+            </div>
+          ) : null}
+
+          <FormSection icon="reset" title="Client Return Information" subtitle="Original delivery remains completed; this creates a separate operational return record.">
+            <div className="grid gap-5 md:grid-cols-2">
+              <Field label="Customer Name" required>
+                <TextInput value={form.customerName} onChange={(value) => updateField("customerName", value)} placeholder="Client or customer name" />
+              </Field>
+              <Field label="Received From">
+                <TextInput value={form.receivedFrom} onChange={(value) => updateField("receivedFrom", value)} placeholder="Person who returned the unit" />
+              </Field>
+              <Field label="Return Date">
+                <TextInput type="date" value={form.returnDate} onChange={(value) => updateField("returnDate", value)} />
+              </Field>
+              <Field label="Resolution" required>
+                <SelectInput
+                  value={form.resolution}
+                  onChange={(value) => updateField("resolution", value)}
+                  options={[
+                    ["available", "Return to available"],
+                    ["repair", "Send to repair"]
+                  ]}
+                />
+              </Field>
+              <Field label="Reason">
+                <TextInput value={form.reason} onChange={(value) => updateField("reason", value)} placeholder="Reason for the return" />
+              </Field>
+              <Field label="Notes">
+                <TextInput value={form.notes} onChange={(value) => updateField("notes", value)} placeholder="Operational notes" />
+              </Field>
+            </div>
+          </FormSection>
+
+          <FormSection icon="box" title="Sold Units" subtitle="Only active sold units linked to completed delivery items can be returned. Reserved, issued, repair, inactive, or available units are blocked.">
+            <SearchBar
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search product, SKU, barcode, or serial..."
+            />
+            {filteredUnits.length ? (
+              <div className="mt-2 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
+                {filteredUnits.map((unit) => (
+                  <button
+                    key={unit.id}
+                    onClick={() => addUnit(unit)}
+                    type="button"
+                    className="flex w-full items-center justify-between border-b border-nexus-line px-4 py-3 text-left last:border-b-0 hover:bg-nexus-panel2"
+                  >
+                    <span>
+                      <span className="block text-sm font-bold text-white">{unit.product_name}</span>
+                      <span className="font-mono text-xs text-nexus-orange">{unit.serial_number}</span>
+                    </span>
+                    <Plus className="h-4 w-4 text-zinc-500" />
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
+            <SelectedUnitsTable units={selectedUnits} onRemove={removeUnit} emptyText="No sold units selected for client return yet." />
+          </FormSection>
+        </div>
+
+        <aside className="space-y-4">
+          <section className="rounded-lg border border-nexus-line bg-nexus-panel">
+            <PanelHeader title="Return Summary" />
+            <dl className="divide-y divide-nexus-line p-4">
+              <DetailRow label="Customer" value={form.customerName || "-"} />
+              <DetailRow label="Return Date" value={formatDate(form.returnDate)} />
+              <DetailRow label="Resolution" value={clientReturnResolutionLabel(form.resolution)} />
+              <DetailRow label="Selected Units" value={selectedUnits.length} strong />
+            </dl>
+          </section>
+        </aside>
+      </div>
+    </Shell>
+  );
+}
+
+function clientReturnResolutionLabel(resolution) {
+  if (resolution === "repair") return "Send to repair";
+  if (resolution === "available") return "Return to available";
+  return resolution || "-";
 }
 
 function DeliveryRecordsPage({ data }) {
@@ -6332,6 +6863,18 @@ const appRoutes = [
   {
     match: (path) => path === "/operations/repairs/",
     render: (data) => <RepairRecordsPage data={data} />
+  },
+  {
+    match: (path) => /^\/operations\/client-returns\/\d+\//.test(path),
+    render: (data) => <ClientReturnRecordDetailPage data={data} />
+  },
+  {
+    match: (path) => path.startsWith("/operations/client-returns/new"),
+    render: (data) => <CreateClientReturnPage data={data} />
+  },
+  {
+    match: (path) => path === "/operations/client-returns/",
+    render: (data) => <ClientReturnRecordsPage data={data} />
   },
   {
     match: (path) => path.startsWith("/operations"),

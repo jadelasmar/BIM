@@ -3,6 +3,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from .models import (
+    ClientReturnItem,
+    ClientReturnRecord,
     DeliveryItem,
     DeliveryRecord,
     IssueItem,
@@ -43,6 +45,7 @@ def create_stock_movement(
     reservation_record=None,
     issue_record=None,
     repair_record=None,
+    client_return_record=None,
     reference="",
 ):
     return StockMovement.objects.create(
@@ -60,6 +63,7 @@ def create_stock_movement(
         reservation_record=reservation_record,
         issue_record=issue_record,
         repair_record=repair_record,
+        client_return_record=client_return_record,
         reference=(reference or "").strip()[:150],
     )
 
@@ -237,6 +241,129 @@ def create_delivery_record(
         )
 
     return delivery
+
+
+def _active_client_return_item_for_unit(unit):
+    return unit.client_return_items.filter(isactive=True).first()
+
+
+@transaction.atomic
+def create_client_return_record(
+    *,
+    unit_ids,
+    resolution,
+    delivery=None,
+    customer_name="",
+    received_from="",
+    return_date=None,
+    reason="",
+    notes="",
+    received_by=None,
+):
+    unique_ids = list(dict.fromkeys(unit_ids or []))
+    if not unique_ids:
+        raise ValidationError("At least one sold stock unit is required.")
+    if resolution not in (
+        ClientReturnRecord.RESOLUTION_AVAILABLE,
+        ClientReturnRecord.RESOLUTION_REPAIR,
+    ):
+        raise ValidationError("Client returns can only move units to available or repair.")
+
+    units = list(
+        ProductUnit.objects.select_for_update()
+        .select_related("product")
+        .filter(pk__in=unique_ids)
+        .order_by("product__descript", "serial_number")
+    )
+    units_by_id = {unit.pk: unit for unit in units}
+    missing_ids = [unit_id for unit_id in unique_ids if unit_id not in units_by_id]
+    if missing_ids:
+        raise ValidationError("One or more stock units were not found.")
+
+    invalid_units = [
+        unit.serial_number or str(unit.pk)
+        for unit in units
+        if not unit.isactive or unit.status != ProductUnit.STATUS_SOLD
+    ]
+    if invalid_units:
+        raise ValidationError(
+            "Client return can only use active sold units: " + ", ".join(invalid_units)
+        )
+
+    delivery_items = list(
+        DeliveryItem.objects.select_for_update()
+        .select_related("delivery", "product", "product_unit")
+        .filter(product_unit_id__in=unique_ids)
+    )
+    delivery_items_by_unit_id = {item.product_unit_id: item for item in delivery_items}
+    blocked_units = []
+    for unit in units:
+        item = delivery_items_by_unit_id.get(unit.pk)
+        active_return = _active_client_return_item_for_unit(unit)
+        if (
+            item is None
+            or not item.isactive
+            or not item.delivery.isactive
+            or item.delivery.status != DeliveryRecord.STATUS_COMPLETED
+            or active_return is not None
+            or (delivery is not None and item.delivery_id != delivery.pk)
+        ):
+            blocked_units.append(unit.serial_number or str(unit.pk))
+    if blocked_units:
+        raise ValidationError(
+            "Client return requires active sold units linked to completed deliveries: "
+            + ", ".join(blocked_units)
+        )
+
+    delivery_ids = {item.delivery_id for item in delivery_items_by_unit_id.values()}
+    record_delivery = delivery
+    if record_delivery is None and len(delivery_ids) == 1:
+        record_delivery = next(iter(delivery_items_by_unit_id.values())).delivery
+
+    client_return = ClientReturnRecord.objects.create(
+        delivery=record_delivery,
+        customer_name=(customer_name or (record_delivery.customer_name if record_delivery else "")).strip(),
+        received_from=(received_from or "").strip(),
+        return_date=return_date or timezone.localdate(),
+        reason=(reason or "").strip(),
+        resolution=resolution,
+        notes=notes,
+        received_by=received_by,
+    )
+
+    movement_type = (
+        StockMovement.TYPE_CLIENT_RETURNED_AVAILABLE
+        if resolution == ProductUnit.STATUS_AVAILABLE
+        else StockMovement.TYPE_CLIENT_RETURNED_REPAIR
+    )
+    for unit in units:
+        item = delivery_items_by_unit_id[unit.pk]
+        ClientReturnItem.objects.create(
+            client_return=client_return,
+            delivery_item=item,
+            product_unit=unit,
+            product=unit.product,
+            notes=notes,
+        )
+        from_status = unit.status
+        unit.status = resolution
+        unit.sold_date = None
+        unit.save(update_fields=("status", "sold_date"))
+        create_stock_movement(
+            product_unit=unit,
+            movement_type=movement_type,
+            from_status=from_status,
+            to_status=resolution,
+            reason=client_return.reason,
+            notes=notes,
+            performed_by=received_by,
+            movement_date=client_return.return_date,
+            delivery_record=item.delivery,
+            client_return_record=client_return,
+            reference=client_return.return_number,
+        )
+
+    return client_return
 
 
 def _active_reservation_item_for_unit(unit):

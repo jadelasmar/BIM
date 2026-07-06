@@ -23,6 +23,7 @@ export const workflowMeta = {
   create_reservation: { icon: "clock-3", tone: "warning" },
   create_issue: { icon: "user-check", tone: "indigo" },
   create_repair: { icon: "wrench", tone: "danger" },
+  create_client_return: { icon: "reset", tone: "green" },
   add_supplier: { icon: "suppliers", tone: "purple" },
   stock_movement: { icon: "trending-up", tone: "neutral" }
 };

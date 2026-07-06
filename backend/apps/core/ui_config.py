@@ -79,6 +79,11 @@ UI_TOKENS = {
         "icon": "wrench",
         "tone": "danger",
     },
+    "client_return_records": {
+        "label": "Client Returns",
+        "icon": "reset",
+        "tone": "green",
+    },
     "clients": {
         "label": "Clients",
         "icon": "suppliers",
@@ -145,6 +150,11 @@ UI_TOKENS = {
         "label": "Create Repair",
         "icon": "wrench",
         "tone": "danger",
+    },
+    "create_client_return": {
+        "label": "Create Client Return",
+        "icon": "reset",
+        "tone": "green",
     },
     "add_supplier": {
         "label": "Add Supplier",

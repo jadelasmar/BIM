@@ -98,6 +98,7 @@ Stock API views:
 - issue return
 - repair list/create/detail
 - repair resolve
+- client return list/create/detail
 - product movement history
 - inventory summary
 - lookup endpoints for categories, brands, models, suppliers
@@ -140,7 +141,7 @@ Recent delivery panels and delivery activity are based on real active `DeliveryR
 
 Product movement history is based on real `StockMovement` rows. Product detail can read recent movement rows through `/api/stock/products/<id>/movements/`, which requires the stock movement view permission.
 
-Product unit statuses for office deployment are `available`, `reserved`, `issued`, `sold`, `repair`, and `inactive`. `returned` and `damaged` are not active status values. Future client return handling should move sold units back to available or repair through an operational workflow.
+Product unit statuses for office deployment are `available`, `reserved`, `issued`, `sold`, `repair`, and `inactive`. `returned` and `damaged` are not active status values. Client Return moves sold units back to available or repair through its own operational record.
 
 Reservation record list search supports reservation number, reserved-for text, reason, product-unit serial number, product description, and product SKU. Reservation list/detail access uses the reservation record view permission. Creating a reservation requires both the reservation record add permission and product-unit change permission because selected stock units are marked reserved. Releasing or cancelling a reservation requires both reservation record change permission and product-unit change permission because linked units return to available stock.
 
@@ -150,7 +151,11 @@ Create Issue only accepts active available product units. Issued units cannot be
 
 Repair record list search supports repair number, repair reason, reported-by text, repair location, technician, product-unit serial number, product description, and product SKU. Repair list/detail access uses the repair record view permission. Creating a repair requires both repair record add permission and product-unit change permission because selected stock units are marked repair. Resolving a repair requires both repair record change permission and product-unit change permission because linked units return to available or are made inactive.
 
-Create Repair only accepts active available product units. Reserved units must be released/cancelled first, issued units must be returned first, and sold units must wait for a future client return workflow before they can enter repair.
+Create Repair only accepts active available product units. Reserved units must be released/cancelled first, issued units must be returned first, and sold units must go through Client Return before they can enter repair.
+
+Client return record list search supports return number, original delivery number, customer name, received-from text, reason, product-unit serial number, product description, and product SKU. Client return list/detail access uses the client return record view permission. Creating a client return requires both client return record add permission and product-unit change permission because selected sold units are moved back to available or repair.
+
+Create Client Return only accepts active sold product units linked to active items on completed delivery records. It blocks duplicate returns through active return-item checks and blocked status checks. Delivery cancellation remains a separate correction workflow; client return is a real operational return event and does not change the original delivery record status.
 
 ## Services
 
@@ -171,10 +176,11 @@ Current services:
 - `return_issue_record`: returns an issue only while linked stock units are still untouched issued units for that issue.
 - `create_repair_record`: creates operational repair records and items, marks selected available product units repair, and records repair movements.
 - `resolve_repair_record`: resolves a repair only while linked stock units are still untouched repair units for that repair, returning units to available or making them inactive.
+- `create_client_return_record`: creates operational client return records and items, validates selected units are active sold units linked to completed delivery items, moves them to available or repair, clears sold date, and records client-return movements.
 
-Receiving creation, receiving cancellation, delivery creation, delivery cancellation, reservation creation, reservation release/cancel, issue creation, issue return, repair creation, repair resolution, manual Add Unit, and direct product-unit status updates now write `StockMovement` rows going forward. Clean deployments do not need legacy backfill.
+Receiving creation, receiving cancellation, delivery creation, delivery cancellation, reservation creation, reservation release/cancel, issue creation, issue return, repair creation, repair resolution, client return creation, manual Add Unit, and direct product-unit status updates now write `StockMovement` rows going forward. Clean deployments do not need legacy backfill.
 
-Keep views thin. Client return and broader stock adjustment workflows should write movements through services instead of direct ad hoc model updates.
+Keep views thin. Broader stock adjustment workflows should write movements through services instead of direct ad hoc model updates.
 
 ## Admin
 

@@ -4,6 +4,8 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from .models import (
     Brand,
     Category,
+    ClientReturnItem,
+    ClientReturnRecord,
     DeliveryItem,
     DeliveryRecord,
     IssueItem,
@@ -23,6 +25,7 @@ from .models import (
 from .services import (
     cancel_delivery_record,
     cancel_receiving_record,
+    create_client_return_record,
     create_delivery_record,
     create_issue_record,
     create_receiving_record,
@@ -317,6 +320,8 @@ class StockMovementSerializer(serializers.ModelSerializer):
     issue_number = serializers.SerializerMethodField()
     repair = serializers.IntegerField(source="repair_record_id", read_only=True)
     repair_number = serializers.SerializerMethodField()
+    client_return = serializers.IntegerField(source="client_return_record_id", read_only=True)
+    client_return_number = serializers.SerializerMethodField()
 
     class Meta:
         model = StockMovement
@@ -349,6 +354,9 @@ class StockMovementSerializer(serializers.ModelSerializer):
             "repair",
             "repair_record",
             "repair_number",
+            "client_return",
+            "client_return_record",
+            "client_return_number",
             "reference",
             "crdate",
             "isactive",
@@ -375,6 +383,9 @@ class StockMovementSerializer(serializers.ModelSerializer):
 
     def get_repair_number(self, obj):
         return obj.repair_record.repair_number if obj.repair_record else ""
+
+    def get_client_return_number(self, obj):
+        return obj.client_return_record.return_number if obj.client_return_record else ""
 
 
 class DeliveryItemSerializer(serializers.ModelSerializer):
@@ -808,6 +819,118 @@ class RepairResolveSerializer(serializers.Serializer):
                 resolution=self.validated_data["resolution"],
                 resolution_notes=self.validated_data["resolution_notes"],
                 resolved_date=self.validated_data.get("resolved_date"),
+            )
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc
+
+
+class ClientReturnItemSerializer(serializers.ModelSerializer):
+    delivery = serializers.IntegerField(source="delivery_item.delivery_id", read_only=True)
+    delivery_number = serializers.CharField(
+        source="delivery_item.delivery.delivery_number",
+        read_only=True,
+    )
+    product_name = serializers.SerializerMethodField()
+    product_sku = serializers.CharField(source="product.sku", read_only=True)
+    serial_number = serializers.CharField(
+        source="product_unit.serial_number",
+        read_only=True,
+    )
+    product_unit_status = serializers.CharField(
+        source="product_unit.status",
+        read_only=True,
+    )
+    product_unit_status_label = serializers.CharField(
+        source="product_unit.get_status_display",
+        read_only=True,
+    )
+
+    class Meta:
+        model = ClientReturnItem
+        fields = (
+            "id",
+            "delivery_item",
+            "delivery",
+            "delivery_number",
+            "product",
+            "product_name",
+            "product_sku",
+            "product_unit",
+            "serial_number",
+            "product_unit_status",
+            "product_unit_status_label",
+            "notes",
+            "crdate",
+            "isactive",
+        )
+        read_only_fields = fields
+
+    def get_product_name(self, obj):
+        return str(obj.product)
+
+
+class ClientReturnRecordSerializer(serializers.ModelSerializer):
+    items = ClientReturnItemSerializer(many=True, read_only=True)
+    total_units = serializers.SerializerMethodField()
+    unit_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=True,
+        allow_empty=False,
+    )
+    delivery_number = serializers.CharField(
+        source="delivery.delivery_number",
+        read_only=True,
+        default="",
+    )
+    received_by_name = serializers.CharField(
+        source="received_by.get_username",
+        read_only=True,
+        default="",
+    )
+
+    class Meta:
+        model = ClientReturnRecord
+        fields = (
+            "id",
+            "return_number",
+            "delivery",
+            "delivery_number",
+            "customer_name",
+            "received_from",
+            "return_date",
+            "reason",
+            "resolution",
+            "notes",
+            "received_by",
+            "received_by_name",
+            "total_units",
+            "unit_ids",
+            "items",
+            "crdate",
+            "isactive",
+        )
+        read_only_fields = (
+            "return_number",
+            "delivery_number",
+            "received_by",
+            "received_by_name",
+            "total_units",
+            "items",
+            "crdate",
+        )
+
+    def get_total_units(self, obj):
+        return obj.total_units
+
+    def create(self, validated_data):
+        unit_ids = validated_data.pop("unit_ids")
+        request = self.context.get("request")
+        try:
+            return create_client_return_record(
+                unit_ids=unit_ids,
+                received_by=request.user if request else None,
+                **validated_data,
             )
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.messages) from exc
