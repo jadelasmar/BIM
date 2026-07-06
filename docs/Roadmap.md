@@ -22,6 +22,7 @@ This roadmap documents product direction, not implementation history.
 - StockMovement operational ledger foundation
 - Reservation records workflow
 - Issue and return-from-issue workflow
+- Repair workflow
 - Office-ready ProductUnit status vocabulary
 - Suppliers lookup API
 - Django admin for stock and users
@@ -35,14 +36,13 @@ Complete office-ready stock workflow polish before moving to secondary modules.
 
 Receiving and delivery records now have operational create/list/detail workflows under `/operations/...`. Manual Add Unit remains a direct stock unit workflow under inventory.
 
-StockMovement now records receiving, receiving cancellation, delivery, delivery cancellation, reservation, reservation release, issue, issue return, manual Add Unit, and direct product-unit status update movements going forward. The ProductUnit status set is now available, reserved, issued, sold, repair, and inactive. The next stock workflow work should build repair/client-return behavior on top of this ledger.
+StockMovement now records receiving, receiving cancellation, delivery, delivery cancellation, reservation, reservation release, issue, issue return, repair creation, repair resolution, manual Add Unit, and direct product-unit status update movements going forward. The ProductUnit status set is now available, reserved, issued, sold, repair, and inactive. The next stock workflow work should build client-return behavior on top of this ledger.
 
 ## Near-Term Modules
 
 - Supplier page
 - Product edit workflow
 - Better stock history views
-- Repair workflow
 - Client return workflow using sold-to-available or sold-to-repair transitions
 
 ## Future Modules

@@ -51,6 +51,9 @@ Important rendered routes:
 - `/operations/issues/` Issue Records list
 - `/operations/issues/new/` Create Issue
 - `/operations/issues/<id>/` Issue Record detail
+- `/operations/repairs/` Repair Records list
+- `/operations/repairs/new/` Create Repair
+- `/operations/repairs/<id>/` Repair Record detail
 - `/settings/` Settings
 - `/accounts/login/` Login
 - `/accounts/setup/<uid>/<token>/` Password setup
@@ -176,6 +179,19 @@ Current Issue Records integration:
 - The detail screen shows issue metadata, issued item lines, and a Return Issue action.
 - Returning an issue requires a reason and returns linked untouched issued units to available stock.
 - Issued units must be returned before they can be delivered.
+
+Current Repair Records integration:
+
+- `/operations/repairs/new/` submits Create Repair through `initial_data.api.repairs`.
+- The create screen loads active available stock units only and prevents selecting units that are reserved, issued, sold, inactive, repair, or otherwise unavailable.
+- On success, Create Repair redirects to `/operations/repairs/<id>/` when the API returns an id, otherwise back to the repair records list.
+- `/operations/repairs/` renders a real list screen from `AppRouter.jsx`.
+- The screen fetches `/api/stock/repairs/` through `initial_data.api.repairs`.
+- It shows repair number, reason, location/technician, expected resolution date, unit totals, and status.
+- `/operations/repairs/<id>/` fetches one record through `initial_data.api.repairDetail`.
+- The detail screen shows repair metadata, repair item lines, and a Resolve Repair action.
+- Resolving a repair requires resolution notes and moves linked untouched repair units either back to available or to inactive.
+- Reserved units must be released/cancelled first, issued units must be returned first, and sold units must wait for a future client return workflow before repair.
 
 Current Delivery Records integration:
 

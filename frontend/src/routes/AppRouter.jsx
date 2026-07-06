@@ -442,6 +442,14 @@ function OperationsPage({ data }) {
       tone: workflowMeta.create_issue.tone
     },
     {
+      title: "Create Repair",
+      detail: "Move available units into repair, testing, or diagnosis.",
+      href: data.routes.createRepair,
+      enabled: data.quickActions.some((action) => action.label === "Create Repair" && action.enabled),
+      icon: workflowMeta.create_repair.icon,
+      tone: workflowMeta.create_repair.tone
+    },
+    {
       title: "Stock Movement",
       detail: "Manual adjustments and exceptions.",
       href: null,
@@ -2283,6 +2291,604 @@ function CreateIssuePage({ data }) {
       </div>
     </Shell>
   );
+}
+
+function RepairRecordsPage({ data }) {
+  const [records, setRecords] = useState([]);
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadRepairs() {
+      setLoading(true);
+      setError("");
+      try {
+        const params = new URLSearchParams();
+        if (query.trim()) params.set("q", query.trim());
+        const endpoint = params.toString()
+          ? `${data.api.repairs}?${params.toString()}`
+          : data.api.repairs;
+        const response = await fetch(endpoint, { signal: controller.signal });
+        if (!response.ok) {
+          throw new Error("Could not load repair records.");
+        }
+        setRecords(await response.json());
+      } catch (loadError) {
+        if (loadError.name !== "AbortError") {
+          setError(loadError.message);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadRepairs();
+    return () => controller.abort();
+  }, [data.api.repairs, query]);
+
+  const activeCount = records.filter((record) => record.status === "active").length;
+  const totalUnits = records.reduce((sum, record) => sum + Number(record.total_units || 0), 0);
+  const latestRecord = records[0];
+  const repairKpis = [
+    {
+      label: "Repair Records",
+      value: formatCount(records.length),
+      detail: "repair or testing records",
+      icon: "wrench",
+      tone: "danger"
+    },
+    {
+      label: "Active Repairs",
+      value: formatCount(activeCount),
+      detail: "not yet resolved",
+      icon: "box",
+      tone: "warning"
+    },
+    {
+      label: "Repair Units",
+      value: formatCount(totalUnits),
+      detail: "units in these records",
+      icon: "layers",
+      tone: "blue"
+    },
+    {
+      label: "Latest Repair",
+      value: latestRecord ? formatDate(latestRecord.repair_date) : "-",
+      detail: latestRecord?.repair_number || "no repairs yet",
+      icon: "clock-3",
+      tone: "neutral"
+    }
+  ];
+
+  return (
+    <Shell data={data}>
+      <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">Repair Records</h1>
+          <p className="mt-1 text-sm text-zinc-400">Track available stock moved into repair, testing, or diagnosis.</p>
+        </div>
+        <Button as="a" href={data.routes.createRepair} variant="primary">
+          <Plus className="h-4 w-4" />
+          Create Repair
+        </Button>
+      </header>
+
+      <KpiGrid items={repairKpis} />
+
+      <section className="mt-4 rounded-lg border border-nexus-line bg-nexus-panel p-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <SearchBar
+            className="flex-1"
+            inputClassName="placeholder:text-zinc-500"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search repair number, reason, reporter, location, technician, product, or serial..."
+          />
+          <span className="text-xs text-zinc-500">{records.length} records</span>
+        </div>
+      </section>
+
+      <RepairRecordsTable records={records} loading={loading} error={error} />
+    </Shell>
+  );
+}
+
+function RepairRecordsTable({ records, loading, error }) {
+  return (
+    <section className="mt-4 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-zinc-800/80 text-zinc-400">
+            <tr>
+              <th className="px-4 py-3 font-medium">Repair</th>
+              <th className="px-4 py-3 font-medium">Reason</th>
+              <th className="px-4 py-3 font-medium">Location / Technician</th>
+              <th className="px-4 py-3 font-medium">Expected Resolution</th>
+              <th className="px-4 py-3 font-medium">Units</th>
+              <th className="px-4 py-3 font-medium">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <TableMessage message="Loading repair records..." />
+            ) : error ? (
+              <TableMessage message={error} />
+            ) : records.length ? (
+              records.map((record) => (
+                <tr key={record.id} className="border-t border-nexus-line hover:bg-zinc-900/70">
+                  <td className="px-4 py-4">
+                    <a href={`/operations/repairs/${record.id}/`} className="font-mono text-xs font-bold text-nexus-orange hover:text-orange-300">
+                      {record.repair_number}
+                    </a>
+                    <p className="mt-1 text-xs text-zinc-500">Sent by {record.sent_by_name || "-"}</p>
+                  </td>
+                  <td className="px-4 py-4 font-semibold text-white">{record.repair_reason || "-"}</td>
+                  <td className="px-4 py-4 text-zinc-300">{[record.repair_location, record.technician].filter(Boolean).join(" / ") || "-"}</td>
+                  <td className="px-4 py-4 text-zinc-300">{formatDate(record.expected_resolution_date)}</td>
+                  <td className="px-4 py-4">
+                    <p className="font-bold text-white">{formatCount(record.total_units || 0)}</p>
+                    <p className="mt-1 text-xs text-zinc-500">{formatCount(record.items?.length || 0)} lines</p>
+                  </td>
+                  <td className="px-4 py-4">
+                    <Status status={repairStatusLabel(record)} statusClass={record.status === "resolved" ? record.resolution || "available" : "repair"} />
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan="6">
+                  <EmptyState
+                    className="border-t border-nexus-line"
+                    title="No repair records yet."
+                    description="Create Repair moves active available units into repair without changing delivery, issue, or reservation records."
+                  />
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function RepairRecordDetailPage({ data }) {
+  const repairId = (data.currentPath || window.location.pathname).match(/\/operations\/repairs\/(\d+)\//)?.[1];
+  const [record, setRecord] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+  const [resolution, setResolution] = useState("available");
+  const [resolutionNotes, setResolutionNotes] = useState("");
+  const [resolving, setResolving] = useState(false);
+  const [resolveError, setResolveError] = useState("");
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadRepair() {
+      setLoading(true);
+      setError("");
+      try {
+        const endpoint = data.api.repairDetail.replace("{id}", repairId);
+        const response = await fetch(endpoint, { signal: controller.signal });
+        if (!response.ok) {
+          throw new Error(response.status === 404 ? "Repair record was not found." : "Could not load repair record.");
+        }
+        setRecord(await response.json());
+      } catch (loadError) {
+        if (loadError.name !== "AbortError") {
+          setError(loadError.message);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadRepair();
+    return () => controller.abort();
+  }, [data.api.repairDetail, repairId, reloadKey]);
+
+  async function resolveRepair() {
+    setResolving(true);
+    setResolveError("");
+    setMessage("");
+    try {
+      if (!resolutionNotes.trim()) {
+        throw new Error("Enter resolution notes.");
+      }
+      const endpoint = data.api.repairDetail.replace("{id}", repairId).replace(/\/$/, "/resolve/");
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": data.csrfToken
+        },
+        body: JSON.stringify({
+          resolution,
+          resolution_notes: resolutionNotes
+        })
+      });
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        throw new Error(firstApiError(details) || "Could not resolve repair.");
+      }
+      setResolutionNotes("");
+      setMessage(
+        resolution === "available"
+          ? "Repair resolved. Linked repair units were moved back to available stock."
+          : "Repair resolved. Linked repair units were made inactive."
+      );
+      setReloadKey((current) => current + 1);
+    } catch (resolveSaveError) {
+      setResolveError(resolveSaveError.message);
+    } finally {
+      setResolving(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <Shell data={data}>
+        <div className="rounded-lg border border-nexus-line bg-nexus-panel p-6 text-zinc-400">
+          Loading repair record...
+        </div>
+      </Shell>
+    );
+  }
+
+  if (error || !record) {
+    return (
+      <Shell data={data}>
+        <div className="rounded-lg border border-nexus-red/60 bg-red-500/10 p-6 text-red-200">
+          {error || "Repair record was not found."}
+        </div>
+      </Shell>
+    );
+  }
+
+  const isActive = record.status === "active";
+
+  return (
+    <Shell data={data}>
+      <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <a href="/operations/repairs/" className="mb-2 inline-flex text-sm font-semibold text-nexus-orange hover:text-orange-300">
+            Back to repairs
+          </a>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-bold text-white">{record.repair_number}</h1>
+            <Status status={repairStatusLabel(record)} statusClass={record.status === "resolved" ? record.resolution || "available" : "repair"} />
+          </div>
+          <p className="mt-1 text-sm text-zinc-400">Reserved, issued, and sold units must use their own workflows before repair.</p>
+        </div>
+      </header>
+
+      {message ? (
+        <div className="mb-4 rounded-lg border border-nexus-green/60 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-200">
+          {message}
+        </div>
+      ) : null}
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="space-y-5">
+          <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
+            <SectionTitle title="Repair Details" />
+            <dl className="mt-4 divide-y divide-nexus-line">
+              <DetailRow label="Reason" value={record.repair_reason || "-"} />
+              <DetailRow label="Reported By" value={record.reported_by_name || "-"} />
+              <DetailRow label="Location" value={record.repair_location || "-"} />
+              <DetailRow label="Technician" value={record.technician || "-"} />
+              <DetailRow label="Repair Date" value={formatDate(record.repair_date)} />
+              <DetailRow label="Expected Resolution" value={formatDate(record.expected_resolution_date)} />
+              <DetailRow label="Sent By" value={record.sent_by_name || "-"} />
+              <DetailRow label="Notes" value={record.notes || "-"} />
+              {record.resolved_date ? <DetailRow label="Resolved Date" value={formatDate(record.resolved_date)} /> : null}
+              {record.resolution ? <DetailRow label="Resolution" value={record.resolution} /> : null}
+              {record.resolution_notes ? <DetailRow label="Resolution Notes" value={record.resolution_notes} /> : null}
+            </dl>
+          </section>
+
+          <RepairItemsTable items={record.items || []} />
+        </div>
+
+        <aside className="space-y-4">
+          <section className="rounded-lg border border-nexus-line bg-nexus-panel">
+            <PanelHeader title="Repair Summary" />
+            <dl className="divide-y divide-nexus-line p-4">
+              <DetailRow label="Reference" value={record.repair_number} />
+              <DetailRow label="Status" value={repairStatusLabel(record)} />
+              <DetailRow label="Units" value={record.total_units || 0} strong />
+            </dl>
+          </section>
+
+          <section className="rounded-lg border border-nexus-line bg-nexus-panel p-4">
+            <h2 className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">Resolve Repair</h2>
+            <p className="mt-3 text-sm text-zinc-500">
+              Resolve only when all linked units are still untouched repair units.
+            </p>
+            <div className="mt-4 space-y-4">
+              <Field label="Resolution" required>
+                <SelectInput
+                  value={resolution}
+                  onChange={setResolution}
+                  options={[
+                    ["available", "Return to available"],
+                    ["inactive", "Deactivate unit"]
+                  ]}
+                  disabled={!isActive}
+                />
+              </Field>
+              <Field label="Resolution Notes" required>
+                <TextInput
+                  value={resolutionNotes}
+                  onChange={setResolutionNotes}
+                  placeholder="How was this repair resolved?"
+                  disabled={!isActive}
+                />
+              </Field>
+            </div>
+            {resolveError ? <p className="mt-3 text-sm font-semibold text-red-300">{resolveError}</p> : null}
+            <Button type="button" onClick={resolveRepair} disabled={!isActive || resolving} className="mt-4 w-full" variant="primary">
+              <RotateCcw className="h-4 w-4" />
+              {resolving ? "Resolving..." : "Resolve Repair"}
+            </Button>
+          </section>
+        </aside>
+      </div>
+    </Shell>
+  );
+}
+
+function RepairItemsTable({ items }) {
+  return (
+    <section className="overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
+      <PanelHeader title="Repair Units" badge={`${formatCount(items.length)} units`} />
+      {items.length ? (
+        <div className="overflow-x-auto border-t border-nexus-line">
+          <table className="min-w-full text-left text-sm">
+            <thead className="bg-zinc-800/80 text-zinc-400">
+              <tr>
+                <th className="px-4 py-3 font-medium">Product</th>
+                <th className="px-4 py-3 font-medium">SKU</th>
+                <th className="px-4 py-3 font-medium">Unit ID</th>
+                <th className="px-4 py-3 font-medium">Serial</th>
+                <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium">Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={item.id} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
+                  <td className="px-4 py-3 font-semibold text-white">{item.product_name}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-nexus-orange">{item.product_sku || "-"}</td>
+                  <td className="px-4 py-3 text-zinc-400">#{item.product_unit}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-zinc-300">{item.serial_number || "-"}</td>
+                  <td className="px-4 py-3">
+                    <Status status={item.product_unit_status_label || item.product_unit_status} statusClass={item.product_unit_status} />
+                  </td>
+                  <td className="px-4 py-3 text-zinc-400">{item.notes || item.resolution_notes || "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="border-t border-nexus-line px-4 py-5 text-sm text-zinc-500">
+          No repair units are linked to this record.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function CreateRepairPage({ data }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [form, setForm] = useState({
+    repairReason: "",
+    reportedByName: "",
+    repairLocation: "",
+    technician: "",
+    repairDate: today,
+    expectedResolutionDate: "",
+    notes: ""
+  });
+  const [units, setUnits] = useState([]);
+  const [query, setQuery] = useState("");
+  const [selectedUnits, setSelectedUnits] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadUnits() {
+      const response = await fetch(`${data.api.productUnits}?status=available`, {
+        signal: controller.signal
+      });
+      setUnits(response.ok ? await response.json() : []);
+    }
+
+    loadUnits().catch((loadError) => {
+      if (loadError.name !== "AbortError") {
+        setError("Could not load available stock units.");
+      }
+    });
+
+    return () => controller.abort();
+  }, [data.api.productUnits]);
+
+  const selectedIds = new Set(selectedUnits.map((unit) => unit.id));
+  const filteredUnits = units
+    .filter((unit) => !selectedIds.has(unit.id))
+    .filter((unit) => {
+      const text = `${unit.product_name} ${unit.product_sku} ${unit.product_barcode || ""} ${unit.serial_number}`.toLowerCase();
+      return query && text.includes(query.toLowerCase());
+    })
+    .slice(0, 8);
+
+  function updateField(name, value) {
+    setForm((current) => ({ ...current, [name]: value }));
+  }
+
+  function addUnit(unit) {
+    setSelectedUnits((current) => [...current, unit]);
+    setQuery("");
+  }
+
+  function removeUnit(unitId) {
+    setSelectedUnits((current) => current.filter((unit) => unit.id !== unitId));
+  }
+
+  async function saveRepair() {
+    setSaving(true);
+    setError("");
+    try {
+      if (!form.repairReason.trim() || !selectedUnits.length) {
+        throw new Error("Repair reason and at least one available stock unit are required.");
+      }
+
+      const response = await fetch(data.api.repairs, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": data.csrfToken
+        },
+        body: JSON.stringify({
+          repair_reason: form.repairReason,
+          reported_by_name: form.reportedByName,
+          repair_location: form.repairLocation,
+          technician: form.technician,
+          repair_date: form.repairDate || null,
+          expected_resolution_date: form.expectedResolutionDate || null,
+          notes: form.notes,
+          unit_ids: selectedUnits.map((unit) => unit.id)
+        })
+      });
+
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        throw new Error(firstApiError(details) || "Could not create repair.");
+      }
+
+      const created = await response.json();
+      window.location.assign(created.id ? `/operations/repairs/${created.id}/` : data.routes.repairRecords);
+    } catch (saveError) {
+      setError(saveError.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Shell data={data}>
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="min-w-0">
+          <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-white">Create Repair</h1>
+              <p className="mt-1 text-sm text-zinc-400">Move active available stock into repair, testing, or diagnosis.</p>
+            </div>
+            <div className="flex flex-wrap gap-3 text-sm">
+              <a href="/operations/repairs/" className="inline-flex h-9 items-center gap-2 rounded-md px-3 font-semibold text-zinc-200 hover:bg-nexus-panel">
+                <X className="h-4 w-4" />
+                Cancel
+              </a>
+              <button disabled={saving} onClick={saveRepair} type="button" className="inline-flex h-9 items-center gap-2 rounded-md bg-nexus-orange px-4 font-semibold text-black">
+                <Icon name="wrench" className="h-4 w-4" />
+                Save Repair
+              </button>
+            </div>
+          </header>
+
+          {error ? (
+            <div className="mb-4 rounded-lg border border-nexus-red/60 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-200">
+              {error}
+            </div>
+          ) : null}
+
+          <FormSection icon="wrench" title="Repair Information" subtitle="Operational repair or testing details for selected stock units.">
+            <div className="grid gap-5 md:grid-cols-2">
+              <Field label="Repair Reason" required>
+                <TextInput value={form.repairReason} onChange={(value) => updateField("repairReason", value)} placeholder="Why this stock is going to repair" />
+              </Field>
+              <Field label="Reported By">
+                <TextInput value={form.reportedByName} onChange={(value) => updateField("reportedByName", value)} placeholder="Person, team, or branch" />
+              </Field>
+              <Field label="Repair Location">
+                <TextInput value={form.repairLocation} onChange={(value) => updateField("repairLocation", value)} placeholder="Workshop, vendor, or shelf" />
+              </Field>
+              <Field label="Technician">
+                <TextInput value={form.technician} onChange={(value) => updateField("technician", value)} placeholder="Responsible person or vendor" />
+              </Field>
+              <Field label="Repair Date">
+                <TextInput type="date" value={form.repairDate} onChange={(value) => updateField("repairDate", value)} />
+              </Field>
+              <Field label="Expected Resolution">
+                <TextInput type="date" value={form.expectedResolutionDate} onChange={(value) => updateField("expectedResolutionDate", value)} />
+              </Field>
+              <Field label="Notes">
+                <TextInput value={form.notes} onChange={(value) => updateField("notes", value)} placeholder="Operational notes" />
+              </Field>
+            </div>
+          </FormSection>
+
+          <FormSection icon="box" title="Available Units" subtitle="Only active available units can be sent to repair. Reserved, issued, and sold units must use their own workflows before repair.">
+            <SearchBar
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search product, SKU, barcode, or serial..."
+            />
+            {filteredUnits.length ? (
+              <div className="mt-2 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
+                {filteredUnits.map((unit) => (
+                  <button
+                    key={unit.id}
+                    onClick={() => addUnit(unit)}
+                    type="button"
+                    className="flex w-full items-center justify-between border-b border-nexus-line px-4 py-3 text-left last:border-b-0 hover:bg-nexus-panel2"
+                  >
+                    <span>
+                      <span className="block text-sm font-bold text-white">{unit.product_name}</span>
+                      <span className="font-mono text-xs text-nexus-orange">{unit.serial_number}</span>
+                    </span>
+                    <Plus className="h-4 w-4 text-zinc-500" />
+                  </button>
+                ))}
+              </div>
+            ) : null}
+
+            <SelectedUnitsTable units={selectedUnits} onRemove={removeUnit} emptyText="No units selected for repair yet." />
+          </FormSection>
+        </div>
+
+        <aside className="space-y-4">
+          <section className="rounded-lg border border-nexus-line bg-nexus-panel">
+            <PanelHeader title="Repair Summary" />
+            <dl className="divide-y divide-nexus-line p-4">
+              <DetailRow label="Reason" value={form.repairReason || "-"} />
+              <DetailRow label="Repair Date" value={formatDate(form.repairDate)} />
+              <DetailRow label="Expected Resolution" value={formatDate(form.expectedResolutionDate)} />
+              <DetailRow label="Selected Units" value={selectedUnits.length} strong />
+              <DetailRow label="Status" value="Draft" />
+            </dl>
+          </section>
+        </aside>
+      </div>
+    </Shell>
+  );
+}
+
+function repairStatusLabel(record) {
+  if (!record?.status) return "-";
+  if (record.status === "resolved" && record.resolution) {
+    return `Resolved to ${record.resolution}`;
+  }
+  return record.status.charAt(0).toUpperCase() + record.status.slice(1);
 }
 
 function issueStatusLabel(record) {
@@ -5714,6 +6320,18 @@ const appRoutes = [
   {
     match: (path) => path === "/operations/issues/",
     render: (data) => <IssueRecordsPage data={data} />
+  },
+  {
+    match: (path) => /^\/operations\/repairs\/\d+\//.test(path),
+    render: (data) => <RepairRecordDetailPage data={data} />
+  },
+  {
+    match: (path) => path.startsWith("/operations/repairs/new"),
+    render: (data) => <CreateRepairPage data={data} />
+  },
+  {
+    match: (path) => path === "/operations/repairs/",
+    render: (data) => <RepairRecordsPage data={data} />
   },
   {
     match: (path) => path.startsWith("/operations"),

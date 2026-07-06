@@ -17,6 +17,7 @@ from .models import (
     ProductModel,
     ProductUnit,
     ReceivingRecord,
+    RepairRecord,
     ReservationRecord,
     StockMovement,
     Supplier,
@@ -35,6 +36,8 @@ from .serializers import (
     ReceivingRecordCancelSerializer,
     ReceivingRecordCorrectionSerializer,
     ReceivingRecordSerializer,
+    RepairRecordSerializer,
+    RepairResolveSerializer,
     ReservationRecordSerializer,
     ReservationReleaseSerializer,
     StockMovementSerializer,
@@ -243,6 +246,7 @@ class ProductStockMovementListAPIView(generics.ListAPIView):
                 "delivery_record",
                 "reservation_record",
                 "issue_record",
+                "repair_record",
             )
             .order_by("-movement_date", "-crdate", "-pk")[:50]
         )
@@ -501,6 +505,87 @@ class IssueRecordReturnAPIView(APIView):
         serializer.is_valid(raise_exception=True)
         issue = serializer.save()
         return Response(IssueRecordSerializer(issue).data)
+
+
+class RepairRecordListCreateAPIView(generics.ListCreateAPIView):
+    serializer_class = RepairRecordSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get_queryset(self):
+        _require_perm(self.request.user, stock_constants.VIEW_REPAIR_RECORD)
+        queryset = (
+            RepairRecord.objects.all()
+            .select_related("sent_by", "resolved_by")
+            .prefetch_related(
+                "items",
+                "items__product",
+                "items__product_unit",
+            )
+            .order_by("-repair_date", "-repair_number")
+        )
+        query = self.request.query_params.get("q", "").strip()
+
+        if query:
+            queryset = queryset.filter(
+                Q(repair_number__icontains=query)
+                | Q(repair_reason__icontains=query)
+                | Q(reported_by_name__icontains=query)
+                | Q(repair_location__icontains=query)
+                | Q(technician__icontains=query)
+                | Q(items__product_unit__serial_number__icontains=query)
+                | Q(items__product__descript__icontains=query)
+                | Q(items__product__sku__icontains=query)
+            ).distinct()
+
+        return queryset
+
+    def perform_create(self, serializer):
+        _require_perm(self.request.user, stock_constants.ADD_REPAIR_RECORD)
+        _require_perm(self.request.user, stock_constants.CHANGE_PRODUCT_UNIT)
+        serializer.save()
+
+
+class RepairRecordDetailAPIView(generics.RetrieveAPIView):
+    serializer_class = RepairRecordSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get_queryset(self):
+        _require_perm(self.request.user, stock_constants.VIEW_REPAIR_RECORD)
+        return (
+            RepairRecord.objects.all()
+            .select_related("sent_by", "resolved_by")
+            .prefetch_related(
+                "items",
+                "items__product",
+                "items__product_unit",
+            )
+        )
+
+
+class RepairRecordResolveAPIView(APIView):
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def post(self, request, pk):
+        _require_perm(request.user, stock_constants.CHANGE_REPAIR_RECORD)
+        _require_perm(request.user, stock_constants.CHANGE_PRODUCT_UNIT)
+        repair = get_object_or_404(
+            RepairRecord.objects.select_related(
+                "sent_by",
+                "resolved_by",
+            ).prefetch_related(
+                "items",
+                "items__product",
+                "items__product_unit",
+            ),
+            pk=pk,
+        )
+        serializer = RepairResolveSerializer(
+            data=request.data,
+            context={"request": request, "repair": repair},
+        )
+        serializer.is_valid(raise_exception=True)
+        repair = serializer.save()
+        return Response(RepairRecordSerializer(repair).data)
 
 
 class ReceivingRecordListCreateAPIView(generics.ListCreateAPIView):

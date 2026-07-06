@@ -53,6 +53,7 @@ Owns BIM Stock:
 - delivery records and delivery items
 - reservation records and reservation items
 - issue records and issue items
+- repair records and repair items
 - stock movements
 - stock selectors
 - stock API views and serializers
@@ -95,6 +96,8 @@ Stock API views:
 - reservation release/cancel
 - issue list/create/detail
 - issue return
+- repair list/create/detail
+- repair resolve
 - product movement history
 - inventory summary
 - lookup endpoints for categories, brands, models, suppliers
@@ -145,6 +148,10 @@ Issue record list search supports issue number, issued-to text, department, bran
 
 Create Issue only accepts active available product units. Issued units cannot be delivered directly by Create Delivery; they must be returned to available first.
 
+Repair record list search supports repair number, repair reason, reported-by text, repair location, technician, product-unit serial number, product description, and product SKU. Repair list/detail access uses the repair record view permission. Creating a repair requires both repair record add permission and product-unit change permission because selected stock units are marked repair. Resolving a repair requires both repair record change permission and product-unit change permission because linked units return to available or are made inactive.
+
+Create Repair only accepts active available product units. Reserved units must be released/cancelled first, issued units must be returned first, and sold units must wait for a future client return workflow before they can enter repair.
+
 ## Services
 
 Stock write workflows that span multiple models live in `backend/apps/stock/services.py`.
@@ -162,10 +169,12 @@ Current services:
 - `release_reservation_record`: releases or cancels a reservation only while linked stock units are still untouched reserved units for that reservation.
 - `create_issue_record`: creates operational issue records and items, marks selected available product units issued, and records issue movements.
 - `return_issue_record`: returns an issue only while linked stock units are still untouched issued units for that issue.
+- `create_repair_record`: creates operational repair records and items, marks selected available product units repair, and records repair movements.
+- `resolve_repair_record`: resolves a repair only while linked stock units are still untouched repair units for that repair, returning units to available or making them inactive.
 
-Receiving creation, receiving cancellation, delivery creation, delivery cancellation, reservation creation, reservation release/cancel, issue creation, issue return, manual Add Unit, and direct product-unit status updates now write `StockMovement` rows going forward. Clean deployments do not need legacy backfill.
+Receiving creation, receiving cancellation, delivery creation, delivery cancellation, reservation creation, reservation release/cancel, issue creation, issue return, repair creation, repair resolution, manual Add Unit, and direct product-unit status updates now write `StockMovement` rows going forward. Clean deployments do not need legacy backfill.
 
-Keep views thin. Repair, client return, and broader stock adjustment workflows should write movements through services instead of direct ad hoc model updates.
+Keep views thin. Client return and broader stock adjustment workflows should write movements through services instead of direct ad hoc model updates.
 
 ## Admin
 

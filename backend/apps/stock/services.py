@@ -10,6 +10,8 @@ from .models import (
     ProductUnit,
     ReceivingItem,
     ReceivingRecord,
+    RepairItem,
+    RepairRecord,
     ReservationItem,
     ReservationRecord,
     StockMovement,
@@ -40,6 +42,7 @@ def create_stock_movement(
     delivery_record=None,
     reservation_record=None,
     issue_record=None,
+    repair_record=None,
     reference="",
 ):
     return StockMovement.objects.create(
@@ -56,6 +59,7 @@ def create_stock_movement(
         delivery_record=delivery_record,
         reservation_record=reservation_record,
         issue_record=issue_record,
+        repair_record=repair_record,
         reference=(reference or "").strip()[:150],
     )
 
@@ -551,6 +555,184 @@ def return_issue_record(
         )
 
     return issue
+
+
+def _active_repair_item_for_unit(unit):
+    return unit.repair_items.filter(isactive=True).first()
+
+
+@transaction.atomic
+def create_repair_record(
+    *,
+    unit_ids,
+    repair_reason,
+    reported_by_name="",
+    repair_location="",
+    technician="",
+    repair_date=None,
+    expected_resolution_date=None,
+    notes="",
+    sent_by=None,
+):
+    unique_ids = list(dict.fromkeys(unit_ids or []))
+    if not unique_ids:
+        raise ValidationError("At least one stock unit is required.")
+
+    units = list(
+        ProductUnit.objects.select_for_update()
+        .select_related("product")
+        .filter(pk__in=unique_ids)
+        .order_by("product__descript", "serial_number")
+    )
+    units_by_id = {unit.pk: unit for unit in units}
+    missing_ids = [unit_id for unit_id in unique_ids if unit_id not in units_by_id]
+    if missing_ids:
+        raise ValidationError("One or more stock units were not found.")
+
+    unavailable_units = [
+        unit.serial_number
+        for unit in units
+        if not unit.isactive or unit.status != ProductUnit.STATUS_AVAILABLE
+    ]
+    if unavailable_units:
+        raise ValidationError(
+            "Only active available stock units can be sent to repair: "
+            + ", ".join(sorted(unavailable_units))
+        )
+
+    repair = RepairRecord.objects.create(
+        repair_reason=(repair_reason or "").strip(),
+        reported_by_name=(reported_by_name or "").strip(),
+        repair_location=(repair_location or "").strip(),
+        technician=(technician or "").strip(),
+        repair_date=repair_date or timezone.localdate(),
+        expected_resolution_date=expected_resolution_date,
+        notes=notes,
+        sent_by=sent_by,
+    )
+
+    for unit in units:
+        from_status = unit.status
+        RepairItem.objects.create(
+            repair=repair,
+            product_unit=unit,
+            product=unit.product,
+        )
+        unit.status = ProductUnit.STATUS_REPAIR
+        unit.save(update_fields=("status", "sold_date"))
+        create_stock_movement(
+            product_unit=unit,
+            movement_type=StockMovement.TYPE_SENT_TO_REPAIR,
+            from_status=from_status,
+            to_status=ProductUnit.STATUS_REPAIR,
+            reason=repair.repair_reason,
+            notes=notes,
+            performed_by=sent_by,
+            movement_date=repair.repair_date,
+            repair_record=repair,
+            reference=repair.repair_number,
+        )
+
+    return repair
+
+
+def _repair_item_can_be_resolved(item):
+    unit = item.product_unit
+    if not item.isactive or not unit:
+        return False
+    active_item = _active_repair_item_for_unit(unit)
+    return (
+        unit.isactive
+        and unit.status == ProductUnit.STATUS_REPAIR
+        and active_item
+        and active_item.pk == item.pk
+    )
+
+
+@transaction.atomic
+def resolve_repair_record(
+    repair,
+    *,
+    resolution,
+    resolved_by=None,
+    resolution_notes="",
+    resolved_date=None,
+):
+    repair = RepairRecord.objects.select_for_update().get(pk=repair.pk)
+    if repair.status != RepairRecord.STATUS_ACTIVE:
+        raise ValidationError("Only active repair records can be resolved.")
+    if resolution not in (
+        ProductUnit.STATUS_AVAILABLE,
+        ProductUnit.STATUS_INACTIVE,
+    ):
+        raise ValidationError("Repair resolution must be available or inactive.")
+
+    items = list(
+        repair.items.select_for_update()
+        .select_related("product_unit", "product")
+        .filter()
+        .order_by("product__descript", "product_unit__serial_number")
+    )
+    blocked_units = [
+        item.product_unit.serial_number
+        for item in items
+        if not _repair_item_can_be_resolved(item)
+    ]
+    if blocked_units:
+        raise ValidationError(
+            "Cannot resolve repair because these stock units are no longer untouched repair units: "
+            + ", ".join(sorted(blocked_units))
+        )
+
+    repair.status = RepairRecord.STATUS_RESOLVED
+    repair.resolution = resolution
+    repair.resolution_notes = (resolution_notes or "").strip()
+    repair.resolved_date = resolved_date or timezone.localdate()
+    repair.resolved_at = timezone.now()
+    repair.resolved_by = resolved_by
+    repair.save(
+        update_fields=(
+            "status",
+            "resolution",
+            "resolution_notes",
+            "resolved_date",
+            "resolved_at",
+            "resolved_by",
+        )
+    )
+
+    for item in items:
+        if item.isactive:
+            item.isactive = False
+            item.resolution_notes = repair.resolution_notes
+            item.save(update_fields=("isactive", "resolution_notes"))
+
+    movement_type = (
+        StockMovement.TYPE_REPAIR_RESOLVED
+        if resolution == ProductUnit.STATUS_AVAILABLE
+        else StockMovement.TYPE_REPAIR_DEACTIVATED
+    )
+    for item in items:
+        unit = item.product_unit
+        from_status = unit.status
+        unit.status = resolution
+        if resolution == ProductUnit.STATUS_INACTIVE:
+            unit.isactive = False
+        unit.save(update_fields=("status", "isactive", "sold_date"))
+        create_stock_movement(
+            product_unit=unit,
+            movement_type=movement_type,
+            from_status=from_status,
+            to_status=resolution,
+            reason=repair.resolution_notes,
+            notes=repair.resolution_notes,
+            performed_by=resolved_by,
+            movement_date=repair.resolved_date,
+            repair_record=repair,
+            reference=repair.repair_number,
+        )
+
+    return repair
 
 
 def _unit_has_delivery(unit):

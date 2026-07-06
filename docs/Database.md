@@ -305,6 +305,60 @@ Rules:
 - Item lines preserve the issued product and product-unit serial relationship for issue detail views and movement history.
 - Product, product-unit link, and serial number are not directly editable after creation.
 
+### RepairRecord
+
+Operational repair/testing record for stock units that physically exist but are not usable. This is not a financial, invoice, payment, or ERP posting.
+
+Fields:
+
+- `repair_number`
+- `repair_reason`
+- `reported_by_name`
+- `repair_location`
+- `technician`
+- `repair_date`
+- `expected_resolution_date`
+- `resolved_date`
+- `resolution`
+- `resolution_notes`
+- `notes`
+- `status`
+- `sent_by`
+- `resolved_by`
+- `resolved_at`
+- `crdate`
+- `isactive`
+
+Rules:
+
+- Repair numbers are generated as `RPR-YYYY-0001`.
+- Status is `active`, `resolved`, or `cancelled`.
+- Creating a repair requires active available product units.
+- Creating a repair marks linked product units repair.
+- Resolving a repair requires linked units to still be active, repair, and linked to active items on that repair.
+- Resolution supports only repair to available or repair to inactive in v1.
+- Inactive resolution marks linked product units inactive.
+- Reserved units must be released/cancelled first, issued units must be returned first, and sold units require a future client return workflow before repair.
+
+### RepairItem
+
+Connects repair stock units to a repair record.
+
+Fields:
+
+- `repair`
+- `product_unit`
+- `product`
+- `notes`
+- `resolution_notes`
+- `crdate`
+- `isactive`
+
+Rules:
+
+- Item lines preserve the repaired product and product-unit serial relationship for repair detail views and movement history.
+- Product, product-unit link, and serial number are not directly editable after creation.
+
 ### StockMovement
 
 Durable operational movement ledger for physical product units.
@@ -324,6 +378,7 @@ Fields:
 - `delivery_record`
 - `reservation_record`
 - `issue_record`
+- `repair_record`
 - `reference`
 - `crdate`
 - `isactive`
@@ -340,6 +395,9 @@ Movement types:
 - `reservation_released`
 - `issued`
 - `issue_returned`
+- `sent_to_repair`
+- `repair_resolved`
+- `repair_deactivated`
 
 Rules:
 
@@ -353,6 +411,9 @@ Rules:
 - Reservation release or cancellation writes `reservation_released` rows when linked product units return from reserved to available.
 - Issue creation writes `issued` rows when selected product units move from available to issued.
 - Issue return writes `issue_returned` rows when linked product units return from issued to available.
+- Repair creation writes `sent_to_repair` rows when selected product units move from available to repair.
+- Repair resolution writes `repair_resolved` rows when linked product units move from repair to available.
+- Repair deactivation writes `repair_deactivated` rows when linked product units move from repair to inactive.
 - Manual Add Unit writes `manual_add` rows.
 - Direct product-unit status updates write `manual_update` rows when the status changes.
 - Clean deployments record movements going forward; old local development data is not backfilled automatically.

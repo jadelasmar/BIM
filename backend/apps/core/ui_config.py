@@ -74,6 +74,11 @@ UI_TOKENS = {
         "icon": "clock-3",
         "tone": "warning",
     },
+    "repair_records": {
+        "label": "Repair Records",
+        "icon": "wrench",
+        "tone": "danger",
+    },
     "clients": {
         "label": "Clients",
         "icon": "suppliers",
@@ -135,6 +140,11 @@ UI_TOKENS = {
         "label": "Create Issue",
         "icon": "user-check",
         "tone": "indigo",
+    },
+    "create_repair": {
+        "label": "Create Repair",
+        "icon": "wrench",
+        "tone": "danger",
     },
     "add_supplier": {
         "label": "Add Supplier",

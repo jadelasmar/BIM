@@ -61,6 +61,9 @@ Important routes:
 - `/operations/issues/`
 - `/operations/issues/new/`
 - `/operations/issues/<id>/`
+- `/operations/repairs/`
+- `/operations/repairs/new/`
+- `/operations/repairs/<id>/`
 - `/suppliers/`
 - `/clients/`
 - `/assets/`
@@ -120,6 +123,9 @@ Important API routes:
 - `/api/stock/issues/`
 - `/api/stock/issues/<id>/`
 - `/api/stock/issues/<id>/return/`
+- `/api/stock/repairs/`
+- `/api/stock/repairs/<id>/`
+- `/api/stock/repairs/<id>/resolve/`
 - `/api/stock/suppliers/`
 - `/api/stock/brands/`
 - `/api/stock/models/`
@@ -183,6 +189,9 @@ Current main operational UI implementation:
 - Issue Records list
 - Issue Record detail
 - Create Issue
+- Repair Records list
+- Repair Record detail
+- Create Repair
 - placeholder pages
 - shared UI pieces not yet split out
 
@@ -413,6 +422,52 @@ GET /operations/issues/<id>/
   -> React AppRouter renders IssueRecordDetailPage
   -> GET /api/stock/issues/<id>/
   -> IssueRecordSerializer returns one record and issued item lines
+```
+
+### Repair Creation
+
+```text
+React Create Repair page
+  -> GET /operations/repairs/new/
+  -> POST /api/stock/repairs/
+  -> RepairRecordSerializer.create()
+  -> services.create_repair_record()
+  -> creates RepairRecord and RepairItem rows
+  -> marks selected ProductUnit rows repair
+  -> writes StockMovement sent_to_repair rows
+  -> redirects to /operations/repairs/<id>/ when the API responds with an id
+```
+
+### Repair Resolution
+
+```text
+React Repair Record detail
+  -> POST /api/stock/repairs/<id>/resolve/
+  -> RepairResolveSerializer.save()
+  -> services.resolve_repair_record()
+  -> resolves only when linked ProductUnit rows are still active, repair, and linked to this repair
+  -> writes StockMovement repair_resolved rows for repair to available
+  -> writes StockMovement repair_deactivated rows for repair to inactive
+```
+
+### Repair Records List
+
+```text
+GET /operations/repairs/
+  -> apps.core.views.module_launcher
+  -> React AppRouter renders RepairRecordsPage
+  -> GET /api/stock/repairs/
+  -> RepairRecordSerializer returns records and items
+```
+
+### Repair Record Detail
+
+```text
+GET /operations/repairs/<id>/
+  -> apps.core.views.module_launcher
+  -> React AppRouter renders RepairRecordDetailPage
+  -> GET /api/stock/repairs/<id>/
+  -> RepairRecordSerializer returns one record and repair item lines
 ```
 
 ### Delivery Record Detail

@@ -54,6 +54,8 @@ from .models import (
     ProductUnit,
     ReceivingItem,
     ReceivingRecord,
+    RepairItem,
+    RepairRecord,
     ReservationItem,
     ReservationRecord,
     StockMovement,
@@ -117,6 +119,7 @@ class UIRegistryTests(SimpleTestCase):
             "receive_stock",
             "create_delivery",
             "create_reservation",
+            "create_repair",
         ):
             token = UI_TOKENS[key]
 
@@ -137,6 +140,8 @@ class UIRegistryTests(SimpleTestCase):
         create_delivery = UI_TOKENS["create_delivery"]
         reservation_records = UI_TOKENS["reservation_records"]
         create_reservation = UI_TOKENS["create_reservation"]
+        repair_records = UI_TOKENS["repair_records"]
+        create_repair = UI_TOKENS["create_repair"]
 
         self.assertEqual(create_delivery["icon"], delivery_records["icon"])
         self.assertEqual(create_delivery["tone"], delivery_records["tone"])
@@ -146,6 +151,10 @@ class UIRegistryTests(SimpleTestCase):
         self.assertEqual(create_reservation["tone"], reservation_records["tone"])
         self.assertEqual(create_reservation["icon"], "clock-3")
         self.assertEqual(create_reservation["tone"], "warning")
+        self.assertEqual(create_repair["icon"], repair_records["icon"])
+        self.assertEqual(create_repair["tone"], repair_records["tone"])
+        self.assertEqual(create_repair["icon"], "wrench")
+        self.assertEqual(create_repair["tone"], "danger")
 
     def test_frontend_uses_registry_for_workflow_icons(self):
         app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
@@ -510,6 +519,12 @@ class UIRegistryTests(SimpleTestCase):
         self.assertIn("<CreateIssuePage data={data}", routes_source)
         self.assertIn("<IssueRecordsPage data={data}", routes_source)
         self.assertIn("<IssueRecordDetailPage data={data}", routes_source)
+        self.assertIn('match: (path) => path === "/operations/repairs/"', routes_source)
+        self.assertIn('match: (path) => path.startsWith("/operations/repairs/new")', routes_source)
+        self.assertIn('match: (path) => /^\\/operations\\/repairs\\/\\d+\\//.test(path)', routes_source)
+        self.assertIn("<CreateRepairPage data={data}", routes_source)
+        self.assertIn("<RepairRecordsPage data={data}", routes_source)
+        self.assertIn("<RepairRecordDetailPage data={data}", routes_source)
         self.assertNotIn('path.startsWith("/inventory/receiving/new")', routes_source)
         self.assertNotIn('path.startsWith("/inventory/deliveries/new")', routes_source)
         self.assertNotIn('path.startsWith("/operations/receiving")', routes_source)
@@ -536,6 +551,17 @@ class UIRegistryTests(SimpleTestCase):
         self.assertIn("data.api.issueDetail", app_source)
         self.assertIn("Return Issue", app_source)
         self.assertIn("Issued units must be returned before delivery.", app_source)
+
+    def test_frontend_has_repair_list_detail_and_create_screens(self):
+        app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
+
+        self.assertIn("function RepairRecordsPage", app_source)
+        self.assertIn("function RepairRecordDetailPage", app_source)
+        self.assertIn("function CreateRepairPage", app_source)
+        self.assertIn("data.api.repairs", app_source)
+        self.assertIn("data.api.repairDetail", app_source)
+        self.assertIn("Resolve Repair", app_source)
+        self.assertIn("Reserved, issued, and sold units must use their own workflows before repair.", app_source)
 
     def test_frontend_inventory_status_vocabulary_matches_product_unit_statuses(self):
         app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
@@ -1406,7 +1432,7 @@ class BIMPOSAccessTests(TestCase):
 
         self.assertTrue(operations_module["enabled"])
         self.assertEqual(operations_module["href"], "/operations/")
-        self.assertEqual(operations_module["count"], 4)
+        self.assertEqual(operations_module["count"], 5)
         self.assertTrue(operations_nav["enabled"])
         self.assertEqual(operations_nav["href"], "/operations/")
         self.assertEqual(operations_response.status_code, 200)
@@ -1616,6 +1642,7 @@ class BIMPOSAccessTests(TestCase):
             Permission.objects.get(codename="add_deliveryrecord"),
             Permission.objects.get(codename="add_reservationrecord"),
             Permission.objects.get(codename="add_issuerecord"),
+            Permission.objects.get(codename="add_repairrecord"),
             Permission.objects.get(codename="change_productunit"),
             Permission.objects.get(codename="view_product"),
         )
@@ -1632,6 +1659,7 @@ class BIMPOSAccessTests(TestCase):
                 "Create Delivery",
                 "Create Reservation",
                 "Create Issue",
+                "Create Repair",
                 "Receive Stock",
                 "Add Unit",
                 "Add Supplier",
@@ -1642,18 +1670,22 @@ class BIMPOSAccessTests(TestCase):
         self.assertEqual(actions_by_label["Create Delivery"]["href"], "/operations/deliveries/new/")
         self.assertEqual(actions_by_label["Create Reservation"]["href"], "/operations/reservations/new/")
         self.assertEqual(actions_by_label["Create Issue"]["href"], "/operations/issues/new/")
+        self.assertEqual(actions_by_label["Create Repair"]["href"], "/operations/repairs/new/")
         self.assertEqual(actions_by_label["Receive Stock"]["href"], "/operations/receiving/new/")
         self.assertEqual(actions_by_label["Add Unit"]["href"], "/inventory/stock-units/new/")
         self.assertTrue(actions_by_label["Add Product"]["enabled"])
         self.assertTrue(actions_by_label["Create Delivery"]["enabled"])
         self.assertTrue(actions_by_label["Create Reservation"]["enabled"])
         self.assertTrue(actions_by_label["Create Issue"]["enabled"])
+        self.assertTrue(actions_by_label["Create Repair"]["enabled"])
         self.assertTrue(actions_by_label["Receive Stock"]["enabled"])
         self.assertTrue(actions_by_label["Add Unit"]["enabled"])
         self.assertEqual(actions_by_label["Create Delivery"]["icon"], "delivery")
         self.assertEqual(actions_by_label["Create Delivery"]["tone"], "indigo")
         self.assertEqual(actions_by_label["Create Issue"]["icon"], "user-check")
         self.assertEqual(actions_by_label["Create Issue"]["tone"], "indigo")
+        self.assertEqual(actions_by_label["Create Repair"]["icon"], "wrench")
+        self.assertEqual(actions_by_label["Create Repair"]["tone"], "danger")
         self.assertFalse(actions_by_label["Add Supplier"]["enabled"])
         self.assertIsNone(actions_by_label["Add Supplier"]["href"])
         self.assertFalse(actions_by_label["Add Client"]["enabled"])
@@ -1747,6 +1779,7 @@ class BIMPOSAccessTests(TestCase):
             Permission.objects.get(codename="add_deliveryrecord"),
             Permission.objects.get(codename="add_reservationrecord"),
             Permission.objects.get(codename="add_issuerecord"),
+            Permission.objects.get(codename="add_repairrecord"),
             Permission.objects.get(codename="change_productunit"),
             Permission.objects.get(codename="view_product"),
         )
@@ -1763,6 +1796,7 @@ class BIMPOSAccessTests(TestCase):
                 "Create Delivery",
                 "Create Reservation",
                 "Create Issue",
+                "Create Repair",
                 "Receive Stock",
                 "Add Unit",
                 "Add Supplier",
@@ -3217,6 +3251,336 @@ class InventoryApiTests(TestCase):
         self.assertEqual(response.json()[0]["movement_type"], StockMovement.TYPE_ISSUED)
         self.assertEqual(response.json()[0]["issue"], issue.pk)
         self.assertEqual(response.json()[0]["issue_number"], issue.issue_number)
+
+    def test_repair_api_creates_record_and_marks_units_repair(self):
+        user = self._user_with_permissions(
+            "view_repairrecord",
+            "add_repairrecord",
+            "change_productunit",
+        )
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/api/stock/repairs/",
+            {
+                "repair_reason": "Printer head failure",
+                "reported_by_name": "Front Office",
+                "repair_location": "Workshop",
+                "technician": "Internal IT",
+                "repair_date": str(timezone.localdate()),
+                "expected_resolution_date": str(timezone.localdate()),
+                "notes": "Diagnose before reuse",
+                "unit_ids": [unit.pk],
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        unit.refresh_from_db()
+        repair = RepairRecord.objects.get(pk=response.json()["id"])
+        self.assertEqual(
+            response.json()["repair_number"][:9],
+            f"RPR-{timezone.localdate().year}-",
+        )
+        self.assertEqual(repair.status, RepairRecord.STATUS_ACTIVE)
+        self.assertEqual(repair.repair_reason, "Printer head failure")
+        self.assertEqual(repair.sent_by, user)
+        self.assertEqual(unit.status, ProductUnit.STATUS_REPAIR)
+        item = RepairItem.objects.get(repair=repair, product_unit=unit)
+        self.assertTrue(item.isactive)
+        movement = StockMovement.objects.get(
+            product_unit=unit,
+            movement_type=StockMovement.TYPE_SENT_TO_REPAIR,
+        )
+        self.assertEqual(movement.from_status, ProductUnit.STATUS_AVAILABLE)
+        self.assertEqual(movement.to_status, ProductUnit.STATUS_REPAIR)
+        self.assertEqual(movement.reference, repair.repair_number)
+        self.assertEqual(movement.repair_record, repair)
+        self.assertEqual(movement.performed_by, user)
+
+    def test_repair_api_rejects_unavailable_units(self):
+        user = self._user_with_permissions(
+            "view_repairrecord",
+            "add_repairrecord",
+            "change_productunit",
+        )
+        unavailable_units = [
+            ProductUnit.objects.get(serial_number="API-RESERVED"),
+            ProductUnit.objects.create(
+                product=self.product,
+                serial_number="RPR-SOLD",
+                status=ProductUnit.STATUS_SOLD,
+                isactive=True,
+            ),
+            ProductUnit.objects.create(
+                product=self.product,
+                serial_number="RPR-ISSUED",
+                status=ProductUnit.STATUS_ISSUED,
+                isactive=True,
+            ),
+            ProductUnit.objects.create(
+                product=self.product,
+                serial_number="RPR-REPAIR",
+                status=ProductUnit.STATUS_REPAIR,
+                isactive=True,
+            ),
+            ProductUnit.objects.get(serial_number="API-INACTIVE"),
+        ]
+        self.client.force_login(user)
+
+        for unit in unavailable_units:
+            response = self.client.post(
+                "/api/stock/repairs/",
+                {
+                    "repair_reason": "Blocked repair",
+                    "unit_ids": [unit.pk],
+                },
+                content_type="application/json",
+            )
+            self.assertEqual(response.status_code, 400, response.content)
+
+        self.assertEqual(RepairRecord.objects.count(), 0)
+        self.assertFalse(
+            StockMovement.objects.filter(
+                movement_type=StockMovement.TYPE_SENT_TO_REPAIR,
+            ).exists()
+        )
+
+    def test_repair_api_returns_list_and_detail(self):
+        user = self._user_with_permissions("view_repairrecord")
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        repair = RepairRecord.objects.create(
+            repair_reason="Printer head failure",
+            reported_by_name="Front Office",
+            repair_location="Workshop",
+            technician="Internal IT",
+            sent_by=user,
+        )
+        RepairItem.objects.create(
+            repair=repair,
+            product=self.product,
+            product_unit=unit,
+            notes="Cable attached",
+        )
+        self.client.force_login(user)
+
+        list_response = self.client.get("/api/stock/repairs/", {"q": "Printer"})
+        detail_response = self.client.get(f"/api/stock/repairs/{repair.pk}/")
+
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(len(list_response.json()), 1)
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertEqual(detail_response.json()["repair_number"], repair.repair_number)
+        self.assertEqual(detail_response.json()["repair_reason"], "Printer head failure")
+        self.assertEqual(detail_response.json()["sent_by_name"], user.username)
+        self.assertEqual(detail_response.json()["total_units"], 1)
+        self.assertEqual(detail_response.json()["items"][0]["product_unit"], unit.pk)
+        self.assertEqual(detail_response.json()["items"][0]["serial_number"], "API-AVAILABLE")
+
+    def test_repair_api_resolves_to_available(self):
+        user = self._user_with_permissions(
+            "view_repairrecord",
+            "change_repairrecord",
+            "change_productunit",
+        )
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        unit.status = ProductUnit.STATUS_REPAIR
+        unit.save(update_fields=("status", "sold_date"))
+        repair = RepairRecord.objects.create(
+            repair_reason="Printer head failure",
+            sent_by=user,
+        )
+        item = RepairItem.objects.create(
+            repair=repair,
+            product=self.product,
+            product_unit=unit,
+        )
+        self.client.force_login(user)
+
+        response = self.client.post(
+            f"/api/stock/repairs/{repair.pk}/resolve/",
+            {
+                "resolution": ProductUnit.STATUS_AVAILABLE,
+                "resolved_date": str(timezone.localdate()),
+                "resolution_notes": "Tested OK",
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        repair.refresh_from_db()
+        item.refresh_from_db()
+        unit.refresh_from_db()
+        self.assertEqual(repair.status, RepairRecord.STATUS_RESOLVED)
+        self.assertEqual(repair.resolution, ProductUnit.STATUS_AVAILABLE)
+        self.assertEqual(repair.resolution_notes, "Tested OK")
+        self.assertEqual(repair.resolved_by, user)
+        self.assertIsNotNone(repair.resolved_at)
+        self.assertFalse(item.isactive)
+        self.assertEqual(unit.status, ProductUnit.STATUS_AVAILABLE)
+        self.assertTrue(unit.isactive)
+        movement = StockMovement.objects.get(
+            product_unit=unit,
+            movement_type=StockMovement.TYPE_REPAIR_RESOLVED,
+        )
+        self.assertEqual(movement.from_status, ProductUnit.STATUS_REPAIR)
+        self.assertEqual(movement.to_status, ProductUnit.STATUS_AVAILABLE)
+        self.assertEqual(movement.repair_record, repair)
+
+    def test_repair_api_resolves_to_inactive(self):
+        user = self._user_with_permissions(
+            "view_repairrecord",
+            "change_repairrecord",
+            "change_productunit",
+        )
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        unit.status = ProductUnit.STATUS_REPAIR
+        unit.save(update_fields=("status", "sold_date"))
+        repair = RepairRecord.objects.create(repair_reason="Not repairable")
+        RepairItem.objects.create(repair=repair, product=self.product, product_unit=unit)
+        self.client.force_login(user)
+
+        response = self.client.post(
+            f"/api/stock/repairs/{repair.pk}/resolve/",
+            {
+                "resolution": ProductUnit.STATUS_INACTIVE,
+                "resolution_notes": "Scrap after testing",
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        unit.refresh_from_db()
+        self.assertEqual(unit.status, ProductUnit.STATUS_INACTIVE)
+        self.assertFalse(unit.isactive)
+        movement = StockMovement.objects.get(
+            product_unit=unit,
+            movement_type=StockMovement.TYPE_REPAIR_DEACTIVATED,
+        )
+        self.assertEqual(movement.from_status, ProductUnit.STATUS_REPAIR)
+        self.assertEqual(movement.to_status, ProductUnit.STATUS_INACTIVE)
+
+    def test_repair_api_blocks_resolve_when_unit_was_changed(self):
+        user = self._user_with_permissions(
+            "view_repairrecord",
+            "change_repairrecord",
+            "change_productunit",
+        )
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        unit.status = ProductUnit.STATUS_RESERVED
+        unit.save(update_fields=("status", "sold_date"))
+        repair = RepairRecord.objects.create(repair_reason="Printer head failure")
+        RepairItem.objects.create(repair=repair, product=self.product, product_unit=unit)
+        self.client.force_login(user)
+
+        response = self.client.post(
+            f"/api/stock/repairs/{repair.pk}/resolve/",
+            {
+                "resolution": ProductUnit.STATUS_AVAILABLE,
+                "resolution_notes": "Try resolve",
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        repair.refresh_from_db()
+        unit.refresh_from_db()
+        self.assertEqual(repair.status, RepairRecord.STATUS_ACTIVE)
+        self.assertEqual(unit.status, ProductUnit.STATUS_RESERVED)
+        self.assertFalse(
+            StockMovement.objects.filter(
+                product_unit=unit,
+                movement_type=StockMovement.TYPE_REPAIR_RESOLVED,
+            ).exists()
+        )
+
+    def test_repair_api_permissions_are_explicit(self):
+        no_view_user = User.objects.create_user(username="repair-no-view", password="test-pass")
+        no_view_user.user_permissions.add(Permission.objects.get(codename="view_productunit"))
+        no_view_user.groups.clear()
+        self.client.force_login(no_view_user)
+        self.assertEqual(self.client.get("/api/stock/repairs/").status_code, 403)
+
+        create_user = User.objects.create_user(username="repair-create", password="test-pass")
+        create_user.user_permissions.add(Permission.objects.get(codename="view_repairrecord"))
+        create_user.user_permissions.add(Permission.objects.get(codename="add_repairrecord"))
+        create_user.groups.clear()
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        self.client.force_login(create_user)
+        create_response = self.client.post(
+            "/api/stock/repairs/",
+            {
+                "repair_reason": "Missing product-unit permission",
+                "unit_ids": [unit.pk],
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(create_response.status_code, 403)
+
+        resolve_user = User.objects.create_user(username="repair-resolve", password="test-pass")
+        resolve_user.user_permissions.add(Permission.objects.get(codename="view_repairrecord"))
+        resolve_user.user_permissions.add(Permission.objects.get(codename="change_repairrecord"))
+        resolve_user.groups.clear()
+        repair = RepairRecord.objects.create(repair_reason="Printer head failure")
+        self.client.force_login(resolve_user)
+        resolve_response = self.client.post(
+            f"/api/stock/repairs/{repair.pk}/resolve/",
+            {
+                "resolution": ProductUnit.STATUS_AVAILABLE,
+                "resolution_notes": "Missing product-unit permission",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(resolve_response.status_code, 403)
+
+    def test_product_movements_api_includes_repair_movements(self):
+        user = self._user_with_permissions("view_stockmovement")
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        repair = RepairRecord.objects.create(repair_reason="Printer head failure")
+        StockMovement.objects.create(
+            product=unit.product,
+            product_unit=unit,
+            movement_type=StockMovement.TYPE_SENT_TO_REPAIR,
+            from_status=ProductUnit.STATUS_AVAILABLE,
+            to_status=ProductUnit.STATUS_REPAIR,
+            performed_by=user,
+            repair_record=repair,
+            reference=repair.repair_number,
+        )
+        self.client.force_login(user)
+
+        response = self.client.get(f"/api/stock/products/{self.product.pk}/movements/")
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()[0]["movement_type"], StockMovement.TYPE_SENT_TO_REPAIR)
+        self.assertEqual(response.json()[0]["repair"], repair.pk)
+        self.assertEqual(response.json()[0]["repair_number"], repair.repair_number)
+
+    def test_delivery_api_rejects_repair_units_directly(self):
+        user = self._user_with_permissions(
+            "add_deliveryrecord",
+            "change_productunit",
+        )
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        unit.status = ProductUnit.STATUS_REPAIR
+        unit.save(update_fields=("status", "sold_date"))
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/api/stock/deliveries/",
+            {
+                "customer_name": "Internal Department",
+                "receiver_name": "Receiver Name",
+                "unit_ids": [unit.pk],
+            },
+            content_type="application/json",
+        )
+
+        unit.refresh_from_db()
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(unit.status, ProductUnit.STATUS_REPAIR)
 
     def test_reference_apis_return_lookup_data(self):
         user = self._user_with_permissions(

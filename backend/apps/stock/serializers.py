@@ -13,6 +13,8 @@ from .models import (
     ProductUnit,
     ReceivingItem,
     ReceivingRecord,
+    RepairItem,
+    RepairRecord,
     ReservationItem,
     ReservationRecord,
     StockMovement,
@@ -24,8 +26,10 @@ from .services import (
     create_delivery_record,
     create_issue_record,
     create_receiving_record,
+    create_repair_record,
     create_reservation_record,
     release_reservation_record,
+    resolve_repair_record,
     return_issue_record,
     update_delivery_record_header,
     update_receiving_record_header,
@@ -311,6 +315,8 @@ class StockMovementSerializer(serializers.ModelSerializer):
     reservation_number = serializers.SerializerMethodField()
     issue = serializers.IntegerField(source="issue_record_id", read_only=True)
     issue_number = serializers.SerializerMethodField()
+    repair = serializers.IntegerField(source="repair_record_id", read_only=True)
+    repair_number = serializers.SerializerMethodField()
 
     class Meta:
         model = StockMovement
@@ -340,6 +346,9 @@ class StockMovementSerializer(serializers.ModelSerializer):
             "issue",
             "issue_record",
             "issue_number",
+            "repair",
+            "repair_record",
+            "repair_number",
             "reference",
             "crdate",
             "isactive",
@@ -363,6 +372,9 @@ class StockMovementSerializer(serializers.ModelSerializer):
 
     def get_issue_number(self, obj):
         return obj.issue_record.issue_number if obj.issue_record else ""
+
+    def get_repair_number(self, obj):
+        return obj.repair_record.repair_number if obj.repair_record else ""
 
 
 class DeliveryItemSerializer(serializers.ModelSerializer):
@@ -655,6 +667,147 @@ class IssueReturnSerializer(serializers.Serializer):
                 returned_by=request.user if request else None,
                 return_reason=self.validated_data["return_reason"],
                 returned_date=self.validated_data.get("returned_date"),
+            )
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc
+
+
+class RepairItemSerializer(serializers.ModelSerializer):
+    product_name = serializers.SerializerMethodField()
+    product_sku = serializers.CharField(source="product.sku", read_only=True)
+    serial_number = serializers.CharField(
+        source="product_unit.serial_number",
+        read_only=True,
+    )
+    product_unit_status = serializers.CharField(
+        source="product_unit.status",
+        read_only=True,
+    )
+    product_unit_status_label = serializers.CharField(
+        source="product_unit.get_status_display",
+        read_only=True,
+    )
+
+    class Meta:
+        model = RepairItem
+        fields = (
+            "id",
+            "product",
+            "product_name",
+            "product_sku",
+            "product_unit",
+            "serial_number",
+            "product_unit_status",
+            "product_unit_status_label",
+            "notes",
+            "resolution_notes",
+            "crdate",
+            "isactive",
+        )
+        read_only_fields = fields
+
+    def get_product_name(self, obj):
+        return str(obj.product)
+
+
+class RepairRecordSerializer(serializers.ModelSerializer):
+    items = RepairItemSerializer(many=True, read_only=True)
+    total_units = serializers.SerializerMethodField()
+    unit_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=True,
+        allow_empty=False,
+    )
+    sent_by_name = serializers.CharField(
+        source="sent_by.get_username",
+        read_only=True,
+    )
+    resolved_by_name = serializers.CharField(
+        source="resolved_by.get_username",
+        read_only=True,
+        default="",
+    )
+
+    class Meta:
+        model = RepairRecord
+        fields = (
+            "id",
+            "repair_number",
+            "repair_reason",
+            "reported_by_name",
+            "repair_location",
+            "technician",
+            "repair_date",
+            "expected_resolution_date",
+            "resolved_date",
+            "resolution",
+            "resolution_notes",
+            "notes",
+            "status",
+            "sent_by",
+            "sent_by_name",
+            "resolved_by",
+            "resolved_by_name",
+            "resolved_at",
+            "total_units",
+            "unit_ids",
+            "items",
+            "crdate",
+            "isactive",
+        )
+        read_only_fields = (
+            "repair_number",
+            "resolved_date",
+            "resolution",
+            "resolution_notes",
+            "status",
+            "sent_by",
+            "sent_by_name",
+            "resolved_by",
+            "resolved_by_name",
+            "resolved_at",
+            "total_units",
+            "items",
+            "crdate",
+        )
+
+    def get_total_units(self, obj):
+        return obj.total_units
+
+    def create(self, validated_data):
+        unit_ids = validated_data.pop("unit_ids")
+        request = self.context.get("request")
+        try:
+            return create_repair_record(
+                unit_ids=unit_ids,
+                sent_by=request.user if request else None,
+                **validated_data,
+            )
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc
+
+
+class RepairResolveSerializer(serializers.Serializer):
+    resolution = serializers.ChoiceField(
+        choices=(
+            ProductUnit.STATUS_AVAILABLE,
+            ProductUnit.STATUS_INACTIVE,
+        )
+    )
+    resolution_notes = serializers.CharField(required=True, allow_blank=False)
+    resolved_date = serializers.DateField(required=False)
+
+    def save(self, **kwargs):
+        repair = self.context["repair"]
+        request = self.context.get("request")
+        try:
+            return resolve_repair_record(
+                repair,
+                resolved_by=request.user if request else None,
+                resolution=self.validated_data["resolution"],
+                resolution_notes=self.validated_data["resolution_notes"],
+                resolved_date=self.validated_data.get("resolved_date"),
             )
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.messages) from exc

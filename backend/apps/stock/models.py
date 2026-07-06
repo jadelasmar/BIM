@@ -628,6 +628,126 @@ class IssueItem(models.Model):
         return f"{self.issue} - {self.product_unit.serial_number}"
 
 
+class RepairRecord(models.Model):
+    STATUS_ACTIVE = "active"
+    STATUS_RESOLVED = "resolved"
+    STATUS_CANCELLED = "cancelled"
+
+    STATUS_CHOICES = [
+        (STATUS_ACTIVE, "Active"),
+        (STATUS_RESOLVED, "Resolved"),
+        (STATUS_CANCELLED, "Cancelled"),
+    ]
+
+    RESOLUTION_AVAILABLE = ProductUnit.STATUS_AVAILABLE
+    RESOLUTION_INACTIVE = ProductUnit.STATUS_INACTIVE
+
+    RESOLUTION_CHOICES = [
+        (RESOLUTION_AVAILABLE, "Available"),
+        (RESOLUTION_INACTIVE, "Inactive"),
+    ]
+
+    repair_number = models.CharField(
+        max_length=32,
+        unique=True,
+        blank=True,
+        editable=False,
+    )
+    repair_reason = models.CharField(max_length=150)
+    reported_by_name = models.CharField(max_length=150, blank=True)
+    repair_location = models.CharField(max_length=150, blank=True)
+    technician = models.CharField(max_length=150, blank=True)
+    repair_date = models.DateField(default=timezone.localdate)
+    expected_resolution_date = models.DateField(blank=True, null=True)
+    resolved_date = models.DateField(blank=True, null=True)
+    resolution = models.CharField(
+        max_length=20,
+        choices=RESOLUTION_CHOICES,
+        blank=True,
+    )
+    resolution_notes = models.TextField(blank=True)
+    notes = models.TextField(blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_ACTIVE,
+    )
+    sent_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="stock_repair_records",
+    )
+    resolved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="resolved_stock_repair_records",
+    )
+    resolved_at = models.DateTimeField(blank=True, null=True)
+    crdate = models.DateTimeField(auto_now_add=True)
+    isactive = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("-repair_date", "-repair_number")
+
+    def save(self, *args, **kwargs):
+        if not self.repair_number:
+            year = (self.repair_date or timezone.localdate()).year
+            prefix = f"RPR-{year}-"
+            latest = (
+                RepairRecord.objects.filter(repair_number__startswith=prefix)
+                .order_by("-repair_number")
+                .first()
+            )
+            next_number = 1
+            if latest:
+                try:
+                    next_number = int(latest.repair_number.rsplit("-", 1)[1]) + 1
+                except (IndexError, ValueError):
+                    next_number = latest.pk + 1
+            self.repair_number = f"{prefix}{next_number:04d}"
+        super().save(*args, **kwargs)
+
+    @property
+    def total_units(self):
+        return self.items.filter(isactive=True).count()
+
+    def __str__(self):
+        return self.repair_number or "Repair"
+
+
+class RepairItem(models.Model):
+    repair = models.ForeignKey(
+        RepairRecord,
+        on_delete=models.CASCADE,
+        related_name="items",
+    )
+    product_unit = models.ForeignKey(
+        ProductUnit,
+        on_delete=models.PROTECT,
+        related_name="repair_items",
+    )
+    product = models.ForeignKey(Product, on_delete=models.PROTECT)
+    notes = models.TextField(blank=True)
+    resolution_notes = models.TextField(blank=True)
+    crdate = models.DateTimeField(auto_now_add=True)
+    isactive = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("product__descript", "product_unit__serial_number")
+
+    def save(self, *args, **kwargs):
+        if self.product_unit_id and not self.product_id:
+            self.product = self.product_unit.product
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.repair} - {self.product_unit.serial_number}"
+
+
 class StockMovement(models.Model):
     TYPE_RECEIVED = "received"
     TYPE_RECEIVING_CANCELLED = "receiving_cancelled"
@@ -639,6 +759,9 @@ class StockMovement(models.Model):
     TYPE_RESERVATION_RELEASED = "reservation_released"
     TYPE_ISSUED = "issued"
     TYPE_ISSUE_RETURNED = "issue_returned"
+    TYPE_SENT_TO_REPAIR = "sent_to_repair"
+    TYPE_REPAIR_RESOLVED = "repair_resolved"
+    TYPE_REPAIR_DEACTIVATED = "repair_deactivated"
 
     MOVEMENT_TYPE_CHOICES = [
         (TYPE_RECEIVED, "Received"),
@@ -651,6 +774,9 @@ class StockMovement(models.Model):
         (TYPE_RESERVATION_RELEASED, "Reservation Released"),
         (TYPE_ISSUED, "Issued"),
         (TYPE_ISSUE_RETURNED, "Issue Returned"),
+        (TYPE_SENT_TO_REPAIR, "Sent To Repair"),
+        (TYPE_REPAIR_RESOLVED, "Repair Resolved"),
+        (TYPE_REPAIR_DEACTIVATED, "Repair Deactivated"),
     ]
 
     product_unit = models.ForeignKey(
@@ -699,6 +825,13 @@ class StockMovement(models.Model):
     )
     issue_record = models.ForeignKey(
         IssueRecord,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="stock_movements",
+    )
+    repair_record = models.ForeignKey(
+        RepairRecord,
         on_delete=models.SET_NULL,
         blank=True,
         null=True,

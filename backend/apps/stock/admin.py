@@ -14,6 +14,8 @@ from .models import (
     ProductUnit,
     ReceivingItem,
     ReceivingRecord,
+    RepairItem,
+    RepairRecord,
     ReservationItem,
     ReservationRecord,
     StockMovement,
@@ -294,6 +296,7 @@ class StockMovementAdmin(admin.ModelAdmin):
         "delivery_record__delivery_number",
         "reservation_record__reservation_number",
         "issue_record__issue_number",
+        "repair_record__repair_number",
     )
     list_select_related = (
         "product",
@@ -303,6 +306,7 @@ class StockMovementAdmin(admin.ModelAdmin):
         "delivery_record",
         "reservation_record",
         "issue_record",
+        "repair_record",
     )
     readonly_fields = (
         "product_unit",
@@ -318,6 +322,7 @@ class StockMovementAdmin(admin.ModelAdmin):
         "delivery_record",
         "reservation_record",
         "issue_record",
+        "repair_record",
         "reference",
         "crdate",
         "isactive",
@@ -479,6 +484,110 @@ class IssueRecordAdmin(admin.ModelAdmin):
                     "return_reason",
                     "returned_by",
                     "returned_at",
+                )
+            },
+        ),
+        (
+            "Notes",
+            {
+                "fields": (
+                    "notes",
+                    "crdate",
+                )
+            },
+        ),
+    )
+
+    @admin.display(description="Units")
+    def unit_count(self, obj):
+        return obj.total_units
+
+
+class RepairItemInline(admin.TabularInline):
+    model = RepairItem
+    extra = 0
+    autocomplete_fields = ("product_unit",)
+    readonly_fields = ("product", "crdate")
+    fields = (
+        "product_unit",
+        "product",
+        "notes",
+        "resolution_notes",
+        "isactive",
+        "crdate",
+    )
+
+
+@admin.register(RepairRecord)
+class RepairRecordAdmin(admin.ModelAdmin):
+    inlines = (RepairItemInline,)
+    list_display = (
+        "repair_number",
+        "repair_reason",
+        "reported_by_name",
+        "repair_location",
+        "technician",
+        "repair_date",
+        "status",
+        "resolution",
+        "unit_count",
+        "sent_by",
+        "resolved_by",
+        "isactive",
+        "crdate",
+    )
+    search_fields = (
+        "repair_number",
+        "repair_reason",
+        "reported_by_name",
+        "repair_location",
+        "technician",
+        "items__product_unit__serial_number",
+        "items__product__descript",
+        "items__product__sku",
+    )
+    list_filter = (
+        "status",
+        "resolution",
+        "repair_date",
+        "expected_resolution_date",
+        "isactive",
+    )
+    readonly_fields = (
+        "repair_number",
+        "resolved_at",
+        "crdate",
+    )
+    autocomplete_fields = ("sent_by", "resolved_by")
+    ordering = ("-repair_date", "-repair_number")
+
+    fieldsets = (
+        (
+            "Repair record",
+            {
+                "fields": (
+                    "repair_number",
+                    "repair_reason",
+                    "reported_by_name",
+                    "repair_location",
+                    "technician",
+                    "repair_date",
+                    "expected_resolution_date",
+                    "status",
+                    "sent_by",
+                    "isactive",
+                )
+            },
+        ),
+        (
+            "Resolution",
+            {
+                "fields": (
+                    "resolved_date",
+                    "resolution",
+                    "resolution_notes",
+                    "resolved_by",
+                    "resolved_at",
                 )
             },
         ),

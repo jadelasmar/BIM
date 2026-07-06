@@ -78,6 +78,21 @@ urlpatterns = [
         name="issue-detail",
     ),
     path(
+        "repairs/",
+        api_views.RepairRecordListCreateAPIView.as_view(),
+        name="repairs",
+    ),
+    path(
+        "repairs/<int:pk>/resolve/",
+        api_views.RepairRecordResolveAPIView.as_view(),
+        name="repair-resolve",
+    ),
+    path(
+        "repairs/<int:pk>/",
+        api_views.RepairRecordDetailAPIView.as_view(),
+        name="repair-detail",
+    ),
+    path(
         "receiving-records/",
         api_views.ReceivingRecordListCreateAPIView.as_view(),
         name="receiving-records",

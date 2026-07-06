@@ -115,6 +115,8 @@ def _command_center_initial_data(
             "reservationDetail": "/api/stock/reservations/{id}/",
             "issues": "/api/stock/issues/",
             "issueDetail": "/api/stock/issues/{id}/",
+            "repairs": "/api/stock/repairs/",
+            "repairDetail": "/api/stock/repairs/{id}/",
             "receivingRecords": "/api/stock/receiving-records/",
             "receivingRecordDetail": "/api/stock/receiving-records/{id}/",
             "suppliers": "/api/stock/suppliers/",
@@ -133,11 +135,13 @@ def _command_center_initial_data(
             "createDelivery": reverse("operations_create_delivery"),
             "createReservation": reverse("operations_create_reservation"),
             "createIssue": reverse("operations_create_issue"),
+            "createRepair": reverse("operations_create_repair"),
             "suppliers": reverse("suppliers"),
             "receivingRecords": reverse("operations_receiving"),
             "deliveryRecords": reverse("operations_deliveries"),
             "reservationRecords": reverse("operations_reservations"),
             "issueRecords": reverse("operations_issues"),
+            "repairRecords": reverse("operations_repairs"),
             "clients": reverse("clients"),
             "assets": reverse("assets"),
             "knowledgeBase": reverse("knowledge_base"),
@@ -282,6 +286,9 @@ def _build_command_center_initial_data(request, current_path=None):
     can_create_issue = user.has_perm(
         stock_constants.ADD_ISSUE_RECORD
     ) and user.has_perm(stock_constants.CHANGE_PRODUCT_UNIT)
+    can_create_repair = user.has_perm(
+        stock_constants.ADD_REPAIR_RECORD
+    ) and user.has_perm(stock_constants.CHANGE_PRODUCT_UNIT)
 
     metrics = [
         {
@@ -350,6 +357,14 @@ def _build_command_center_initial_data(request, current_path=None):
             **ui_item("create_issue"),
         },
         {
+            "href": reverse("operations_create_repair")
+            if can_create_repair
+            else None,
+            "enabled": can_create_repair,
+            "description": "Move available stock into repair or testing",
+            **ui_item("create_repair"),
+        },
+        {
             "href": reverse("operations_receive_stock")
             if user.has_perm(stock_constants.ADD_PRODUCT_UNIT)
             else None,
@@ -389,10 +404,10 @@ def _build_command_center_initial_data(request, current_path=None):
             **ui_item("inventory"),
         },
         {
-            "description": "Receiving, delivery, reservation, issue, stock history",
+            "description": "Receiving, delivery, reservation, issue, repair, stock history",
             "href": reverse("operations") if can_use_operations else None,
             "enabled": can_use_operations,
-            "count": 4,
+            "count": 5,
             "meta": "active workflows",
             **ui_item("operations"),
         },
