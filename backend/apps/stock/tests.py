@@ -51,6 +51,7 @@ from .models import (
     ProductUnit,
     ReceivingItem,
     ReceivingRecord,
+    StockMovement,
     Supplier,
 )
 
@@ -182,8 +183,13 @@ class UIRegistryTests(SimpleTestCase):
         self.assertIn("function ProductUnitRegister", app_source)
         self.assertIn("<ProductUnitRegister", product_details_source)
         self.assertIn("units={units}", product_details_source)
+        self.assertIn("movements={movements}", product_details_source)
+        self.assertIn("data.api.productMovements", product_details_source)
+        self.assertIn('["Movements", movements.length]', product_details_source)
         self.assertIn("canAccessAdmin={data.user?.canAccessAdmin}", product_details_source)
         self.assertIn("data.quickActions.find", product_details_source)
+        self.assertIn("Movement History", product_details_source)
+        self.assertNotIn("activityTitle(unit)", product_details_source)
         self.assertNotIn('className="text-sm text-zinc-500"', product_details_source)
         self.assertNotIn("Supplier Code", product_details_source)
         self.assertNotIn('href="/inventory/receiving/new/"', product_details_source)
@@ -2180,6 +2186,18 @@ class ReceivingServiceTests(TestCase):
         self.assertTrue(
             all(item.product_unit_id for item in receiving.items.order_by("serial_number"))
         )
+        movements = StockMovement.objects.filter(receiving_record=receiving).order_by(
+            "product_unit__serial_number"
+        )
+        self.assertEqual(movements.count(), 2)
+        self.assertEqual(
+            [movement.movement_type for movement in movements],
+            [StockMovement.TYPE_RECEIVED, StockMovement.TYPE_RECEIVED],
+        )
+        self.assertTrue(
+            all(movement.to_status == ProductUnit.STATUS_AVAILABLE for movement in movements)
+        )
+        self.assertTrue(all(movement.performed_by == self.user for movement in movements))
 
     def test_service_rejects_serial_count_that_does_not_match_quantity(self):
         from django.core.exceptions import ValidationError
@@ -2396,6 +2414,13 @@ class InventoryApiTests(TestCase):
         self.assertEqual(search_response.json()[0]["serial_number"], "API-AVAILABLE")
         self.assertEqual(create_response.status_code, 201)
         self.assertEqual(create_response.json()["product_sku"], "LAS-CAN-L100")
+        movement = StockMovement.objects.get(
+            product_unit__serial_number="API-NEW",
+            movement_type=StockMovement.TYPE_MANUAL_ADD,
+        )
+        self.assertEqual(movement.to_status, ProductUnit.STATUS_AVAILABLE)
+        self.assertEqual(movement.product, self.product)
+        self.assertEqual(movement.performed_by, user)
 
     def test_product_units_api_creates_manual_unit_without_supplier(self):
         user = self._user_with_permissions("view_productunit", "add_productunit")
@@ -2416,6 +2441,84 @@ class InventoryApiTests(TestCase):
         self.assertEqual(response.status_code, 201, response.content)
         self.assertIsNone(response.json()["supplier"])
         self.assertEqual(response.json()["supplier_name"], None)
+
+    def test_product_units_api_records_manual_update_movement_when_status_changes(self):
+        user = self._user_with_permissions("view_productunit", "change_productunit")
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        self.client.force_login(user)
+
+        response = self.client.patch(
+            f"/api/stock/product-units/{unit.pk}/",
+            {"status": ProductUnit.STATUS_RESERVED},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        movement = StockMovement.objects.get(
+            product_unit=unit,
+            movement_type=StockMovement.TYPE_MANUAL_UPDATE,
+        )
+        self.assertEqual(movement.from_status, ProductUnit.STATUS_AVAILABLE)
+        self.assertEqual(movement.to_status, ProductUnit.STATUS_RESERVED)
+        self.assertEqual(movement.performed_by, user)
+
+    def test_product_units_api_does_not_record_manual_update_for_non_status_edit(self):
+        user = self._user_with_permissions("view_productunit", "change_productunit")
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        self.client.force_login(user)
+
+        response = self.client.patch(
+            f"/api/stock/product-units/{unit.pk}/",
+            {"notes": "Updated maintenance note"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertFalse(
+            StockMovement.objects.filter(
+                product_unit=unit,
+                movement_type=StockMovement.TYPE_MANUAL_UPDATE,
+            ).exists()
+        )
+
+    def test_product_movements_api_returns_product_history(self):
+        user = self._user_with_permissions("view_stockmovement")
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        StockMovement.objects.create(
+            product=unit.product,
+            product_unit=unit,
+            movement_type=StockMovement.TYPE_MANUAL_ADD,
+            from_status="",
+            to_status=ProductUnit.STATUS_AVAILABLE,
+            reason="Opening unit",
+            notes="Initial count",
+            performed_by=user,
+            reference="Manual Add Unit",
+        )
+        self.client.force_login(user)
+
+        response = self.client.get(f"/api/stock/products/{self.product.pk}/movements/")
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(len(response.json()), 1)
+        movement_data = response.json()[0]
+        self.assertEqual(movement_data["movement_type"], StockMovement.TYPE_MANUAL_ADD)
+        self.assertEqual(movement_data["movement_type_label"], "Manual Add")
+        self.assertEqual(movement_data["product_unit"], unit.pk)
+        self.assertEqual(movement_data["serial_number"], "API-AVAILABLE")
+        self.assertEqual(movement_data["from_status"], "")
+        self.assertEqual(movement_data["to_status"], ProductUnit.STATUS_AVAILABLE)
+        self.assertEqual(movement_data["performed_by_name"], user.username)
+        self.assertEqual(movement_data["reference"], "Manual Add Unit")
+
+    def test_product_movements_api_requires_view_movement_permission(self):
+        user = self._user_with_permissions("view_product")
+        user.groups.clear()
+        self.client.force_login(user)
+
+        response = self.client.get(f"/api/stock/products/{self.product.pk}/movements/")
+
+        self.assertEqual(response.status_code, 403)
 
     def test_reference_apis_return_lookup_data(self):
         user = self._user_with_permissions(
@@ -2577,6 +2680,14 @@ class InventoryApiTests(TestCase):
         self.assertEqual(response.json()["total_units"], 1)
         self.assertEqual(unit.status, ProductUnit.STATUS_SOLD)
         self.assertEqual(unit.sold_date, timezone.localdate())
+        movement = StockMovement.objects.get(
+            product_unit=unit,
+            movement_type=StockMovement.TYPE_DELIVERED,
+        )
+        self.assertEqual(movement.from_status, ProductUnit.STATUS_AVAILABLE)
+        self.assertEqual(movement.to_status, ProductUnit.STATUS_SOLD)
+        self.assertEqual(movement.delivery_record.delivery_number, response.json()["delivery_number"])
+        self.assertEqual(movement.performed_by, user)
         self.assertTrue(
             DeliveryRecord.objects.filter(
                 delivery_number=response.json()["delivery_number"],
@@ -2749,6 +2860,14 @@ class InventoryApiTests(TestCase):
         self.assertEqual(unit.status, ProductUnit.STATUS_AVAILABLE)
         self.assertIsNone(unit.sold_date)
         self.assertTrue(unit.isactive)
+        movement = StockMovement.objects.get(
+            product_unit=unit,
+            movement_type=StockMovement.TYPE_DELIVERY_CANCELLED,
+        )
+        self.assertEqual(movement.from_status, ProductUnit.STATUS_SOLD)
+        self.assertEqual(movement.to_status, ProductUnit.STATUS_AVAILABLE)
+        self.assertEqual(movement.reason, "Wrong unit selected")
+        self.assertEqual(movement.performed_by, user)
 
     def test_delivery_api_blocks_cancel_when_linked_unit_is_no_longer_sold(self):
         user = self._user_with_permissions(
@@ -2778,6 +2897,12 @@ class InventoryApiTests(TestCase):
         unit.refresh_from_db()
         self.assertEqual(delivery.status, DeliveryRecord.STATUS_COMPLETED)
         self.assertEqual(unit.status, ProductUnit.STATUS_RETURNED)
+        self.assertFalse(
+            StockMovement.objects.filter(
+                product_unit=unit,
+                movement_type=StockMovement.TYPE_DELIVERY_CANCELLED,
+            ).exists()
+        )
 
     def test_delivery_api_cancel_requires_product_unit_change_permission(self):
         user = self._user_with_permissions(
@@ -3063,6 +3188,14 @@ class InventoryApiTests(TestCase):
         self.assertFalse(item.isactive)
         self.assertEqual(unit.status, ProductUnit.STATUS_INACTIVE)
         self.assertFalse(unit.isactive)
+        movement = StockMovement.objects.get(
+            product_unit=unit,
+            movement_type=StockMovement.TYPE_RECEIVING_CANCELLED,
+        )
+        self.assertEqual(movement.from_status, ProductUnit.STATUS_AVAILABLE)
+        self.assertEqual(movement.to_status, ProductUnit.STATUS_INACTIVE)
+        self.assertEqual(movement.reason, "Wrong serial entered")
+        self.assertEqual(movement.performed_by, user)
 
     def test_receiving_api_blocks_cancel_when_linked_unit_is_used(self):
         user = self._user_with_permissions(

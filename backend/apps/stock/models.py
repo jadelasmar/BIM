@@ -409,3 +409,78 @@ class DeliveryItem(models.Model):
 
     def __str__(self):
         return f"{self.delivery} - {self.product_unit.serial_number}"
+
+
+class StockMovement(models.Model):
+    TYPE_RECEIVED = "received"
+    TYPE_RECEIVING_CANCELLED = "receiving_cancelled"
+    TYPE_DELIVERED = "delivered"
+    TYPE_DELIVERY_CANCELLED = "delivery_cancelled"
+    TYPE_MANUAL_ADD = "manual_add"
+    TYPE_MANUAL_UPDATE = "manual_update"
+
+    MOVEMENT_TYPE_CHOICES = [
+        (TYPE_RECEIVED, "Received"),
+        (TYPE_RECEIVING_CANCELLED, "Receiving Cancelled"),
+        (TYPE_DELIVERED, "Delivered"),
+        (TYPE_DELIVERY_CANCELLED, "Delivery Cancelled"),
+        (TYPE_MANUAL_ADD, "Manual Add"),
+        (TYPE_MANUAL_UPDATE, "Manual Update"),
+    ]
+
+    product_unit = models.ForeignKey(
+        ProductUnit,
+        on_delete=models.PROTECT,
+        related_name="movements",
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.PROTECT,
+        related_name="stock_movements",
+    )
+    movement_type = models.CharField(max_length=40, choices=MOVEMENT_TYPE_CHOICES)
+    from_status = models.CharField(max_length=20, blank=True)
+    to_status = models.CharField(max_length=20, blank=True)
+    reason = models.CharField(max_length=150, blank=True)
+    notes = models.TextField(blank=True)
+    performed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="stock_movements",
+    )
+    movement_date = models.DateField(default=timezone.localdate)
+    receiving_record = models.ForeignKey(
+        ReceivingRecord,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="stock_movements",
+    )
+    delivery_record = models.ForeignKey(
+        DeliveryRecord,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="stock_movements",
+    )
+    reference = models.CharField(max_length=150, blank=True)
+    crdate = models.DateTimeField(auto_now_add=True)
+    isactive = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("-movement_date", "-crdate", "-pk")
+        indexes = [
+            models.Index(fields=("product", "movement_date")),
+            models.Index(fields=("product_unit", "movement_date")),
+            models.Index(fields=("movement_type", "movement_date")),
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.product_unit_id and not self.product_id:
+            self.product = self.product_unit.product
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.get_movement_type_display()} - {self.product_unit}"

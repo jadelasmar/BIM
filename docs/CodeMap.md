@@ -252,8 +252,10 @@ React Create Delivery page
   -> GET /operations/deliveries/new/
   -> POST /api/stock/deliveries/
   -> DeliveryRecordSerializer.create()
+  -> services.create_delivery_record()
   -> creates DeliveryRecord and DeliveryItem rows
   -> marks selected ProductUnit rows sold
+  -> writes StockMovement delivered rows
   -> redirects to /operations/deliveries/<id>/ when an id is returned
 ```
 
@@ -280,6 +282,7 @@ React Delivery Record detail
   -> DeliveryRecordCancelSerializer.save()
   -> services.cancel_delivery_record()
   -> cancels only when linked ProductUnit rows are still active, sold, and linked to this delivery
+  -> writes StockMovement delivery_cancelled rows
 ```
 
 ### Delivery Records List
@@ -312,6 +315,7 @@ React Receive Stock page
   -> services.create_receiving_record()
   -> creates ReceivingRecord and ReceivingItem rows
   -> creates/links ProductUnit rows when serial numbers are supplied
+  -> writes StockMovement received rows for linked units
 ```
 
 ### Receiving Correction
@@ -328,6 +332,7 @@ React Receiving Record detail
   -> ReceivingRecordCancelSerializer.save()
   -> services.cancel_receiving_record()
   -> cancels only when linked ProductUnit rows are still active and available
+  -> writes StockMovement receiving_cancelled rows
 ```
 
 Manual Add Unit remains separate:
@@ -337,6 +342,18 @@ React Add Unit page
   -> POST /api/stock/product-units/
   -> ProductUnitSerializer
   -> creates ProductUnit rows directly
+  -> writes StockMovement manual_add rows
+```
+
+### Product Movement History
+
+```text
+GET /inventory/products/<id>/
+  -> apps.core.views.module_launcher
+  -> React AppRouter renders ProductDetailsPage
+  -> GET /api/stock/products/<id>/movements/
+  -> ProductStockMovementListAPIView
+  -> StockMovementSerializer returns recent movement rows
 ```
 
 ### Receiving Records List
@@ -366,5 +383,6 @@ GET /operations/receiving/<id>/
 - More UI patterns should move into `components/ui/` only when repeated by current screens.
 - Receiving edit/cancel is intentionally limited to office-safe correction fields.
 - Delivery edit/cancel is intentionally limited to office-safe correction fields.
+- Product movement history now has a backend ledger, but full movement reports are not implemented yet.
 - Supplier/client/assets/report modules are placeholders or partial.
 - `Product.image` still uploads to `products_images/`.

@@ -16,6 +16,8 @@ VIEW_DELIVERY_RECORD = f"{APP_LABEL}.view_deliveryrecord"
 ADD_DELIVERY_RECORD = f"{APP_LABEL}.add_deliveryrecord"
 CHANGE_DELIVERY_RECORD = f"{APP_LABEL}.change_deliveryrecord"
 
+VIEW_STOCK_MOVEMENT = f"{APP_LABEL}.view_stockmovement"
+
 ADD_CATEGORY = f"{APP_LABEL}.add_category"
 ADD_BRAND = f"{APP_LABEL}.add_brand"
 

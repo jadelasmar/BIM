@@ -13,6 +13,11 @@ urlpatterns = [
         name="product-detail",
     ),
     path(
+        "products/<int:pk>/movements/",
+        api_views.ProductStockMovementListAPIView.as_view(),
+        name="product-movements",
+    ),
+    path(
         "product-units/",
         api_views.ProductUnitListCreateAPIView.as_view(),
         name="product-units",

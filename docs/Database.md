@@ -202,6 +202,48 @@ Rules:
 - Item lines preserve the delivered product and product-unit serial relationship for delivery detail views and future stock history.
 - Correction workflows may update line notes. Product, product-unit link, delivered units, and serial number are not directly editable after creation.
 
+### StockMovement
+
+Durable operational movement ledger for physical product units.
+
+Fields:
+
+- `product_unit`
+- `product`
+- `movement_type`
+- `from_status`
+- `to_status`
+- `reason`
+- `notes`
+- `performed_by`
+- `movement_date`
+- `receiving_record`
+- `delivery_record`
+- `reference`
+- `crdate`
+- `isactive`
+
+Movement types:
+
+- `received`
+- `receiving_cancelled`
+- `delivered`
+- `delivery_cancelled`
+- `manual_add`
+- `manual_update`
+
+Rules:
+
+- Movement rows are operational audit records, not accounting or financial postings.
+- Movement rows are written by stock services and allowed product-unit maintenance APIs.
+- Receiving creation writes `received` rows for serialized linked product units.
+- Receiving cancellation writes `receiving_cancelled` rows when linked product units move to inactive.
+- Delivery creation writes `delivered` rows when selected product units move from available to sold.
+- Delivery cancellation writes `delivery_cancelled` rows when linked product units return from sold to available.
+- Manual Add Unit writes `manual_add` rows.
+- Direct product-unit status updates write `manual_update` rows when the status changes.
+- Clean deployments record movements going forward; old local development data is not backfilled automatically.
+
 ## Migration Strategy
 
 - Preserve existing migrations.
@@ -214,7 +256,6 @@ Rules:
 
 Likely future models:
 
-- `StockMovement`
 - attachments/documents
 - clients
 - assets

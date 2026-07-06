@@ -1,6 +1,5 @@
 from rest_framework import serializers
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db import transaction
 
 from .models import (
     Brand,
@@ -12,11 +11,13 @@ from .models import (
     ProductUnit,
     ReceivingItem,
     ReceivingRecord,
+    StockMovement,
     Supplier,
 )
 from .services import (
     cancel_delivery_record,
     cancel_receiving_record,
+    create_delivery_record,
     create_receiving_record,
     update_delivery_record_header,
     update_receiving_record_header,
@@ -278,6 +279,62 @@ class ProductUnitSerializer(serializers.ModelSerializer):
         return obj.supplier.name if obj.supplier else None
 
 
+class StockMovementSerializer(serializers.ModelSerializer):
+    movement_type_label = serializers.CharField(
+        source="get_movement_type_display",
+        read_only=True,
+    )
+    product_name = serializers.SerializerMethodField()
+    product_sku = serializers.CharField(source="product.sku", read_only=True)
+    serial_number = serializers.CharField(
+        source="product_unit.serial_number",
+        read_only=True,
+    )
+    performed_by_name = serializers.SerializerMethodField()
+    receiving_number = serializers.SerializerMethodField()
+    delivery_number = serializers.SerializerMethodField()
+
+    class Meta:
+        model = StockMovement
+        fields = (
+            "id",
+            "product",
+            "product_name",
+            "product_sku",
+            "product_unit",
+            "serial_number",
+            "movement_type",
+            "movement_type_label",
+            "from_status",
+            "to_status",
+            "reason",
+            "notes",
+            "performed_by",
+            "performed_by_name",
+            "movement_date",
+            "receiving_record",
+            "receiving_number",
+            "delivery_record",
+            "delivery_number",
+            "reference",
+            "crdate",
+            "isactive",
+        )
+        read_only_fields = fields
+
+    def get_product_name(self, obj):
+        return str(obj.product)
+
+    def get_performed_by_name(self, obj):
+        return obj.performed_by.get_username() if obj.performed_by else ""
+
+    def get_receiving_number(self, obj):
+        return obj.receiving_record.receiving_number if obj.receiving_record else ""
+
+    def get_delivery_number(self, obj):
+        return obj.delivery_record.delivery_number if obj.delivery_record else ""
+
+
 class DeliveryItemSerializer(serializers.ModelSerializer):
     product_name = serializers.SerializerMethodField()
     product_sku = serializers.CharField(source="product.sku", read_only=True)
@@ -388,28 +445,11 @@ class DeliveryRecordSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         unit_ids = validated_data.pop("unit_ids")
         request = self.context.get("request")
-
-        with transaction.atomic():
-            delivery = DeliveryRecord.objects.create(
-                **validated_data,
-                created_by=request.user if request else None,
-            )
-            units = (
-                ProductUnit.objects.select_related("product")
-                .filter(pk__in=unit_ids)
-                .order_by("product__descript", "serial_number")
-            )
-            for unit in units:
-                DeliveryItem.objects.create(
-                    delivery=delivery,
-                    product_unit=unit,
-                    product=unit.product,
-                )
-                unit.status = ProductUnit.STATUS_SOLD
-                unit.sold_date = delivery.delivery_date
-                unit.save(update_fields=("status", "sold_date"))
-
-        return delivery
+        return create_delivery_record(
+            unit_ids=unit_ids,
+            created_by=request.user if request else None,
+            **validated_data,
+        )
 
 
 class DeliveryItemCorrectionSerializer(serializers.Serializer):

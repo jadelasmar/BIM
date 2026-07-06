@@ -8,6 +8,7 @@ from .models import (
     ProductUnit,
     ReceivingItem,
     ReceivingRecord,
+    StockMovement,
 )
 
 
@@ -21,7 +22,37 @@ def _clean_serial_numbers(serial_numbers):
     return cleaned
 
 
-def _create_receiving_item(receiving, supplier, received_date, item_data):
+def create_stock_movement(
+    *,
+    product_unit,
+    movement_type,
+    from_status="",
+    to_status="",
+    reason="",
+    notes="",
+    performed_by=None,
+    movement_date=None,
+    receiving_record=None,
+    delivery_record=None,
+    reference="",
+):
+    return StockMovement.objects.create(
+        product_unit=product_unit,
+        product=product_unit.product,
+        movement_type=movement_type,
+        from_status=from_status or "",
+        to_status=to_status or "",
+        reason=(reason or "").strip()[:150],
+        notes=notes or "",
+        performed_by=performed_by,
+        movement_date=movement_date or timezone.localdate(),
+        receiving_record=receiving_record,
+        delivery_record=delivery_record,
+        reference=(reference or "").strip()[:150],
+    )
+
+
+def _create_receiving_item(receiving, supplier, received_date, item_data, created_by=None):
     product = item_data["product"]
     quantity = int(item_data.get("quantity") or 1)
     serial_numbers = _clean_serial_numbers(item_data.get("serial_numbers"))
@@ -41,6 +72,18 @@ def _create_receiving_item(receiving, supplier, received_date, item_data):
             quantity=1,
             cost=cost,
             notes=notes,
+        )
+        create_stock_movement(
+            product_unit=product_unit,
+            movement_type=StockMovement.TYPE_RECEIVED,
+            from_status=product_unit.status,
+            to_status=product_unit.status,
+            reason="Linked to receiving record",
+            notes=notes,
+            performed_by=created_by,
+            movement_date=received_date,
+            receiving_record=receiving,
+            reference=receiving.receiving_number,
         )
         return
     if serial_numbers and len(serial_numbers) != quantity:
@@ -77,6 +120,18 @@ def _create_receiving_item(receiving, supplier, received_date, item_data):
                 serial_number=serial_number,
                 cost=cost,
                 notes=notes,
+            )
+            create_stock_movement(
+                product_unit=unit,
+                movement_type=StockMovement.TYPE_RECEIVED,
+                from_status="",
+                to_status=ProductUnit.STATUS_AVAILABLE,
+                reason="Received stock",
+                notes=notes,
+                performed_by=created_by,
+                movement_date=received_date,
+                receiving_record=receiving,
+                reference=receiving.receiving_number,
             )
         return
 
@@ -116,9 +171,60 @@ def create_receiving_record(
             supplier=supplier,
             received_date=receiving.received_date,
             item_data=item_data,
+            created_by=created_by,
         )
 
     return receiving
+
+
+@transaction.atomic
+def create_delivery_record(
+    *,
+    unit_ids,
+    customer_name,
+    receiver_name="",
+    delivery_date=None,
+    notes="",
+    created_by=None,
+    status=DeliveryRecord.STATUS_COMPLETED,
+):
+    delivery = DeliveryRecord.objects.create(
+        customer_name=(customer_name or "").strip(),
+        receiver_name=(receiver_name or "").strip(),
+        delivery_date=delivery_date or timezone.localdate(),
+        notes=notes,
+        status=status,
+        created_by=created_by,
+    )
+    units = (
+        ProductUnit.objects.select_related("product")
+        .filter(pk__in=unit_ids)
+        .order_by("product__descript", "serial_number")
+    )
+    for unit in units:
+        from_status = unit.status
+        DeliveryItem.objects.create(
+            delivery=delivery,
+            product_unit=unit,
+            product=unit.product,
+        )
+        unit.status = ProductUnit.STATUS_SOLD
+        unit.sold_date = delivery.delivery_date
+        unit.save(update_fields=("status", "sold_date"))
+        create_stock_movement(
+            product_unit=unit,
+            movement_type=StockMovement.TYPE_DELIVERED,
+            from_status=from_status,
+            to_status=ProductUnit.STATUS_SOLD,
+            reason="Delivered stock",
+            notes=notes,
+            performed_by=created_by,
+            movement_date=delivery.delivery_date,
+            delivery_record=delivery,
+            reference=delivery.delivery_number,
+        )
+
+    return delivery
 
 
 def _unit_has_delivery(unit):
@@ -251,9 +357,22 @@ def cancel_receiving_record(receiving, *, cancelled_by=None, cancel_reason=""):
             item.save(update_fields=("isactive",))
 
     for unit in linked_units:
+        from_status = unit.status
         unit.status = ProductUnit.STATUS_INACTIVE
         unit.isactive = False
         unit.save(update_fields=("status", "isactive", "sold_date"))
+        create_stock_movement(
+            product_unit=unit,
+            movement_type=StockMovement.TYPE_RECEIVING_CANCELLED,
+            from_status=from_status,
+            to_status=ProductUnit.STATUS_INACTIVE,
+            reason=receiving.cancel_reason,
+            notes=receiving.cancel_reason,
+            performed_by=cancelled_by,
+            movement_date=timezone.localdate(),
+            receiving_record=receiving,
+            reference=receiving.receiving_number,
+        )
 
     return receiving
 
@@ -360,8 +479,21 @@ def cancel_delivery_record(delivery, *, cancelled_by=None, cancel_reason=""):
 
     for item in items:
         unit = item.product_unit
+        from_status = unit.status
         unit.status = ProductUnit.STATUS_AVAILABLE
         unit.sold_date = None
         unit.save(update_fields=("status", "sold_date"))
+        create_stock_movement(
+            product_unit=unit,
+            movement_type=StockMovement.TYPE_DELIVERY_CANCELLED,
+            from_status=from_status,
+            to_status=ProductUnit.STATUS_AVAILABLE,
+            reason=delivery.cancel_reason,
+            notes=delivery.cancel_reason,
+            performed_by=cancelled_by,
+            movement_date=timezone.localdate(),
+            delivery_record=delivery,
+            reference=delivery.delivery_number,
+        )
 
     return delivery

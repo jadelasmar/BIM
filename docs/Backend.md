@@ -51,6 +51,7 @@ Owns BIM Stock:
 - suppliers
 - receiving records and receiving items
 - delivery records and delivery items
+- stock movements
 - stock selectors
 - stock API views and serializers
 - admin configuration
@@ -88,6 +89,7 @@ Stock API views:
 - receiving record cancel
 - delivery list/create/detail/update
 - delivery cancel
+- product movement history
 - inventory summary
 - lookup endpoints for categories, brands, models, suppliers
 
@@ -125,19 +127,25 @@ Dashboard receiving counts and recent receiving panels are based on real active 
 
 Recent delivery panels and delivery activity are based on real active `DeliveryRecord` rows. Sold `ProductUnit` rows that are not linked to a delivery item are not shown as delivery records and must not generate fake delivery detail links.
 
+Product movement history is based on real `StockMovement` rows. Product detail can read recent movement rows through `/api/stock/products/<id>/movements/`, which requires the stock movement view permission.
+
 ## Services
 
 Stock write workflows that span multiple models live in `backend/apps/stock/services.py`.
 
 Current services:
 
+- `create_stock_movement`: centralized helper for operational stock movement rows.
 - `create_receiving_record`: creates operational receiving records and items, and creates/links `ProductUnit` rows when serial numbers are supplied.
 - `update_receiving_record_header`: updates safe receiving header fields and line cost/notes, synchronizing available linked stock-unit purchase metadata.
 - `cancel_receiving_record`: cancels a receiving record only while linked stock units are still unused and available.
+- `create_delivery_record`: creates operational delivery records and items, marks selected product units sold, and records delivery movements.
 - `update_delivery_record_header`: updates safe delivery header fields and delivery item notes, synchronizing sold dates only for untouched sold units.
 - `cancel_delivery_record`: cancels a delivery record only while linked stock units are still untouched sold units for that delivery.
 
-Keep views thin. Add services when returns, adjustments, or broader stock movement logic becomes more complex.
+Receiving creation, receiving cancellation, delivery creation, delivery cancellation, manual Add Unit, and direct product-unit status updates now write `StockMovement` rows going forward. Clean deployments do not need legacy backfill.
+
+Keep views thin. Reservation, issue, damage, return, and broader stock adjustment workflows should write movements through services instead of direct ad hoc model updates.
 
 ## Admin
 

@@ -135,6 +135,14 @@ Current Receiving Records integration:
   - Product, quantity, and serial mistakes are handled by cancelling and recreating the record when linked units are still unused.
 - If cancellation is blocked because a linked stock unit is already used, the detail screen shows the backend operational message.
 
+Current Product Details movement integration:
+
+- `/inventory/products/<id>/` fetches product movement history through `initial_data.api.productMovements`.
+- The Product Details movement count uses real `StockMovement` rows instead of the previous placeholder count.
+- The Movement History panel lists recent movement date, type, serial, from/to status, reference, user, and notes.
+- Recent Activity on product detail is based on movement rows instead of inferring activity from current `ProductUnit.status`.
+- If the user lacks stock movement view access, the page shows a permission-aware movement message and preserves product/unit detail behavior.
+
 Current Delivery Records integration:
 
 - `/operations/deliveries/new/` submits Create Delivery through `initial_data.api.deliveries`.

@@ -19,6 +19,7 @@ This roadmap documents product direction, not implementation history.
 - Receiving Records list frontend
 - Receiving Record detail frontend
 - Receiving record edit/cancel correction workflow
+- StockMovement operational ledger foundation
 - Suppliers lookup API
 - Django admin for stock and users
 - Login and password setup
@@ -31,11 +32,14 @@ Complete office-ready stock workflow polish before moving to secondary modules.
 
 Receiving and delivery records now have operational create/list/detail workflows under `/operations/...`. Manual Add Unit remains a direct stock unit workflow under inventory.
 
+StockMovement now records receiving, receiving cancellation, delivery, delivery cancellation, manual Add Unit, and direct product-unit status update movements going forward. The next stock workflow work should build reservation, issue, damage, and return behavior on top of this ledger.
+
 ## Near-Term Modules
 
 - Supplier page
 - Product edit workflow
 - Better stock history views
+- Reservation, issue, damage, and return workflows
 
 ## Future Modules
 

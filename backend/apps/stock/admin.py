@@ -12,6 +12,7 @@ from .models import (
     ProductUnit,
     ReceivingItem,
     ReceivingRecord,
+    StockMovement,
     Supplier,
 )
 
@@ -250,6 +251,59 @@ class ProductUnitAdmin(admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
+
+
+@admin.register(StockMovement)
+class StockMovementAdmin(admin.ModelAdmin):
+    list_display = (
+        "movement_date",
+        "movement_type",
+        "product",
+        "product_unit",
+        "from_status",
+        "to_status",
+        "reference",
+        "performed_by",
+        "isactive",
+    )
+    list_filter = ("movement_type", "from_status", "to_status", "movement_date", "isactive")
+    search_fields = (
+        "reference",
+        "reason",
+        "notes",
+        "product__descript",
+        "product__sku",
+        "product_unit__serial_number",
+        "receiving_record__receiving_number",
+        "delivery_record__delivery_number",
+    )
+    list_select_related = (
+        "product",
+        "product_unit",
+        "performed_by",
+        "receiving_record",
+        "delivery_record",
+    )
+    readonly_fields = (
+        "product_unit",
+        "product",
+        "movement_type",
+        "from_status",
+        "to_status",
+        "reason",
+        "notes",
+        "performed_by",
+        "movement_date",
+        "receiving_record",
+        "delivery_record",
+        "reference",
+        "crdate",
+        "isactive",
+    )
+    ordering = ("-movement_date", "-crdate")
+
+    def has_add_permission(self, request):
+        return False
 
 
 class DeliveryItemInline(admin.TabularInline):

@@ -106,6 +106,7 @@ def _command_center_initial_data(
             "summary": "/api/stock/summary/",
             "products": "/api/stock/products/",
             "productDetail": "/api/stock/products/{id}/",
+            "productMovements": "/api/stock/products/{id}/movements/",
             "productUnits": "/api/stock/product-units/",
             "productUnitDetail": "/api/stock/product-units/{id}/",
             "deliveries": "/api/stock/deliveries/",

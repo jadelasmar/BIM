@@ -1,5 +1,7 @@
+from django.db import transaction
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import generics, permissions
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
@@ -14,6 +16,7 @@ from .models import (
     ProductModel,
     ProductUnit,
     ReceivingRecord,
+    StockMovement,
     Supplier,
 )
 from .serializers import (
@@ -28,8 +31,10 @@ from .serializers import (
     ReceivingRecordCancelSerializer,
     ReceivingRecordCorrectionSerializer,
     ReceivingRecordSerializer,
+    StockMovementSerializer,
     SupplierSerializer,
 )
+from .services import create_stock_movement
 
 
 def _require_perm(user, permission):
@@ -163,7 +168,19 @@ class ProductUnitListCreateAPIView(generics.ListCreateAPIView):
 
     def perform_create(self, serializer):
         _require_perm(self.request.user, stock_constants.ADD_PRODUCT_UNIT)
-        serializer.save()
+        with transaction.atomic():
+            unit = serializer.save()
+            create_stock_movement(
+                product_unit=unit,
+                movement_type=StockMovement.TYPE_MANUAL_ADD,
+                from_status="",
+                to_status=unit.status,
+                reason="Manual Add Unit",
+                notes=unit.notes,
+                performed_by=self.request.user,
+                movement_date=unit.purchase_date,
+                reference="Manual Add Unit",
+            )
 
 
 class ProductUnitDetailAPIView(generics.RetrieveUpdateAPIView):
@@ -181,7 +198,41 @@ class ProductUnitDetailAPIView(generics.RetrieveUpdateAPIView):
 
     def perform_update(self, serializer):
         _require_perm(self.request.user, stock_constants.CHANGE_PRODUCT_UNIT)
-        serializer.save()
+        old_status = serializer.instance.status
+        with transaction.atomic():
+            unit = serializer.save()
+            if old_status != unit.status:
+                create_stock_movement(
+                    product_unit=unit,
+                    movement_type=StockMovement.TYPE_MANUAL_UPDATE,
+                    from_status=old_status,
+                    to_status=unit.status,
+                    reason="Manual stock unit update",
+                    notes=unit.notes,
+                    performed_by=self.request.user,
+                    movement_date=timezone.localdate(),
+                    reference="Manual Unit Update",
+                )
+
+
+class ProductStockMovementListAPIView(generics.ListAPIView):
+    serializer_class = StockMovementSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get_queryset(self):
+        _require_perm(self.request.user, stock_constants.VIEW_STOCK_MOVEMENT)
+        get_object_or_404(Product.objects.filter(isactive=True), pk=self.kwargs["pk"])
+        return (
+            StockMovement.objects.filter(product_id=self.kwargs["pk"], isactive=True)
+            .select_related(
+                "product",
+                "product_unit",
+                "performed_by",
+                "receiving_record",
+                "delivery_record",
+            )
+            .order_by("-movement_date", "-crdate", "-pk")[:50]
+        )
 
 
 class DeliveryRecordListCreateAPIView(generics.ListCreateAPIView):

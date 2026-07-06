@@ -2253,7 +2253,9 @@ function ProductDetailsPage({ data }) {
   const productId = data.currentPath?.match(/\/inventory\/products\/(\d+)\//)?.[1];
   const [product, setProduct] = useState(null);
   const [units, setUnits] = useState([]);
+  const [movements, setMovements] = useState([]);
   const [unitsAccessDenied, setUnitsAccessDenied] = useState(false);
+  const [movementsAccessDenied, setMovementsAccessDenied] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -2264,11 +2266,14 @@ function ProductDetailsPage({ data }) {
       setLoading(true);
       setError("");
       try {
-        const [productResponse, unitsResponse] = await Promise.all([
+        const [productResponse, unitsResponse, movementsResponse] = await Promise.all([
           fetch(data.api.productDetail.replace("{id}", productId), {
             signal: controller.signal
           }),
           fetch(`${data.api.productUnits}?product=${productId}`, {
+            signal: controller.signal
+          }),
+          fetch(data.api.productMovements.replace("{id}", productId), {
             signal: controller.signal
           })
         ]);
@@ -2279,7 +2284,9 @@ function ProductDetailsPage({ data }) {
 
         setProduct(await productResponse.json());
         setUnits(unitsResponse.ok ? await unitsResponse.json() : []);
+        setMovements(movementsResponse.ok ? await movementsResponse.json() : []);
         setUnitsAccessDenied(unitsResponse.status === 401 || unitsResponse.status === 403);
+        setMovementsAccessDenied(movementsResponse.status === 401 || movementsResponse.status === 403);
       } catch (loadError) {
         if (loadError.name !== "AbortError") {
           setError(loadError.message);
@@ -2291,7 +2298,7 @@ function ProductDetailsPage({ data }) {
 
     loadProduct();
     return () => controller.abort();
-  }, [data.api.productDetail, data.api.productUnits, productId]);
+  }, [data.api.productDetail, data.api.productMovements, data.api.productUnits, productId]);
 
   if (loading) {
     return (
@@ -2324,12 +2331,7 @@ function ProductDetailsPage({ data }) {
   const detailActions = [receiveStockAction, addStockUnitAction, createDeliveryAction].filter(
     (action) => action?.enabled && action.href
   );
-  const recentActivity = units.slice(0, 6).map((unit) => ({
-    title: activityTitle(unit),
-    detail: activityDetail(unit),
-    date: formatDate(unit.purchase_date || unit.sold_date || unit.crdate),
-    tone: unit.status
-  }));
+  const recentActivity = movements.slice(0, 6);
 
   return (
     <Shell data={data}>
@@ -2387,7 +2389,7 @@ function ProductDetailsPage({ data }) {
         {[
           ["Overview", ""],
           ["Stock Units", product.total_units],
-          ["Movements", 0],
+          ["Movements", movements.length],
           ["Receiving", 0],
           ["Deliveries", 0],
           ["Documents", 0]
@@ -2454,21 +2456,29 @@ function ProductDetailsPage({ data }) {
             accessDenied={unitsAccessDenied}
             canAccessAdmin={data.user?.canAccessAdmin}
           />
+          <ProductMovementHistory
+            movements={movements}
+            accessDenied={movementsAccessDenied}
+          />
         </div>
 
         <aside className="rounded-lg border border-nexus-line bg-nexus-panel">
           <PanelHeader title="Recent Activity" />
           {recentActivity.length ? (
-            recentActivity.map((item) => (
-              <div key={`${item.title}-${item.detail}`} className="border-t border-nexus-line px-4 py-4">
-                <p className="text-sm font-bold text-white">{item.title}</p>
-                <p className="mt-1 text-xs text-zinc-500">{item.detail}</p>
-                <p className="mt-1 text-xs text-zinc-600">{item.date}</p>
+            recentActivity.map((movement) => (
+              <div key={movement.id} className="border-t border-nexus-line px-4 py-4">
+                <p className="text-sm font-bold text-white">{movement.movement_type_label || movement.movement_type}</p>
+                <p className="mt-1 text-xs text-zinc-500">{movement.reference || movement.serial_number || "-"}</p>
+                <p className="mt-1 text-xs text-zinc-600">{formatDate(movement.movement_date || movement.crdate)}</p>
               </div>
             ))
+          ) : movementsAccessDenied ? (
+            <p className="border-t border-nexus-line px-4 py-5 text-sm text-zinc-500">
+              Movement history requires stock movement access.
+            </p>
           ) : (
             <p className="border-t border-nexus-line px-4 py-5 text-sm text-zinc-500">
-              No stock-unit activity yet.
+              No stock movements recorded yet.
             </p>
           )}
           <a href={`/inventory/products/${product.id}/`} className="block border-t border-nexus-line px-4 py-4 text-center text-sm font-semibold text-nexus-orange hover:bg-nexus-panel2">
@@ -2477,6 +2487,63 @@ function ProductDetailsPage({ data }) {
         </aside>
       </div>
     </Shell>
+  );
+}
+
+function ProductMovementHistory({ movements, accessDenied }) {
+  const visibleMovements = movements.slice(0, 10);
+
+  return (
+    <section className="overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel" aria-label="Movement History">
+      <PanelHeader title="Movement History" badge={`${formatCount(movements.length)} events`} />
+      {accessDenied ? (
+        <p className="border-t border-nexus-line px-4 py-5 text-sm text-zinc-500">
+          Movement history requires stock movement access.
+        </p>
+      ) : visibleMovements.length ? (
+        <>
+          <div className="overflow-x-auto border-t border-nexus-line">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-zinc-800/80 text-zinc-400">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Date</th>
+                  <th className="px-4 py-3 font-medium">Type</th>
+                  <th className="px-4 py-3 font-medium">Serial</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 font-medium">Reference</th>
+                  <th className="px-4 py-3 font-medium">User</th>
+                  <th className="px-4 py-3 font-medium">Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleMovements.map((movement) => (
+                  <tr key={movement.id} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
+                    <td className="px-4 py-3 text-zinc-400">{formatDate(movement.movement_date || movement.crdate)}</td>
+                    <td className="px-4 py-3 font-semibold text-white">{movement.movement_type_label || movement.movement_type}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-nexus-orange">{movement.serial_number || "-"}</td>
+                    <td className="px-4 py-3 text-zinc-400">
+                      {movement.from_status || "-"} {movement.to_status ? "->" : ""} {movement.to_status || ""}
+                    </td>
+                    <td className="px-4 py-3 text-zinc-400">{movement.reference || movement.receiving_number || movement.delivery_number || "-"}</td>
+                    <td className="px-4 py-3 text-zinc-400">{movement.performed_by_name || "-"}</td>
+                    <td className="px-4 py-3 text-zinc-400">{movement.notes || movement.reason || "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {movements.length > visibleMovements.length ? (
+            <p className="border-t border-nexus-line px-4 py-3 text-xs text-zinc-500">
+              Showing {visibleMovements.length} of {movements.length} movement events.
+            </p>
+          ) : null}
+        </>
+      ) : (
+        <p className="border-t border-nexus-line px-4 py-5 text-sm text-zinc-500">
+          No stock movements are recorded for this product yet.
+        </p>
+      )}
+    </section>
   );
 }
 
@@ -2562,20 +2629,6 @@ function ProductDetailMetric({ label, value, detail, warning = false, danger = f
       <p className="mt-1 text-sm text-zinc-500">{detail}</p>
     </article>
   );
-}
-
-function activityTitle(unit) {
-  if (unit.status === "sold") return "Stock Delivered";
-  if (unit.status === "reserved") return "Unit Reserved";
-  if (unit.status === "returned") return "Unit Returned";
-  return "Stock Received";
-}
-
-function activityDetail(unit) {
-  if (unit.status === "sold") return `${unit.serial_number} delivered`;
-  if (unit.status === "reserved") return `${unit.serial_number} reserved`;
-  if (unit.status === "returned") return `${unit.serial_number} returned`;
-  return `${unit.serial_number}${unit.supplier_name ? ` - ${unit.supplier_name}` : ""}`;
 }
 
 function AddProductPage({ data }) {
