@@ -49,6 +49,7 @@ Owns BIM Stock:
 - product definitions
 - physical stock units
 - suppliers
+- clients
 - receiving records and receiving items
 - delivery records and delivery items
 - reservation records and reservation items
@@ -98,18 +99,20 @@ Stock API views:
 - issue return
 - repair list/create/detail
 - repair resolve
+- supplier list/create/detail/update
+- client list/create/detail/update
 - client return list/create/detail
 - product movement history
 - inventory summary
-- lookup endpoints for categories, brands, models, suppliers
+- lookup endpoints for categories, brands, models, suppliers, clients
 
-Delivery record list search currently supports delivery number, customer name, receiver name, product-unit serial number, product description, and product SKU. Delivery list/detail access uses the delivery record view permission. Creating a delivery requires both the delivery record add permission and product-unit change permission because selected stock units are marked sold.
+Delivery record list search currently supports delivery number, linked client name, compatibility client text, receiver name, product-unit serial number, product description, and product SKU. The API field `customer_name` remains for compatibility, while new office records can also link to `client`. Delivery list/detail access uses the delivery record view permission. Creating a delivery requires both the delivery record add permission and product-unit change permission because selected stock units are marked sold.
 
 Create Delivery only accepts active available product units. Reserved units must be released before they can be delivered.
 
 Delivery correction is intentionally limited:
 
-- Safe header updates may change customer name, receiver name, delivery date, and notes.
+- Safe header updates may change client name, receiver name, delivery date, and notes.
 - Safe line updates may change delivery item notes only.
 - Product-unit links, products, delivered units, serial numbers, and delivered quantity are not editable through the delivery correction API.
 - Changing the delivery date is blocked unless every linked stock unit is still active, sold, and linked to this delivery item.
@@ -153,7 +156,7 @@ Repair record list search supports repair number, repair reason, reported-by tex
 
 Create Repair only accepts active available product units. Reserved units must be released/cancelled first, issued units must be returned first, and sold units must go through Client Return before they can enter repair.
 
-Client return record list search supports return number, original delivery number, customer name, received-from text, reason, product-unit serial number, product description, and product SKU. Client return list/detail access uses the client return record view permission. Creating a client return requires both client return record add permission and product-unit change permission because selected sold units are moved back to available or repair.
+Client return record list search supports return number, original delivery number, linked client name, compatibility client text, received-from text, reason, product-unit serial number, product description, and product SKU. The API field `customer_name` remains for compatibility, while new office records can also link to `client`. Client return list/detail access uses the client return record view permission. Creating a client return requires both client return record add permission and product-unit change permission because selected sold units are moved back to available or repair.
 
 Create Client Return only accepts active sold product units linked to active items on completed delivery records. It blocks duplicate returns through active return-item checks and blocked status checks. Delivery cancellation remains a separate correction workflow; client return is a real operational return event and does not change the original delivery record status.
 

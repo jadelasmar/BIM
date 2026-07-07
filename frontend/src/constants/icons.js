@@ -38,6 +38,7 @@ import {
   TriangleAlert,
   Upload,
   UserCheck,
+  Users,
   Wrench,
   X
 } from "lucide-react";
@@ -89,6 +90,7 @@ export const iconComponents = {
   "shield-alert": ShieldAlert,
   "shopping-bag": ShoppingBag,
   suppliers: Handshake,
+  clients: Users,
   "trending-up": TrendingUp,
   "triangle-alert": TriangleAlert,
   upload: Upload,

@@ -11,6 +11,7 @@ from apps.stock.models import ProductUnit
 from apps.stock.selectors import (
     active_product_count,
     available_unit_count,
+    client_count,
     delivery_record_count,
     low_stock_alerts,
     low_stock_counts,
@@ -122,6 +123,7 @@ def _command_center_initial_data(
             "receivingRecords": "/api/stock/receiving-records/",
             "receivingRecordDetail": "/api/stock/receiving-records/{id}/",
             "suppliers": "/api/stock/suppliers/",
+            "clients": "/api/stock/clients/",
             "brands": "/api/stock/brands/",
             "models": "/api/stock/models/",
             "categories": "/api/stock/categories/",
@@ -140,6 +142,7 @@ def _command_center_initial_data(
             "createRepair": reverse("operations_create_repair"),
             "createClientReturn": reverse("operations_create_client_return"),
             "suppliers": reverse("suppliers"),
+            "supplierNew": reverse("supplier_new"),
             "receivingRecords": reverse("operations_receiving"),
             "deliveryRecords": reverse("operations_deliveries"),
             "reservationRecords": reverse("operations_reservations"),
@@ -147,6 +150,7 @@ def _command_center_initial_data(
             "repairRecords": reverse("operations_repairs"),
             "clientReturnRecords": reverse("operations_client_returns"),
             "clients": reverse("clients"),
+            "clientNew": reverse("client_new"),
             "assets": reverse("assets"),
             "knowledgeBase": reverse("knowledge_base"),
         },
@@ -230,8 +234,9 @@ def _command_center_initial_data(
         "overview": [
             {
                 "value": _format_count(supplier_count()),
-                "detail": "registered vendor",
+                "detail": "active suppliers",
                 "href": reverse("suppliers"),
+                "enabled": True,
                 **ui_item("suppliers"),
             },
             {
@@ -247,8 +252,8 @@ def _command_center_initial_data(
                 **ui_item("delivery_records"),
             },
             {
-                "value": "-",
-                "detail": "Coming later",
+                "value": _format_count(client_count()),
+                "detail": "active clients",
                 "href": reverse("clients"),
                 "enabled": True,
                 **ui_item("clients"),

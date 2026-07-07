@@ -5,6 +5,7 @@ from django.utils import timezone
 from .models import (
     Brand,
     Category,
+    Client,
     ClientReturnItem,
     ClientReturnRecord,
     DeliveryItem,
@@ -164,7 +165,19 @@ class ProductAdmin(admin.ModelAdmin):
 # Supplier is used when adding purchased ProductUnit records.
 @admin.register(Supplier)
 class SupplierAdmin(admin.ModelAdmin):
-    search_fields = ("name",)
+    list_display = ("name", "contact_person", "phone", "email", "isactive")
+    list_filter = ("isactive",)
+    search_fields = ("name", "contact_person", "phone", "email")
+    readonly_fields = ("crdate",)
+    ordering = ("name",)
+
+
+@admin.register(Client)
+class ClientAdmin(admin.ModelAdmin):
+    list_display = ("name", "contact_person", "phone", "email", "isactive")
+    list_filter = ("isactive",)
+    search_fields = ("name", "contact_person", "phone", "email")
+    readonly_fields = ("crdate",)
     ordering = ("name",)
 
 

@@ -136,6 +136,31 @@ class Product(models.Model):
 # Supplier stores the company or person that stock units are bought from.
 class Supplier(models.Model):
     name = models.CharField(max_length=150, unique=True)
+    contact_person = models.CharField(max_length=150, blank=True)
+    phone = models.CharField(max_length=60, blank=True)
+    email = models.EmailField(blank=True)
+    notes = models.TextField(blank=True)
+    crdate = models.DateTimeField(default=timezone.now)
+    isactive = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("name",)
+
+    def __str__(self):
+        return self.name
+
+
+class Client(models.Model):
+    name = models.CharField(max_length=150, unique=True)
+    contact_person = models.CharField(max_length=150, blank=True)
+    phone = models.CharField(max_length=60, blank=True)
+    email = models.EmailField(blank=True)
+    notes = models.TextField(blank=True)
+    crdate = models.DateTimeField(default=timezone.now)
+    isactive = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("name",)
 
     def __str__(self):
         return self.name
@@ -333,6 +358,13 @@ class DeliveryRecord(models.Model):
         unique=True,
         blank=True,
         editable=False,
+    )
+    client = models.ForeignKey(
+        Client,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="deliveries",
     )
     customer_name = models.CharField(max_length=150)
     receiver_name = models.CharField(max_length=150, blank=True)
@@ -765,6 +797,13 @@ class ClientReturnRecord(models.Model):
     )
     delivery = models.ForeignKey(
         DeliveryRecord,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="client_returns",
+    )
+    client = models.ForeignKey(
+        Client,
         on_delete=models.SET_NULL,
         blank=True,
         null=True,

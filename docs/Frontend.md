@@ -57,6 +57,12 @@ Important rendered routes:
 - `/operations/client-returns/` Client Return Records list
 - `/operations/client-returns/new/` Create Client Return
 - `/operations/client-returns/<id>/` Client Return Record detail
+- `/suppliers/` Supplier list
+- `/suppliers/new/` Create Supplier
+- `/suppliers/<id>/` Supplier detail/edit
+- `/clients/` Client list
+- `/clients/new/` Create Client
+- `/clients/<id>/` Client detail/edit
 - `/settings/` Settings
 - `/accounts/login/` Login
 - `/accounts/setup/<uid>/<token>/` Password setup
@@ -68,6 +74,8 @@ Current dedicated page folder:
 - `pages/auth/AuthPages.jsx`
 
 Most operational pages currently live in `routes/AppRouter.jsx`. Split pages gradually when feature work touches them.
+
+The Command Center dashboard focuses on stock KPIs, system overview shortcuts, recent activity, recent deliveries, and recent receiving. Module navigation belongs in the sidebar rather than a duplicate dashboard modules section. Topbar Quick Add is limited to the common fast actions: Add Product, Add Unit, Receive Stock, and Create Delivery. Reservations, issues, repairs, client returns, receiving records, delivery records, and future movement history belong in the Operations hub. Supplier and Client cards show real active master-data counts and open the simple master-data modules.
 
 Good future page split targets:
 
@@ -149,6 +157,14 @@ Current Receiving Records integration:
   - Product, quantity, and serial mistakes are handled by cancelling and recreating the record when linked units are still unused.
 - If cancellation is blocked because a linked stock unit is already used, the detail screen shows the backend operational message.
 
+Current Supplier and Client integration:
+
+- `/suppliers/` and `/clients/` render simple master-data list screens.
+- `/suppliers/new/`, `/clients/new/`, `/suppliers/<id>/`, and `/clients/<id>/` render create/edit screens for name, contact person, phone, email, notes, and active status.
+- Receive Stock can select or create a Supplier inline.
+- Create Delivery can select or create a Client inline. The API still sends `customer_name` for compatibility while linking the `client` master record.
+- Create Client Return can select or create a Client inline.
+
 Current Product Details movement integration:
 
 - `/inventory/products/<id>/` fetches product movement history through `initial_data.api.productMovements`.
@@ -204,7 +220,7 @@ Current Client Return integration:
 - On success, Create Client Return redirects to `/operations/client-returns/<id>/` when the API returns an id, otherwise back to the client return records list.
 - `/operations/client-returns/` renders a real list screen from `AppRouter.jsx`.
 - The screen fetches `/api/stock/client-returns/` through `initial_data.api.clientReturns`.
-- It shows return number, original delivery number when available, customer, received-from text, return date, unit totals, and resolution.
+- It shows return number, original delivery number when available, client, received-from text, return date, unit totals, and resolution.
 - `/operations/client-returns/<id>/` fetches one record through `initial_data.api.clientReturnDetail`.
 - The detail screen shows return metadata and returned item lines with original delivery number, product, SKU, serial number, current unit status, and notes.
 - Delivery detail includes a Create Client Return action that opens the create screen with the delivery id in the URL.
@@ -216,12 +232,12 @@ Current Delivery Records integration:
 - On success, Create Delivery redirects to `/operations/deliveries/<id>/` when the API returns an id, otherwise back to the delivery records list.
 - `/operations/deliveries/` renders a real list screen from `AppRouter.jsx`.
 - The screen fetches `/api/stock/deliveries/` through `initial_data.api.deliveries`.
-- It shows delivery number, customer, receiver, delivery date, unit totals, and status.
+- It shows delivery number, client, receiver, delivery date, unit totals, and status.
 - Loading, empty, and error states reuse the existing table and empty-state patterns.
 - `/operations/deliveries/<id>/` fetches one record through `initial_data.api.deliveryDetail`.
-- The detail screen shows customer, receiver, delivery date, status, creator, notes, total units, and delivered item lines with product, SKU, unit id, serial number, unit status, and notes.
+- The detail screen shows client, receiver, delivery date, status, creator, notes, total units, and delivered item lines with product, SKU, unit id, serial number, unit status, and notes.
 - The detail screen supports safe correction actions only:
-  - Edit Details updates customer, receiver, delivery date, notes, and item notes.
+  - Edit Details updates client, receiver, delivery date, notes, and item notes.
   - Cancel Record requires a cancellation reason and uses the delivery cancel API.
   - Wrong delivered unit, product, or serial mistakes are handled by cancelling and recreating the record when linked units are still untouched sold units.
 - If cancellation is blocked because a linked stock unit is no longer an untouched sold unit, the detail screen shows the backend operational message.

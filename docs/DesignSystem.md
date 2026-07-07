@@ -38,6 +38,8 @@ Core tokens:
 
 Use orange for primary actions and active states. Use red for danger/error. Use green for success/available.
 
+For dashboard KPIs and System Overview cards, use orange only for active, hover/focus, or warning states such as Low Stock. Normal operational counts, including Reserved Stock, should use neutral card styling by default unless they are actively selected as a filter. Warning/problem counts such as Low Stock, Out of Stock, and Repair use muted/neutral icon styling when the count is zero and warning color only when the count is greater than zero.
+
 ## Icons
 
 Source:

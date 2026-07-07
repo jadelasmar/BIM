@@ -11,6 +11,7 @@ from . import constants as stock_constants
 from .models import (
     Brand,
     Category,
+    Client,
     ClientReturnRecord,
     DeliveryRecord,
     IssueRecord,
@@ -26,6 +27,7 @@ from .models import (
 from .serializers import (
     BrandSerializer,
     CategorySerializer,
+    ClientSerializer,
     ClientReturnRecordSerializer,
     DeliveryRecordCancelSerializer,
     DeliveryRecordCorrectionSerializer,
@@ -263,7 +265,7 @@ class ClientReturnRecordListCreateAPIView(generics.ListCreateAPIView):
         _require_perm(self.request.user, stock_constants.VIEW_CLIENT_RETURN_RECORD)
         queryset = (
             ClientReturnRecord.objects.all()
-            .select_related("delivery", "received_by")
+            .select_related("client", "delivery", "received_by")
             .prefetch_related(
                 "items",
                 "items__delivery_item",
@@ -279,6 +281,7 @@ class ClientReturnRecordListCreateAPIView(generics.ListCreateAPIView):
             queryset = queryset.filter(
                 Q(return_number__icontains=query)
                 | Q(delivery__delivery_number__icontains=query)
+                | Q(client__name__icontains=query)
                 | Q(customer_name__icontains=query)
                 | Q(received_from__icontains=query)
                 | Q(reason__icontains=query)
@@ -303,7 +306,7 @@ class ClientReturnRecordDetailAPIView(generics.RetrieveAPIView):
         _require_perm(self.request.user, stock_constants.VIEW_CLIENT_RETURN_RECORD)
         return (
             ClientReturnRecord.objects.all()
-            .select_related("delivery", "received_by")
+            .select_related("client", "delivery", "received_by")
             .prefetch_related(
                 "items",
                 "items__delivery_item",
@@ -322,7 +325,7 @@ class DeliveryRecordListCreateAPIView(generics.ListCreateAPIView):
         _require_perm(self.request.user, stock_constants.VIEW_DELIVERY_RECORD)
         queryset = (
             DeliveryRecord.objects.all()
-            .select_related("created_by")
+            .select_related("client", "created_by")
             .prefetch_related(
                 "items",
                 "items__product",
@@ -335,6 +338,7 @@ class DeliveryRecordListCreateAPIView(generics.ListCreateAPIView):
         if query:
             queryset = queryset.filter(
                 Q(delivery_number__icontains=query)
+                | Q(client__name__icontains=query)
                 | Q(customer_name__icontains=query)
                 | Q(receiver_name__icontains=query)
                 | Q(items__product_unit__serial_number__icontains=query)
@@ -363,7 +367,7 @@ class DeliveryRecordDetailAPIView(generics.RetrieveUpdateAPIView):
         _require_perm(self.request.user, stock_constants.VIEW_DELIVERY_RECORD)
         return (
             DeliveryRecord.objects.all()
-            .select_related("created_by")
+            .select_related("client", "created_by")
             .prefetch_related(
                 "items",
                 "items__product",
@@ -822,12 +826,65 @@ class SupplierListAPIView(generics.ListCreateAPIView):
 
     def get_queryset(self):
         _require_perm(self.request.user, stock_constants.VIEW_SUPPLIER)
-        queryset = Supplier.objects.order_by("name")
+        queryset = Supplier.objects.filter(isactive=True).order_by("name")
         query = self.request.query_params.get("q", "").strip()
         if query:
-            queryset = queryset.filter(name__icontains=query)
+            queryset = queryset.filter(
+                Q(name__icontains=query)
+                | Q(contact_person__icontains=query)
+                | Q(phone__icontains=query)
+                | Q(email__icontains=query)
+            )
         return queryset
 
     def perform_create(self, serializer):
         _require_perm(self.request.user, stock_constants.ADD_SUPPLIER)
+        serializer.save()
+
+
+class SupplierDetailAPIView(generics.RetrieveUpdateAPIView):
+    serializer_class = SupplierSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get_queryset(self):
+        _require_perm(self.request.user, stock_constants.VIEW_SUPPLIER)
+        return Supplier.objects.all()
+
+    def perform_update(self, serializer):
+        _require_perm(self.request.user, stock_constants.CHANGE_SUPPLIER)
+        serializer.save()
+
+
+class ClientListCreateAPIView(generics.ListCreateAPIView):
+    serializer_class = ClientSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get_queryset(self):
+        _require_perm(self.request.user, stock_constants.VIEW_CLIENT)
+        queryset = Client.objects.filter(isactive=True).order_by("name")
+        query = self.request.query_params.get("q", "").strip()
+        if query:
+            queryset = queryset.filter(
+                Q(name__icontains=query)
+                | Q(contact_person__icontains=query)
+                | Q(phone__icontains=query)
+                | Q(email__icontains=query)
+            )
+        return queryset
+
+    def perform_create(self, serializer):
+        _require_perm(self.request.user, stock_constants.ADD_CLIENT)
+        serializer.save()
+
+
+class ClientDetailAPIView(generics.RetrieveUpdateAPIView):
+    serializer_class = ClientSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get_queryset(self):
+        _require_perm(self.request.user, stock_constants.VIEW_CLIENT)
+        return Client.objects.all()
+
+    def perform_update(self, serializer):
+        _require_perm(self.request.user, stock_constants.CHANGE_CLIENT)
         serializer.save()

@@ -207,26 +207,17 @@ function Topbar({ data, onRefresh, onOpenSidebar }) {
         Menu
       </Button>
       <div className="flex flex-wrap items-center justify-end gap-3">
-      <ThemeToggle storageKey={data.theme?.storageKey} />
-      <Button
-        type="button"
-        onClick={onRefresh || (() => window.location.reload())}
-        variant="outline"
-      >
-        <RefreshCw className="h-4 w-4" aria-hidden="true" />
-        Refresh
-      </Button>
-      <QuickAddMenu actions={data.quickActions || []} />
-      <div
-        className="hidden h-9 w-9 items-center justify-center rounded-md border border-nexus-line sm:inline-flex"
-        aria-label={`Signed in as ${data.user?.displayName || data.user?.username || "User"}`}
-        title="Signed in"
-      >
-        <span className="grid h-6 w-6 place-items-center rounded-md bg-nexus-orange/10 text-xs font-bold text-nexus-orange">
-          {data.user?.initials || "U"}
-        </span>
-      </div>
-      <LogoutForm data={data} />
+        <ThemeToggle storageKey={data.theme?.storageKey} />
+        <Button
+          type="button"
+          onClick={onRefresh || (() => window.location.reload())}
+          variant="outline"
+        >
+          <RefreshCw className="h-4 w-4" aria-hidden="true" />
+          Refresh
+        </Button>
+        <QuickAddMenu actions={data.quickActions || []} />
+        <LogoutForm data={data} />
       </div>
     </div>
   );
@@ -303,7 +294,6 @@ function CommandCenter({ data }) {
       <Header data={dashboardData} />
       <KpiGrid items={dashboardData.kpis} />
       <Overview items={dashboardData.overview} />
-      <Modules modules={dashboardData.modules} />
 
       <section className="mt-4">
         <RecentActivity items={dashboardData.recentActivity} />
@@ -395,6 +385,299 @@ function PlaceholderPage({ data, title }) {
       <section className="rounded-lg border border-nexus-line bg-nexus-panel p-6">
         <p className="text-sm text-zinc-400">This module will be implemented in a later phase.</p>
       </section>
+    </Shell>
+  );
+}
+
+const MASTER_DATA_CONFIG = {
+  suppliers: {
+    title: "Suppliers",
+    singular: "Supplier",
+    icon: "suppliers",
+    apiKey: "suppliers",
+    routeKey: "suppliers",
+    newRouteKey: "supplierNew",
+    path: "/suppliers/",
+    searchPlaceholder: "Search suppliers by name, contact, phone, or email...",
+    description: "Maintain supplier source details for receiving stock."
+  },
+  clients: {
+    title: "Clients",
+    singular: "Client",
+    icon: "clients",
+    apiKey: "clients",
+    routeKey: "clients",
+    newRouteKey: "clientNew",
+    path: "/clients/",
+    searchPlaceholder: "Search clients by name, contact, phone, or email...",
+    description: "Maintain client details used by delivery and return records."
+  }
+};
+
+function MasterDataListPage({ data, type }) {
+  const config = MASTER_DATA_CONFIG[type];
+  const [records, setRecords] = useState([]);
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadRecords() {
+      setLoading(true);
+      setError("");
+      try {
+        const params = new URLSearchParams();
+        if (query.trim()) params.set("q", query.trim());
+        const endpoint = params.toString()
+          ? `${data.api[config.apiKey]}?${params.toString()}`
+          : data.api[config.apiKey];
+        const response = await fetch(endpoint, { signal: controller.signal });
+        if (!response.ok) {
+          throw new Error(`Could not load ${config.title.toLowerCase()}.`);
+        }
+        setRecords(await response.json());
+      } catch (loadError) {
+        if (loadError.name !== "AbortError") {
+          setError(loadError.message);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadRecords();
+    return () => controller.abort();
+  }, [config.apiKey, config.title, data.api, query]);
+
+  return (
+    <Shell data={data}>
+      <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-white">{config.title}</h1>
+          <p className="mt-1 text-sm text-zinc-400">{config.description}</p>
+        </div>
+        <Button as="a" href={data.routes[config.newRouteKey]} variant="primary">
+          <Plus className="h-4 w-4" />
+          Add {config.singular}
+        </Button>
+      </header>
+
+      <section className="rounded-lg border border-nexus-line bg-nexus-panel p-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <SearchBar
+            className="flex-1"
+            inputClassName="placeholder:text-zinc-500"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={config.searchPlaceholder}
+          />
+          <span className="text-xs text-zinc-500">{records.length} active</span>
+        </div>
+      </section>
+
+      <MasterDataTable config={config} records={records} loading={loading} error={error} />
+    </Shell>
+  );
+}
+
+function MasterDataTable({ config, records, loading, error }) {
+  return (
+    <section className="mt-4 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-zinc-800/80 text-zinc-400">
+            <tr>
+              <th className="px-4 py-3 font-medium">{config.singular}</th>
+              <th className="px-4 py-3 font-medium">Contact</th>
+              <th className="px-4 py-3 font-medium">Phone</th>
+              <th className="px-4 py-3 font-medium">Email</th>
+              <th className="px-4 py-3 font-medium">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <TableMessage message={`Loading ${config.title.toLowerCase()}...`} />
+            ) : error ? (
+              <TableMessage message={error} />
+            ) : records.length ? (
+              records.map((record) => (
+                <tr key={record.id} className="border-t border-nexus-line hover:bg-zinc-900/70">
+                  <td className="px-4 py-4">
+                    <a href={`${config.path}${record.id}/`} className="font-semibold text-white hover:text-nexus-orange">
+                      {record.name}
+                    </a>
+                    <p className="mt-1 text-xs text-zinc-500">{record.notes || "Operational master data"}</p>
+                  </td>
+                  <td className="px-4 py-4 text-zinc-300">{record.contact_person || "-"}</td>
+                  <td className="px-4 py-4 text-zinc-300">{record.phone || "-"}</td>
+                  <td className="px-4 py-4 text-zinc-300">{record.email || "-"}</td>
+                  <td className="px-4 py-4">
+                    <Status status={record.isactive ? "Active" : "Inactive"} statusClass={record.isactive ? "available" : "inactive"} />
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan="5">
+                  <EmptyState
+                    className="border-t border-nexus-line"
+                    title={`No ${config.title.toLowerCase()} yet.`}
+                    description={`Add a ${config.singular.toLowerCase()} to use it in stock workflows.`}
+                  />
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function MasterDataDetailPage({ data, type, isNew = false }) {
+  const config = MASTER_DATA_CONFIG[type];
+  const recordId = isNew ? "" : (data.currentPath || window.location.pathname).match(new RegExp(`${config.path}(\\d+)/`))?.[1];
+  const [form, setForm] = useState({
+    name: "",
+    contact_person: "",
+    phone: "",
+    email: "",
+    notes: "",
+    isactive: true
+  });
+  const [loading, setLoading] = useState(!isNew);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (isNew || !recordId) return undefined;
+    const controller = new AbortController();
+
+    async function loadRecord() {
+      setLoading(true);
+      setError("");
+      try {
+        const response = await fetch(`${data.api[config.apiKey]}${recordId}/`, { signal: controller.signal });
+        if (!response.ok) {
+          throw new Error(`${config.singular} was not found.`);
+        }
+        const record = await response.json();
+        setForm({
+          name: record.name || "",
+          contact_person: record.contact_person || "",
+          phone: record.phone || "",
+          email: record.email || "",
+          notes: record.notes || "",
+          isactive: record.isactive !== false
+        });
+      } catch (loadError) {
+        if (loadError.name !== "AbortError") {
+          setError(loadError.message);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadRecord();
+    return () => controller.abort();
+  }, [config.apiKey, config.singular, data.api, isNew, recordId]);
+
+  function updateField(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function saveRecord() {
+    setSaving(true);
+    setError("");
+    try {
+      if (!form.name.trim()) {
+        throw new Error(`${config.singular} name is required.`);
+      }
+      const endpoint = isNew ? data.api[config.apiKey] : `${data.api[config.apiKey]}${recordId}/`;
+      const response = await fetch(endpoint, {
+        method: isNew ? "POST" : "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": data.csrfToken
+        },
+        body: JSON.stringify(form)
+      });
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        throw new Error(firstApiError(details) || `Could not save ${config.singular.toLowerCase()}.`);
+      }
+      const saved = await response.json();
+      window.location.assign(`${config.path}${saved.id}/`);
+    } catch (saveError) {
+      setError(saveError.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Shell data={data}>
+      <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <a href={data.routes[config.routeKey]} className="mb-2 inline-flex text-sm font-semibold text-nexus-orange hover:text-orange-300">
+            Back to {config.title}
+          </a>
+          <h1 className="text-2xl font-bold text-white">{isNew ? `Add ${config.singular}` : config.singular}</h1>
+          <p className="mt-1 text-sm text-zinc-400">{config.description}</p>
+        </div>
+        <Button type="button" variant="primary" loading={saving} onClick={saveRecord}>
+          <Save className="h-4 w-4" />
+          Save {config.singular}
+        </Button>
+      </header>
+
+      {error ? (
+        <div className="mb-4 rounded-lg border border-nexus-red/60 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-200">
+          {error}
+        </div>
+      ) : null}
+
+      {loading ? (
+        <section className="rounded-lg border border-nexus-line bg-nexus-panel p-6 text-sm text-zinc-500">
+          Loading {config.singular.toLowerCase()}...
+        </section>
+      ) : (
+        <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
+          <FormSection icon={config.icon} title={`${config.singular} Information`} subtitle="Operational master data only. No accounting or CRM behavior is created here.">
+            <div className="grid gap-5 md:grid-cols-2">
+              <Field label={`${config.singular} Name`} required>
+                <TextInput value={form.name} onChange={(value) => updateField("name", value)} placeholder={`${config.singular} name`} />
+              </Field>
+              <Field label="Contact Person">
+                <TextInput value={form.contact_person} onChange={(value) => updateField("contact_person", value)} placeholder="Contact name" />
+              </Field>
+              <Field label="Phone">
+                <TextInput value={form.phone} onChange={(value) => updateField("phone", value)} placeholder="Phone number" />
+              </Field>
+              <Field label="Email">
+                <TextInput type="email" value={form.email} onChange={(value) => updateField("email", value)} placeholder="Email address" />
+              </Field>
+            </div>
+            <div className="mt-5">
+              <Field label="Notes">
+                <TextInput value={form.notes} onChange={(value) => updateField("notes", value)} placeholder="Internal notes" />
+              </Field>
+            </div>
+            <label className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-zinc-300">
+              <input
+                type="checkbox"
+                checked={form.isactive}
+                onChange={(event) => updateField("isactive", event.target.checked)}
+                className="h-4 w-4 rounded border-nexus-line bg-black"
+              />
+              Active
+            </label>
+          </FormSection>
+        </section>
+      )}
     </Shell>
   );
 }
@@ -2346,14 +2629,14 @@ function RepairRecordsPage({ data }) {
       value: formatCount(records.length),
       detail: "repair or testing records",
       icon: "wrench",
-      tone: "danger"
+      tone: records.length > 0 ? "warning" : "neutral"
     },
     {
       label: "Active Repairs",
       value: formatCount(activeCount),
       detail: "not yet resolved",
       icon: "box",
-      tone: "warning"
+      tone: activeCount > 0 ? "warning" : "neutral"
     },
     {
       label: "Repair Units",
@@ -2968,7 +3251,7 @@ function ClientReturnRecordsPage({ data }) {
       value: formatCount(repairCount),
       detail: "records resolved to repair",
       icon: "wrench",
-      tone: "danger"
+      tone: repairCount > 0 ? "warning" : "neutral"
     },
     {
       label: "Latest Return",
@@ -3001,7 +3284,7 @@ function ClientReturnRecordsPage({ data }) {
             inputClassName="placeholder:text-zinc-500"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search return number, delivery, customer, received from, reason, product, or serial..."
+            placeholder="Search return number, delivery, client, received from, reason, product, or serial..."
           />
           <span className="text-xs text-zinc-500">{records.length} records</span>
         </div>
@@ -3020,7 +3303,7 @@ function ClientReturnRecordsTable({ records, loading, error }) {
           <thead className="bg-zinc-800/80 text-zinc-400">
             <tr>
               <th className="px-4 py-3 font-medium">Return</th>
-              <th className="px-4 py-3 font-medium">Customer</th>
+              <th className="px-4 py-3 font-medium">Client</th>
               <th className="px-4 py-3 font-medium">Received From</th>
               <th className="px-4 py-3 font-medium">Return Date</th>
               <th className="px-4 py-3 font-medium">Units</th>
@@ -3041,7 +3324,7 @@ function ClientReturnRecordsTable({ records, loading, error }) {
                     </a>
                     <p className="mt-1 text-xs text-zinc-500">{record.delivery_number || "delivery linked by item"}</p>
                   </td>
-                  <td className="px-4 py-4 font-semibold text-white">{record.customer_name || "-"}</td>
+                  <td className="px-4 py-4 font-semibold text-white">{record.client_name || record.customer_name || "-"}</td>
                   <td className="px-4 py-4 text-zinc-300">{record.received_from || "-"}</td>
                   <td className="px-4 py-4 text-zinc-300">{formatDate(record.return_date)}</td>
                   <td className="px-4 py-4">
@@ -3146,7 +3429,7 @@ function ClientReturnRecordDetailPage({ data }) {
             <SectionTitle title="Return Details" />
             <dl className="mt-4 divide-y divide-nexus-line">
               <DetailRow label="Original Delivery" value={record.delivery_number || "-"} />
-              <DetailRow label="Customer" value={record.customer_name || "-"} />
+              <DetailRow label="Client" value={record.client_name || record.customer_name || "-"} />
               <DetailRow label="Received From" value={record.received_from || "-"} />
               <DetailRow label="Return Date" value={formatDate(record.return_date)} />
               <DetailRow label="Reason" value={record.reason || "-"} />
@@ -3220,6 +3503,7 @@ function CreateClientReturnPage({ data }) {
   const today = new Date().toISOString().slice(0, 10);
   const deliveryId = new URLSearchParams(window.location.search).get("delivery") || "";
   const [form, setForm] = useState({
+    client: "",
     customerName: "",
     receivedFrom: "",
     returnDate: today,
@@ -3228,6 +3512,7 @@ function CreateClientReturnPage({ data }) {
     notes: ""
   });
   const [units, setUnits] = useState([]);
+  const [clients, setClients] = useState([]);
   const [query, setQuery] = useState("");
   const [selectedUnits, setSelectedUnits] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -3237,10 +3522,12 @@ function CreateClientReturnPage({ data }) {
     const controller = new AbortController();
 
     async function loadUnits() {
-      const response = await fetch(`${data.api.productUnits}?status=sold`, {
-        signal: controller.signal
-      });
+      const [response, clientsResponse] = await Promise.all([
+        fetch(`${data.api.productUnits}?status=sold`, { signal: controller.signal }),
+        fetch(data.api.clients, { signal: controller.signal })
+      ]);
       setUnits(response.ok ? await response.json() : []);
+      setClients(clientsResponse.ok ? await clientsResponse.json() : []);
     }
 
     loadUnits().catch((loadError) => {
@@ -3250,7 +3537,7 @@ function CreateClientReturnPage({ data }) {
     });
 
     return () => controller.abort();
-  }, [data.api.productUnits]);
+  }, [data.api.clients, data.api.productUnits]);
 
   const selectedIds = new Set(selectedUnits.map((unit) => unit.id));
   const filteredUnits = units
@@ -3263,6 +3550,37 @@ function CreateClientReturnPage({ data }) {
 
   function updateField(name, value) {
     setForm((current) => ({ ...current, [name]: value }));
+  }
+
+  function addClientItem(item) {
+    setClients((current) =>
+      current.some((client) => client.id === item.id)
+        ? current
+        : [...current, item].sort((a, b) => a.name.localeCompare(b.name))
+    );
+  }
+
+  async function createClientOption(name) {
+    if (!name.trim()) {
+      throw new Error("Enter a client name before creating it.");
+    }
+    const response = await fetch(data.api.clients, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": data.csrfToken
+      },
+      body: JSON.stringify({ name: name.trim() })
+    });
+    if (!response.ok) {
+      const details = await response.json().catch(() => ({}));
+      throw new Error(firstApiError(details) || "Could not create client.");
+    }
+    const created = await response.json();
+    addClientItem(created);
+    updateField("client", String(created.id));
+    updateField("customerName", created.name);
+    return created;
   }
 
   function addUnit(unit) {
@@ -3278,12 +3596,14 @@ function CreateClientReturnPage({ data }) {
     setSaving(true);
     setError("");
     try {
-      if (!form.customerName.trim() || !selectedUnits.length) {
-        throw new Error("Customer name and at least one sold stock unit are required.");
+      const selectedClient = clients.find((client) => String(client.id) === String(form.client));
+      if (!selectedClient || !selectedUnits.length) {
+        throw new Error("Client name and at least one sold stock unit are required.");
       }
 
       const payload = {
-        customer_name: form.customerName,
+        client: selectedClient.id,
+        customer_name: selectedClient.name,
         received_from: form.receivedFrom,
         return_date: form.returnDate || null,
         reason: form.reason,
@@ -3349,9 +3669,20 @@ function CreateClientReturnPage({ data }) {
 
           <FormSection icon="reset" title="Client Return Information" subtitle="Original delivery remains completed; this creates a separate operational return record.">
             <div className="grid gap-5 md:grid-cols-2">
-              <Field label="Customer Name" required>
-                <TextInput value={form.customerName} onChange={(value) => updateField("customerName", value)} placeholder="Client or customer name" />
-              </Field>
+              <SearchableCreatableSelect
+                label="Client"
+                required
+                value={form.client}
+                onChange={(value) => {
+                  const selected = clients.find((client) => String(client.id) === String(value));
+                  updateField("client", value);
+                  updateField("customerName", selected?.name || "");
+                }}
+                options={clients}
+                onCreate={createClientOption}
+                placeholder="Search or create client..."
+                helperText="Client Return is operational stock tracking only, not a refund or credit."
+              />
               <Field label="Received From">
                 <TextInput value={form.receivedFrom} onChange={(value) => updateField("receivedFrom", value)} placeholder="Person who returned the unit" />
               </Field>
@@ -3410,7 +3741,7 @@ function CreateClientReturnPage({ data }) {
           <section className="rounded-lg border border-nexus-line bg-nexus-panel">
             <PanelHeader title="Return Summary" />
             <dl className="divide-y divide-nexus-line p-4">
-              <DetailRow label="Customer" value={form.customerName || "-"} />
+              <DetailRow label="Client" value={clients.find((client) => String(client.id) === String(form.client))?.name || "-"} />
               <DetailRow label="Return Date" value={formatDate(form.returnDate)} />
               <DetailRow label="Resolution" value={clientReturnResolutionLabel(form.resolution)} />
               <DetailRow label="Selected Units" value={selectedUnits.length} strong />
@@ -3522,7 +3853,7 @@ function DeliveryRecordsPage({ data }) {
             inputClassName="placeholder:text-zinc-500"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search delivery number, customer, receiver, product, or serial..."
+            placeholder="Search delivery number, client, receiver, product, or serial..."
           />
           <span className="text-xs text-zinc-500">{records.length} records</span>
         </div>
@@ -3541,7 +3872,7 @@ function DeliveryRecordsTable({ records, loading, error }) {
           <thead className="bg-zinc-800/80 text-zinc-400">
             <tr>
               <th className="px-4 py-3 font-medium">Delivery</th>
-              <th className="px-4 py-3 font-medium">Customer</th>
+              <th className="px-4 py-3 font-medium">Client</th>
               <th className="px-4 py-3 font-medium">Receiver</th>
               <th className="px-4 py-3 font-medium">Delivery Date</th>
               <th className="px-4 py-3 font-medium">Units</th>
@@ -3563,7 +3894,7 @@ function DeliveryRecordsTable({ records, loading, error }) {
                     <p className="mt-1 text-xs text-zinc-500">Created by {record.created_by_name || "-"}</p>
                   </td>
                   <td className="px-4 py-4">
-                    <p className="font-semibold text-white">{record.customer_name || "-"}</p>
+                    <p className="font-semibold text-white">{record.client_name || record.customer_name || "-"}</p>
                     <p className="mt-1 text-xs text-zinc-500">Stock exit</p>
                   </td>
                   <td className="px-4 py-4 text-zinc-300">{record.receiver_name || "-"}</td>
@@ -3875,7 +4206,7 @@ function DeliveryRecordDetailPage({ data }) {
               </div>
 
               <dl className="mt-5 grid gap-4 md:grid-cols-2">
-                <DetailRow label="Customer" value={record.customer_name || "-"} strong />
+                <DetailRow label="Client" value={record.client_name || record.customer_name || "-"} strong />
                 <DetailRow label="Receiver" value={record.receiver_name || "-"} />
                 <DetailRow label="Delivery Date" value={formatDate(record.delivery_date)} />
                 <DetailRow label="Created By" value={record.created_by_name || "-"} />
@@ -3932,7 +4263,7 @@ function DeliveryCorrectionPanel({
         <div>
           <h2 className="text-sm font-bold text-white">Edit delivery details</h2>
           <p className="mt-1 text-sm text-zinc-400">
-            Safe edits are limited to customer, receiver, delivery date, notes, and item notes.
+            Safe edits are limited to client, receiver, delivery date, notes, and item notes.
           </p>
         </div>
         <Button type="button" variant="ghost" onClick={onCancel}>
@@ -3942,7 +4273,7 @@ function DeliveryCorrectionPanel({
       </div>
 
       <div className="mt-5 grid gap-4 md:grid-cols-2">
-        <Field label="Customer" required>
+        <Field label="Client" required>
           <TextInput value={form.customerName} onChange={(value) => onFieldChange("customerName", value)} />
         </Field>
         <Field label="Receiver">
@@ -4078,8 +4409,8 @@ function Header({ data }) {
   return (
     <header className="pb-5">
       <div className="min-w-0">
-        <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">
-          <span className="h-2 w-2 rounded-full border border-nexus-blue" />
+        <p className="flex items-center gap-2 text-sm font-semibold text-zinc-300">
+          <span className="h-2 w-2 rounded-full bg-nexus-blue/80" />
           {greeting}
         </p>
         <h1 className="mt-2 text-2xl font-bold tracking-tight text-white">{data.hero.title}</h1>
@@ -4202,7 +4533,7 @@ function InventoryPage({ data }) {
       value: formatCount(summary?.reserved_units ?? 0),
       detail: "pending allocation",
       icon: "box",
-      tone: "warning",
+      tone: "neutral",
       href: `${data.routes.inventory}?status=reserved`
     },
     {
@@ -5820,12 +6151,14 @@ function StockEntryPage({ data, mode = "add-unit" }) {
 function CreateDeliveryPage({ data }) {
   const today = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState({
+    client: "",
     customerName: "",
     receiverName: "",
     deliveryDate: today,
     notes: ""
   });
   const [units, setUnits] = useState([]);
+  const [clients, setClients] = useState([]);
   const [query, setQuery] = useState("");
   const [selectedUnits, setSelectedUnits] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -5835,10 +6168,12 @@ function CreateDeliveryPage({ data }) {
     const controller = new AbortController();
 
     async function loadUnits() {
-      const response = await fetch(`${data.api.productUnits}?status=available`, {
-        signal: controller.signal
-      });
+      const [response, clientsResponse] = await Promise.all([
+        fetch(`${data.api.productUnits}?status=available`, { signal: controller.signal }),
+        fetch(data.api.clients, { signal: controller.signal })
+      ]);
       setUnits(response.ok ? await response.json() : []);
+      setClients(clientsResponse.ok ? await clientsResponse.json() : []);
     }
 
     loadUnits().catch((loadError) => {
@@ -5848,7 +6183,7 @@ function CreateDeliveryPage({ data }) {
     });
 
     return () => controller.abort();
-  }, [data.api.productUnits]);
+  }, [data.api.clients, data.api.productUnits]);
 
   const selectedIds = new Set(selectedUnits.map((unit) => unit.id));
   const filteredUnits = units
@@ -5861,6 +6196,37 @@ function CreateDeliveryPage({ data }) {
 
   function updateField(name, value) {
     setForm((current) => ({ ...current, [name]: value }));
+  }
+
+  function addClientItem(item) {
+    setClients((current) =>
+      current.some((client) => client.id === item.id)
+        ? current
+        : [...current, item].sort((a, b) => a.name.localeCompare(b.name))
+    );
+  }
+
+  async function createClientOption(name) {
+    if (!name.trim()) {
+      throw new Error("Enter a client name before creating it.");
+    }
+    const response = await fetch(data.api.clients, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": data.csrfToken
+      },
+      body: JSON.stringify({ name: name.trim() })
+    });
+    if (!response.ok) {
+      const details = await response.json().catch(() => ({}));
+      throw new Error(firstApiError(details) || "Could not create client.");
+    }
+    const created = await response.json();
+    addClientItem(created);
+    updateField("client", String(created.id));
+    updateField("customerName", created.name);
+    return created;
   }
 
   function addUnit(unit) {
@@ -5876,8 +6242,9 @@ function CreateDeliveryPage({ data }) {
     setSaving(true);
     setError("");
     try {
-      if (!form.customerName || !selectedUnits.length) {
-        throw new Error("Customer and at least one stock unit are required.");
+      const selectedClient = clients.find((client) => String(client.id) === String(form.client));
+      if (!selectedClient || !selectedUnits.length) {
+        throw new Error("Client and at least one stock unit are required.");
       }
 
       const response = await fetch(data.api.deliveries, {
@@ -5887,7 +6254,8 @@ function CreateDeliveryPage({ data }) {
           "X-CSRFToken": data.csrfToken
         },
         body: JSON.stringify({
-          customer_name: form.customerName,
+          client: selectedClient.id,
+          customer_name: selectedClient.name,
           receiver_name: form.receiverName,
           delivery_date: form.deliveryDate,
           notes: form.notes,
@@ -5950,9 +6318,20 @@ function CreateDeliveryPage({ data }) {
             </div>
 
             <div className="grid gap-5 md:grid-cols-2">
-              <Field label="Customer" required>
-                <TextInput value={form.customerName} onChange={(value) => updateField("customerName", value)} placeholder="Enter customer" />
-              </Field>
+              <SearchableCreatableSelect
+                label="Client"
+                required
+                value={form.client}
+                onChange={(value) => {
+                  const selected = clients.find((client) => String(client.id) === String(value));
+                  updateField("client", value);
+                  updateField("customerName", selected?.name || "");
+                }}
+                options={clients}
+                onCreate={createClientOption}
+                placeholder="Search or create client..."
+                helperText="Delivery links to Client master data; no invoice or accounting record is created."
+              />
               <Field label="Delivery Date" required>
                 <TextInput value={form.deliveryDate} onChange={(value) => updateField("deliveryDate", value)} />
               </Field>
@@ -6031,7 +6410,7 @@ function CreateDeliveryPage({ data }) {
             </div>
             <dl className="divide-y divide-nexus-line p-4">
               <DetailRow label="Reference" value="Not created yet" />
-              <DetailRow label="Customer" value={form.customerName || "-"} />
+              <DetailRow label="Client" value={clients.find((client) => String(client.id) === String(form.client))?.name || "-"} />
               <DetailRow label="Receiver" value={form.receiverName || "-"} />
               <DetailRow label="Date" value={form.deliveryDate || "-"} />
               <DetailRow label="Units" value={selectedUnits.length} strong />
@@ -6424,6 +6803,9 @@ function DetailRow({ label, value, highlight = false, strong = false }) {
 }
 
 function QuickAddMenu({ actions }) {
+  const quickActionLabels = new Set(["Add Product", "Add Unit", "Receive Stock", "Create Delivery"]);
+  const visibleActions = actions.filter((action) => quickActionLabels.has(action.label));
+
   return (
     <details className="relative">
       <summary className="inline-flex h-9 cursor-pointer list-none items-center gap-2 rounded-md bg-nexus-orange px-4 font-semibold text-black marker:hidden">
@@ -6431,7 +6813,7 @@ function QuickAddMenu({ actions }) {
         Quick Add
       </summary>
       <div className="absolute right-0 z-20 mt-2 w-64 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel shadow-2xl">
-        {actions.map((action) =>
+        {visibleActions.map((action) =>
           action.enabled && action.href ? (
             <a key={action.label} href={action.href} className="flex items-start gap-3 border-b border-nexus-line px-3 py-3 last:border-b-0 hover:bg-nexus-panel2">
               <ActionIcon name={action.icon} tone={action.tone} />
@@ -6459,28 +6841,30 @@ function KpiGrid({ items }) {
   return (
     <section className="grid gap-3 md:grid-cols-2 2xl:grid-cols-4" aria-label="Key metrics">
       {items.map((item) => {
+        const isWarning = item.tone === "warning";
+        const isDanger = item.tone === "danger";
         const className = `group block min-h-32 rounded-lg border bg-nexus-panel p-4 shadow-panel ${
-            item.tone === "danger"
+            isDanger
               ? "border-nexus-red/70"
-              : item.tone === "warning"
+              : isWarning
                 ? "border-nexus-orange/70"
                 : "border-nexus-line"
-          } ${item.href ? "cursor-pointer hover:border-nexus-orange/80 focus:outline-none focus:ring-2 focus:ring-nexus-orange/50" : ""}`;
+          } ${item.href ? "cursor-pointer hover:border-nexus-orange/70 hover:bg-nexus-orange/5 focus:outline-none focus:ring-2 focus:ring-nexus-orange/40" : ""}`;
         const content = (
           <>
             <div className="flex items-start justify-between gap-3">
-              <p className="text-sm text-zinc-400">{item.label}</p>
+              <p className="text-sm font-medium text-zinc-400">{item.label}</p>
               <span className={`rounded-md p-2 ${toneClasses[item.tone] || toneClasses.neutral}`}>
                 <Icon name={item.icon} />
               </span>
             </div>
             <p
-              className={`mt-6 text-3xl font-bold ${
-                item.tone === "danger"
+              className={`mt-6 text-3xl font-semibold tracking-tight ${
+                isDanger
                   ? "text-nexus-red"
-                  : item.tone === "warning"
+                  : isWarning
                     ? "text-nexus-orange"
-                    : "text-white"
+                    : "text-white group-hover:text-nexus-orange"
               }`}
             >
               {item.value}
@@ -6519,7 +6903,7 @@ function Overview({ items }) {
         {items.map((item) => {
           const isEnabled = item.enabled !== false && item.href;
           const className = `group flex items-center gap-3 rounded-lg border border-nexus-line bg-nexus-panel p-4 ${
-            isEnabled ? "cursor-pointer hover:border-nexus-orange/80 focus:outline-none focus:ring-2 focus:ring-nexus-orange/50" : "cursor-not-allowed opacity-45 grayscale"
+            isEnabled ? "cursor-pointer hover:border-nexus-orange/70 hover:bg-nexus-orange/5 focus:outline-none focus:ring-2 focus:ring-nexus-orange/40" : "cursor-not-allowed opacity-45 grayscale"
           }`;
           const content = (
             <>
@@ -6527,8 +6911,8 @@ function Overview({ items }) {
                 <Icon name={item.icon} />
               </span>
               <div className="min-w-0 flex-1">
-                <p className={`text-sm font-bold ${isEnabled ? "text-white" : "text-zinc-500"}`}>{item.value}</p>
-                <p className={`text-xs ${isEnabled ? "text-zinc-300" : "text-zinc-500"}`}>{item.label}</p>
+                <p className={`text-sm font-bold ${isEnabled ? "text-white group-hover:text-nexus-orange" : "text-zinc-500"}`}>{item.value}</p>
+                <p className={`text-xs ${isEnabled ? "text-zinc-400" : "text-zinc-500"}`}>{item.label}</p>
                 <p className="text-xs text-zinc-500">{item.detail}</p>
               </div>
               {isEnabled ? <ChevronRight className="h-4 w-4 shrink-0 text-zinc-600 group-hover:text-nexus-orange" /> : null}
@@ -6540,50 +6924,6 @@ function Overview({ items }) {
             </a>
           ) : (
             <article key={item.label} aria-disabled="true" className={className} title={item.detail || undefined}>
-              {content}
-            </article>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-function Modules({ modules }) {
-  return (
-    <section className="mt-5" aria-label="Modules">
-      <SectionTitle title="Modules" />
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-        {modules.map((module) => {
-          const isEnabled = module.enabled && module.href;
-          const content = (
-            <>
-              <span className={`inline-flex rounded-lg p-2 ${toneClasses[module.tone] || toneClasses.neutral}`}>
-                <Icon name={module.icon} className="h-4 w-4" />
-              </span>
-              <h2 className={`mt-3 text-sm font-bold ${isEnabled ? "text-white" : "text-zinc-500"}`}>
-                {module.name}
-              </h2>
-              <p className={`mt-1 min-h-9 text-xs ${isEnabled ? "text-zinc-400" : "text-zinc-600"}`}>
-                {module.description}
-              </p>
-              <div className="mt-3 flex items-center justify-between border-t border-nexus-line pt-2 text-xs">
-                <span className="font-mono text-zinc-500">
-                  {module.count !== null && module.count !== undefined ? `${formatCount(module.count)} ${module.meta}` : module.meta}
-                </span>
-                <span className={`inline-flex items-center gap-1 font-semibold ${isEnabled ? "text-nexus-orange" : "text-zinc-600"}`}>
-                  {isEnabled ? "Open" : "Pending"} <ChevronRight className="h-4 w-4" />
-                </span>
-              </div>
-            </>
-          );
-
-          return isEnabled ? (
-            <a key={module.name} href={module.href} className="rounded-lg border border-nexus-line bg-nexus-panel p-3 hover:border-nexus-orange/80">
-              {content}
-            </a>
-          ) : (
-            <article key={module.name} aria-disabled="true" className="rounded-lg border border-nexus-line bg-nexus-panel p-3 opacity-45 grayscale">
               {content}
             </article>
           );
@@ -6789,12 +7129,28 @@ const appRoutes = [
     render: (data) => <SettingsPage data={data} />
   },
   {
-    match: (path) => path.startsWith("/suppliers"),
-    render: (data) => <PlaceholderPage data={data} title="Suppliers" />
+    match: (path) => /^\/suppliers\/\d+\//.test(path),
+    render: (data) => <MasterDataDetailPage data={data} type="suppliers" />
   },
   {
-    match: (path) => path.startsWith("/clients"),
-    render: (data) => <PlaceholderPage data={data} title="Clients" />
+    match: (path) => path.startsWith("/suppliers/new"),
+    render: (data) => <MasterDataDetailPage data={data} type="suppliers" isNew />
+  },
+  {
+    match: (path) => path === "/suppliers/",
+    render: (data) => <MasterDataListPage data={data} type="suppliers" />
+  },
+  {
+    match: (path) => /^\/clients\/\d+\//.test(path),
+    render: (data) => <MasterDataDetailPage data={data} type="clients" />
+  },
+  {
+    match: (path) => path.startsWith("/clients/new"),
+    render: (data) => <MasterDataDetailPage data={data} type="clients" isNew />
+  },
+  {
+    match: (path) => path === "/clients/",
+    render: (data) => <MasterDataListPage data={data} type="clients" />
   },
   {
     match: (path) => path.startsWith("/assets"),

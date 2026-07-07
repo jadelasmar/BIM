@@ -4,7 +4,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from . import constants as stock_constants
-from .models import DeliveryRecord, Product, ProductUnit, ReceivingRecord, Supplier
+from .models import Client, DeliveryRecord, Product, ProductUnit, ReceivingRecord, Supplier
 
 
 def user_can_view_stock(user):
@@ -50,7 +50,11 @@ def recent_receiving_count():
 
 
 def supplier_count():
-    return Supplier.objects.count()
+    return Supplier.objects.filter(isactive=True).count()
+
+
+def client_count():
+    return Client.objects.filter(isactive=True).count()
 
 
 def low_stock_counts():

@@ -197,7 +197,8 @@ def create_receiving_record(
 def create_delivery_record(
     *,
     unit_ids,
-    customer_name,
+    customer_name="",
+    client=None,
     receiver_name="",
     delivery_date=None,
     notes="",
@@ -230,8 +231,10 @@ def create_delivery_record(
             + ", ".join(sorted(unavailable_units))
         )
 
+    client_name = client.name if client else ""
     delivery = DeliveryRecord.objects.create(
-        customer_name=(customer_name or "").strip(),
+        client=client,
+        customer_name=(customer_name or client_name or "").strip(),
         receiver_name=(receiver_name or "").strip(),
         delivery_date=delivery_date or timezone.localdate(),
         notes=notes,
@@ -274,6 +277,7 @@ def create_client_return_record(
     unit_ids,
     resolution,
     delivery=None,
+    client=None,
     customer_name="",
     received_from="",
     return_date=None,
@@ -341,9 +345,15 @@ def create_client_return_record(
     if record_delivery is None and len(delivery_ids) == 1:
         record_delivery = next(iter(delivery_items_by_unit_id.values())).delivery
 
+    record_client = client or (record_delivery.client if record_delivery else None)
     client_return = ClientReturnRecord.objects.create(
         delivery=record_delivery,
-        customer_name=(customer_name or (record_delivery.customer_name if record_delivery else "")).strip(),
+        client=record_client,
+        customer_name=(
+            customer_name
+            or (record_client.name if record_client else "")
+            or (record_delivery.customer_name if record_delivery else "")
+        ).strip(),
         received_from=(received_from or "").strip(),
         return_date=return_date or timezone.localdate(),
         reason=(reason or "").strip(),

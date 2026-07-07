@@ -192,17 +192,20 @@ class UIRegistryTests(SimpleTestCase):
         self.assertIn("onRefresh", command_center_source)
         self.assertIn("Refresh", app_source)
 
-    def test_topbar_keeps_user_avatar_without_visible_name(self):
+    def test_topbar_omits_redundant_user_avatar_and_keeps_actions(self):
         app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
         topbar_source = app_source[
             app_source.index("function Topbar"):
             app_source.index("function ThemeToggle")
         ]
 
-        self.assertIn("data.user?.initials", topbar_source)
-        self.assertIn("aria-label={`Signed in as", topbar_source)
+        self.assertIn("<ThemeToggle", topbar_source)
+        self.assertIn("<QuickAddMenu", topbar_source)
+        self.assertIn("<LogoutForm", topbar_source)
+        self.assertNotIn("data.user?.initials", topbar_source)
+        self.assertNotIn("aria-label={`Signed in as", topbar_source)
         self.assertNotIn("max-w-36 truncate", topbar_source)
-        self.assertNotIn("data.user?.displayName || data.user?.username", topbar_source.split("aria-label")[0])
+        self.assertNotIn("data.user?.displayName || data.user?.username", topbar_source)
 
     def test_product_details_page_renders_stock_units_and_permission_aware_actions(self):
         app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")

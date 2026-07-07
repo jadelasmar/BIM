@@ -65,7 +65,11 @@ Important routes:
 - `/operations/repairs/new/`
 - `/operations/repairs/<id>/`
 - `/suppliers/`
+- `/suppliers/new/`
+- `/suppliers/<id>/`
 - `/clients/`
+- `/clients/new/`
+- `/clients/<id>/`
 - `/assets/`
 - `/knowledge-base/`
 - `/settings/`
@@ -127,6 +131,9 @@ Important API routes:
 - `/api/stock/repairs/<id>/`
 - `/api/stock/repairs/<id>/resolve/`
 - `/api/stock/suppliers/`
+- `/api/stock/suppliers/<id>/`
+- `/api/stock/clients/`
+- `/api/stock/clients/<id>/`
 - `/api/stock/brands/`
 - `/api/stock/models/`
 - `/api/stock/categories/`
@@ -195,6 +202,8 @@ Current main operational UI implementation:
 - Client Return Records list
 - Client Return Record detail
 - Create Client Return
+- Supplier list/detail/create/edit
+- Client list/detail/create/edit
 - placeholder pages
 - shared UI pieces not yet split out
 
@@ -598,5 +607,5 @@ GET /operations/receiving/<id>/
 - Receiving edit/cancel is intentionally limited to office-safe correction fields.
 - Delivery edit/cancel is intentionally limited to office-safe correction fields.
 - Product movement history now has a backend ledger, but full movement reports are not implemented yet.
-- Supplier/client/assets/report modules are placeholders or partial.
+- Asset/report modules are placeholders or partial.
 - `Product.image` still uploads to `products_images/`.

@@ -69,6 +69,26 @@ Stores companies or people stock is bought from.
 Fields:
 
 - `name` unique
+- `contact_person`
+- `phone`
+- `email`
+- `notes`
+- `crdate`
+- `isactive`
+
+### Client
+
+Stores simple client master data for delivery and client return records.
+
+Fields:
+
+- `name` unique
+- `contact_person`
+- `phone`
+- `email`
+- `notes`
+- `crdate`
+- `isactive`
 
 ### ProductUnit
 
@@ -164,6 +184,7 @@ Outbound delivery record.
 Fields:
 
 - `delivery_number`
+- `client`
 - `customer_name`
 - `receiver_name`
 - `delivery_date`
@@ -184,7 +205,7 @@ Rules:
 - Cancellation is operational only and does not create accounting, invoice, payment, tax, voucher, or financial posting behavior.
 - Cancelling a delivery record requires all linked product units to still be active, sold, and linked to this delivery.
 - Successful cancellation marks the delivery record cancelled, stores cancellation audit fields, marks related delivery items inactive, and returns linked product units to available stock.
-- Customer name, receiver name, delivery date, notes, and `isactive` are the header fields expected to support future customer, receiver, date-range, and active/cancelled delivery reports.
+- Client, receiver name, delivery date, notes, and `isactive` are the header fields expected to support future client, receiver, date-range, and active/cancelled delivery reports. The compatibility field remains `customer_name` in the database for now.
 - Delivery records do not create accounting, invoice, payment, tax, voucher, or financial posting behavior.
 
 ### DeliveryItem
@@ -367,6 +388,7 @@ Fields:
 
 - `return_number`
 - `delivery`
+- `client`
 - `customer_name`
 - `received_from`
 - `return_date`

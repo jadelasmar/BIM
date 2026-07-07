@@ -26,7 +26,7 @@ This roadmap documents product direction, not implementation history.
 - Client return workflow using sold-to-available and sold-to-repair transitions
 - Office-ready ProductUnit status vocabulary
 - First office testing/deployment checklist
-- Suppliers lookup API
+- Supplier and Client master data modules
 - Django admin for stock and users
 - Login and password setup
 - Dark/light theme
@@ -42,14 +42,13 @@ StockMovement now records receiving, receiving cancellation, delivery, delivery 
 
 ## Near-Term Modules
 
-- Supplier page
 - Product edit workflow
 - Better stock history views
 - Broader office stock polish around search, audit views, and operational usability
 
 ## Future Modules
 
-- Clients
+- Advanced supplier/client relationship views
 - Assets
 - Knowledge Base
 - Reports

@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from .models import (
     Brand,
     Category,
+    Client,
     ClientReturnItem,
     ClientReturnRecord,
     DeliveryItem,
@@ -84,7 +85,17 @@ class ProductModelSerializer(serializers.ModelSerializer):
 class SupplierSerializer(serializers.ModelSerializer):
     class Meta:
         model = Supplier
-        fields = ("id", "name")
+        fields = (
+            "id",
+            "name",
+            "contact_person",
+            "phone",
+            "email",
+            "notes",
+            "crdate",
+            "isactive",
+        )
+        read_only_fields = ("crdate",)
 
     def validate_name(self, value):
         name = value.strip()
@@ -95,6 +106,33 @@ class SupplierSerializer(serializers.ModelSerializer):
             queryset = queryset.exclude(pk=self.instance.pk)
         if queryset.exists():
             raise serializers.ValidationError("Supplier already exists.")
+        return name
+
+
+class ClientSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Client
+        fields = (
+            "id",
+            "name",
+            "contact_person",
+            "phone",
+            "email",
+            "notes",
+            "crdate",
+            "isactive",
+        )
+        read_only_fields = ("crdate",)
+
+    def validate_name(self, value):
+        name = value.strip()
+        if not name:
+            raise serializers.ValidationError("Client name is required.")
+        queryset = Client.objects.filter(name__iexact=name)
+        if self.instance:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        if queryset.exists():
+            raise serializers.ValidationError("Client already exists.")
         return name
 
 
@@ -883,6 +921,12 @@ class ClientReturnRecordSerializer(serializers.ModelSerializer):
         read_only=True,
         default="",
     )
+    client = serializers.PrimaryKeyRelatedField(
+        queryset=Client.objects.filter(isactive=True),
+        required=False,
+        allow_null=True,
+    )
+    client_name = serializers.CharField(source="client.name", read_only=True, default="")
     received_by_name = serializers.CharField(
         source="received_by.get_username",
         read_only=True,
@@ -896,6 +940,8 @@ class ClientReturnRecordSerializer(serializers.ModelSerializer):
             "return_number",
             "delivery",
             "delivery_number",
+            "client",
+            "client_name",
             "customer_name",
             "received_from",
             "return_date",
@@ -913,12 +959,16 @@ class ClientReturnRecordSerializer(serializers.ModelSerializer):
         read_only_fields = (
             "return_number",
             "delivery_number",
+            "client_name",
             "received_by",
             "received_by_name",
             "total_units",
             "items",
             "crdate",
         )
+        extra_kwargs = {
+            "customer_name": {"required": False, "allow_blank": True},
+        }
 
     def get_total_units(self, obj):
         return obj.total_units
@@ -949,12 +999,20 @@ class DeliveryRecordSerializer(serializers.ModelSerializer):
         source="created_by.get_username",
         read_only=True,
     )
+    client = serializers.PrimaryKeyRelatedField(
+        queryset=Client.objects.filter(isactive=True),
+        required=False,
+        allow_null=True,
+    )
+    client_name = serializers.CharField(source="client.name", read_only=True, default="")
 
     class Meta:
         model = DeliveryRecord
         fields = (
             "id",
             "delivery_number",
+            "client",
+            "client_name",
             "customer_name",
             "receiver_name",
             "delivery_date",
@@ -973,6 +1031,7 @@ class DeliveryRecordSerializer(serializers.ModelSerializer):
         )
         read_only_fields = (
             "delivery_number",
+            "client_name",
             "cancel_reason",
             "cancelled_at",
             "cancelled_by",
@@ -1200,6 +1259,9 @@ class ReceivingRecordSerializer(serializers.ModelSerializer):
             "items",
             "crdate",
         )
+        extra_kwargs = {
+            "customer_name": {"required": False, "allow_blank": True},
+        }
 
     def get_total_quantity(self, obj):
         return obj.total_quantity

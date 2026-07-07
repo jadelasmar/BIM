@@ -37,7 +37,7 @@ UI_TOKENS = {
     "reserved_stock": {
         "label": "Reserved Stock",
         "icon": "box",
-        "tone": "warning",
+        "tone": "neutral",
     },
     "out_of_stock": {
         "label": "Out of Stock Products",
@@ -86,7 +86,7 @@ UI_TOKENS = {
     },
     "clients": {
         "label": "Clients",
-        "icon": "suppliers",
+        "icon": "clients",
         "tone": "blue",
     },
     "active_users": {
@@ -163,7 +163,7 @@ UI_TOKENS = {
     },
     "add_client": {
         "label": "Add Client",
-        "icon": "suppliers",
+        "icon": "clients",
         "tone": "blue",
     },
     "stock_movement": {
