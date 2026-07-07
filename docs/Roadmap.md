@@ -25,6 +25,7 @@ This roadmap documents product direction, not implementation history.
 - Repair workflow
 - Client return workflow using sold-to-available and sold-to-repair transitions
 - Office-ready ProductUnit status vocabulary
+- First office testing/deployment checklist
 - Suppliers lookup API
 - Django admin for stock and users
 - Login and password setup
@@ -33,7 +34,7 @@ This roadmap documents product direction, not implementation history.
 
 ## Current Product Focus
 
-Complete office-ready stock workflow polish before moving to secondary modules.
+Prepare and run first internal office testing before moving to reports or secondary modules.
 
 Receiving and delivery records now have operational create/list/detail workflows under `/operations/...`. Manual Add Unit remains a direct stock unit workflow under inventory.
 

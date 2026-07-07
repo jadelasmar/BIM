@@ -488,6 +488,22 @@ class UIRegistryTests(SimpleTestCase):
         self.assertIn("cancel_reason", detail_source)
         self.assertIn("Wrong unit, product, or serial entries should be cancelled and recreated when safe.", detail_source)
 
+    def test_client_return_action_is_only_on_delivery_detail(self):
+        app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
+        receiving_detail_source = app_source[
+            app_source.index("function ReceivingRecordDetailPage"):
+            app_source.index("function ReceivingCorrectionPanel")
+        ]
+        delivery_detail_source = app_source[
+            app_source.index("function DeliveryRecordDetailPage"):
+            app_source.index("function CreateDeliveryPage")
+        ]
+
+        self.assertNotIn("Create Client Return", receiving_detail_source)
+        self.assertNotIn("client-returns/new", receiving_detail_source)
+        self.assertIn("Create Client Return", delivery_detail_source)
+        self.assertIn("client-returns/new", delivery_detail_source)
+
     def test_create_delivery_redirects_to_delivery_detail(self):
         app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
         delivery_source = app_source[
@@ -4116,6 +4132,29 @@ class InventoryApiTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(unit.status, ProductUnit.STATUS_ISSUED)
+
+    def test_delivery_service_rejects_units_that_are_not_available(self):
+        from django.core.exceptions import ValidationError
+
+        from .services import create_delivery_record
+
+        unit = ProductUnit.objects.get(serial_number="API-RESERVED")
+
+        with self.assertRaises(ValidationError):
+            create_delivery_record(
+                unit_ids=[unit.pk],
+                customer_name="Internal Department",
+            )
+
+        unit.refresh_from_db()
+        self.assertEqual(unit.status, ProductUnit.STATUS_RESERVED)
+        self.assertFalse(DeliveryRecord.objects.exists())
+        self.assertFalse(
+            StockMovement.objects.filter(
+                product_unit=unit,
+                movement_type=StockMovement.TYPE_DELIVERED,
+            ).exists()
+        )
 
     def test_client_return_api_moves_sold_delivery_unit_to_available(self):
         user = self._user_with_permissions(

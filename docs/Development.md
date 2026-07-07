@@ -115,6 +115,8 @@ git diff --check
 
 ## Environment Variables
 
+Use `.env.example` as a reference for office setup. Django currently reads these values from the OS environment, service runner, or deployment script; it does not auto-load `.env` files.
+
 - `DJANGO_SECRET_KEY`
 - `DJANGO_DEBUG`
 - `BIM_EMAIL_BACKEND`
@@ -136,6 +138,8 @@ db.sqlite3
 
 Do not commit local database files.
 
+For first office testing, take a copy of `db.sqlite3` before entering real test data and after each test session. Also back up `backend/media/` if uploaded product images or files are used.
+
 ## Deployment Notes
 
 - Set a real `DJANGO_SECRET_KEY`.
@@ -144,3 +148,4 @@ Do not commit local database files.
 - Run `npm run build` before collecting/serving static assets.
 - Configure static and media serving for production.
 - Replace SQLite if production requires a server database.
+- Use [Office Testing](OfficeTesting.md) for the first internal deployment checklist, user roles, database backups, and stock workflow smoke tests.

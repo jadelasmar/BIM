@@ -855,10 +855,6 @@ function ReceivingRecordDetailPage({ data }) {
             <Status status={isCancelled ? "Cancelled" : "Recorded"} statusClass={isCancelled ? "inactive" : "received"} />
             {!isCancelled ? (
               <>
-                <Button as="a" href={`/operations/client-returns/new/?delivery=${record.id}`} variant="outline">
-                  <Icon name="reset" className="h-4 w-4" />
-                  Create Client Return
-                </Button>
                 <Button type="button" variant="outline" onClick={() => setEditing((current) => !current)}>
                   <Edit3 className="h-4 w-4" />
                   Edit Details
@@ -3770,6 +3766,10 @@ function DeliveryRecordDetailPage({ data }) {
             <Status status={deliveryStatusLabel(record)} statusClass={deliveryStatusClass(record)} />
             {!isCancelled ? (
               <>
+                <Button as="a" href={`/operations/client-returns/new/?delivery=${record.id}`} variant="outline">
+                  <Icon name="reset" className="h-4 w-4" />
+                  Create Client Return
+                </Button>
                 <Button type="button" variant="outline" onClick={() => setEditing((current) => !current)}>
                   <Edit3 className="h-4 w-4" />
                   Edit Details

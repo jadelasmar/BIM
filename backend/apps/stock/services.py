@@ -204,6 +204,32 @@ def create_delivery_record(
     created_by=None,
     status=DeliveryRecord.STATUS_COMPLETED,
 ):
+    unique_ids = list(dict.fromkeys(unit_ids or []))
+    if not unique_ids:
+        raise ValidationError("At least one available stock unit is required.")
+
+    units = list(
+        ProductUnit.objects.select_for_update()
+        .select_related("product")
+        .filter(pk__in=unique_ids)
+        .order_by("product__descript", "serial_number")
+    )
+    units_by_id = {unit.pk: unit for unit in units}
+    missing_ids = [unit_id for unit_id in unique_ids if unit_id not in units_by_id]
+    if missing_ids:
+        raise ValidationError("One or more stock units were not found.")
+
+    unavailable_units = [
+        unit.serial_number
+        for unit in units
+        if not unit.isactive or unit.status != ProductUnit.STATUS_AVAILABLE
+    ]
+    if unavailable_units:
+        raise ValidationError(
+            "Only active available stock units can be delivered: "
+            + ", ".join(sorted(unavailable_units))
+        )
+
     delivery = DeliveryRecord.objects.create(
         customer_name=(customer_name or "").strip(),
         receiver_name=(receiver_name or "").strip(),
@@ -211,11 +237,6 @@ def create_delivery_record(
         notes=notes,
         status=status,
         created_by=created_by,
-    )
-    units = (
-        ProductUnit.objects.select_related("product")
-        .filter(pk__in=unit_ids)
-        .order_by("product__descript", "serial_number")
     )
     for unit in units:
         from_status = unit.status
