@@ -11,9 +11,7 @@ def prepare_bimpos_groups():
     )
     stock_view_permissions = stock_permissions.filter(codename__startswith="view_")
     stock_manage_permissions = stock_permissions.exclude(codename__startswith="delete_")
-    stock_support_permissions = stock_permissions.exclude(
-        codename__startswith="add_",
-    ).exclude(codename__startswith="delete_")
+    stock_support_permissions = stock_permissions.exclude(codename__startswith="delete_")
 
     administrator_group, _ = Group.objects.get_or_create(name="Administrator")
     administrator_group.permissions.set(stock_permissions)

@@ -103,7 +103,7 @@ BIM Stock business app:
 - `selectors.py`: reusable read queries for dashboards/app shell
 - `services.py`: multi-model stock write workflows
 - `constants.py`: app label and permission strings
-- `roles.py`: prepared stock-related groups and permissions
+- `roles.py`: prepared Administrator, Operations Manager, IT Support, and Viewer stock permissions
 - `tests.py`: backend and source-inspection tests
 - `migrations/`: preserved migration history
 
@@ -273,6 +273,7 @@ Tailwind directives, theme CSS variables, and light-theme overrides.
 GET /
   -> apps.core.views.module_launcher
   -> builds initial_data
+  -> includes role-aware stock action permission flags
   -> renders backend/templates/bim/react_app.html
   -> React mounts from frontend/src/main.jsx
   -> AppRouter chooses page from currentPath

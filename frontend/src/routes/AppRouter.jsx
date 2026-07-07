@@ -397,6 +397,8 @@ const MASTER_DATA_CONFIG = {
     apiKey: "suppliers",
     routeKey: "suppliers",
     newRouteKey: "supplierNew",
+    createPermission: "canCreateSupplier",
+    editPermission: "canEditSupplier",
     path: "/suppliers/",
     searchPlaceholder: "Search suppliers by name, contact, phone, or email...",
     description: "Maintain supplier source details for receiving stock."
@@ -408,6 +410,8 @@ const MASTER_DATA_CONFIG = {
     apiKey: "clients",
     routeKey: "clients",
     newRouteKey: "clientNew",
+    createPermission: "canCreateClient",
+    editPermission: "canEditClient",
     path: "/clients/",
     searchPlaceholder: "Search clients by name, contact, phone, or email...",
     description: "Maintain client details used by delivery and return records."
@@ -416,6 +420,7 @@ const MASTER_DATA_CONFIG = {
 
 function MasterDataListPage({ data, type }) {
   const config = MASTER_DATA_CONFIG[type];
+  const canCreate = Boolean(data.permissions?.[config.createPermission]);
   const [records, setRecords] = useState([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -458,10 +463,12 @@ function MasterDataListPage({ data, type }) {
           <h1 className="text-2xl font-bold text-white">{config.title}</h1>
           <p className="mt-1 text-sm text-zinc-400">{config.description}</p>
         </div>
-        <Button as="a" href={data.routes[config.newRouteKey]} variant="primary">
-          <Plus className="h-4 w-4" />
-          Add {config.singular}
-        </Button>
+        {canCreate ? (
+          <Button as="a" href={data.routes[config.newRouteKey]} variant="primary">
+            <Plus className="h-4 w-4" />
+            Add {config.singular}
+          </Button>
+        ) : null}
       </header>
 
       <section className="rounded-lg border border-nexus-line bg-nexus-panel p-3">
@@ -539,6 +546,7 @@ function MasterDataTable({ config, records, loading, error }) {
 function MasterDataDetailPage({ data, type, isNew = false }) {
   const config = MASTER_DATA_CONFIG[type];
   const recordId = isNew ? "" : (data.currentPath || window.location.pathname).match(new RegExp(`${config.path}(\\d+)/`))?.[1];
+  const canSave = Boolean(data.permissions?.[isNew ? config.createPermission : config.editPermission]);
   const [form, setForm] = useState({
     name: "",
     contact_person: "",
@@ -590,6 +598,7 @@ function MasterDataDetailPage({ data, type, isNew = false }) {
   }
 
   async function saveRecord() {
+    if (!canSave) return;
     setSaving(true);
     setError("");
     try {
@@ -628,15 +637,22 @@ function MasterDataDetailPage({ data, type, isNew = false }) {
           <h1 className="text-2xl font-bold text-white">{isNew ? `Add ${config.singular}` : config.singular}</h1>
           <p className="mt-1 text-sm text-zinc-400">{config.description}</p>
         </div>
-        <Button type="button" variant="primary" loading={saving} onClick={saveRecord}>
-          <Save className="h-4 w-4" />
-          Save {config.singular}
-        </Button>
+        {canSave ? (
+          <Button type="button" variant="primary" loading={saving} onClick={saveRecord}>
+            <Save className="h-4 w-4" />
+            Save {config.singular}
+          </Button>
+        ) : null}
       </header>
 
       {error ? (
         <div className="mb-4 rounded-lg border border-nexus-red/60 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-200">
           {error}
+        </div>
+      ) : null}
+      {!canSave ? (
+        <div className="mb-4 rounded-lg border border-nexus-line bg-nexus-panel2 px-4 py-3 text-sm font-semibold text-zinc-300">
+          You can view this {config.singular.toLowerCase()}, but your role cannot {isNew ? "create" : "edit"} {config.title.toLowerCase()}.
         </div>
       ) : null}
 
@@ -985,6 +1001,8 @@ function ReceivingRecordDetailPage({ data }) {
   const [cancelError, setCancelError] = useState("");
 
   const isCancelled = record?.status === "cancelled" || record?.isactive === false;
+  const canEditReceiving = Boolean(data.permissions?.canEditReceiving);
+  const canCancelReceiving = Boolean(data.permissions?.canCancelReceiving);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1053,6 +1071,7 @@ function ReceivingRecordDetailPage({ data }) {
   }
 
   async function saveCorrection() {
+    if (!canEditReceiving) return;
     setSavingCorrection(true);
     setCorrectionError("");
     setCorrectionMessage("");
@@ -1091,6 +1110,7 @@ function ReceivingRecordDetailPage({ data }) {
   }
 
   async function cancelReceivingRecord() {
+    if (!canCancelReceiving) return;
     setCancelling(true);
     setCancelError("");
     setCorrectionMessage("");
@@ -1136,16 +1156,20 @@ function ReceivingRecordDetailPage({ data }) {
         {record ? (
           <div className="flex flex-wrap items-center gap-3">
             <Status status={isCancelled ? "Cancelled" : "Recorded"} statusClass={isCancelled ? "inactive" : "received"} />
-            {!isCancelled ? (
+            {!isCancelled && (canEditReceiving || canCancelReceiving) ? (
               <>
-                <Button type="button" variant="outline" onClick={() => setEditing((current) => !current)}>
-                  <Edit3 className="h-4 w-4" />
-                  Edit Details
-                </Button>
-                <Button type="button" variant="secondary" onClick={() => setCancelOpen((current) => !current)}>
-                  <RotateCcw className="h-4 w-4" />
-                  Cancel Record
-                </Button>
+                {canEditReceiving ? (
+                  <Button type="button" variant="outline" onClick={() => setEditing((current) => !current)}>
+                    <Edit3 className="h-4 w-4" />
+                    Edit Details
+                  </Button>
+                ) : null}
+                {canCancelReceiving ? (
+                  <Button type="button" variant="secondary" onClick={() => setCancelOpen((current) => !current)}>
+                    <RotateCcw className="h-4 w-4" />
+                    Cancel Record
+                  </Button>
+                ) : null}
               </>
             ) : null}
           </div>
@@ -1174,7 +1198,7 @@ function ReceivingRecordDetailPage({ data }) {
         />
       ) : record ? (
         <>
-        {editing ? (
+        {editing && canEditReceiving ? (
           <ReceivingCorrectionPanel
             form={correctionForm}
             suppliers={suppliers}
@@ -1191,7 +1215,7 @@ function ReceivingRecordDetailPage({ data }) {
           />
         ) : null}
 
-        {cancelOpen ? (
+        {cancelOpen && canCancelReceiving ? (
           <section className="mb-5 rounded-lg border border-nexus-red/60 bg-red-500/10 p-5">
             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div>
@@ -1593,6 +1617,7 @@ function ReservationRecordDetailPage({ data }) {
   const [releasing, setReleasing] = useState(false);
   const [releaseError, setReleaseError] = useState("");
   const [message, setMessage] = useState("");
+  const canReleaseReservation = Boolean(data.permissions?.canReleaseReservation);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1621,6 +1646,7 @@ function ReservationRecordDetailPage({ data }) {
   }, [data.api.reservationDetail, reservationId, reloadKey]);
 
   async function releaseReservation() {
+    if (!canReleaseReservation) return;
     setReleasing(true);
     setReleaseError("");
     setMessage("");
@@ -1723,6 +1749,7 @@ function ReservationRecordDetailPage({ data }) {
             </dl>
           </section>
 
+          {canReleaseReservation ? (
           <section className="rounded-lg border border-nexus-line bg-nexus-panel p-4">
             <h2 className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">Release Reservation</h2>
             <p className="mt-3 text-sm text-zinc-500">
@@ -1744,6 +1771,7 @@ function ReservationRecordDetailPage({ data }) {
               {releasing ? "Releasing..." : "Release Reservation"}
             </Button>
           </section>
+          ) : null}
         </aside>
       </div>
     </Shell>
@@ -2186,6 +2214,7 @@ function IssueRecordDetailPage({ data }) {
   const [returning, setReturning] = useState(false);
   const [returnError, setReturnError] = useState("");
   const [message, setMessage] = useState("");
+  const canReturnIssue = Boolean(data.permissions?.canReturnIssue);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -2214,6 +2243,7 @@ function IssueRecordDetailPage({ data }) {
   }, [data.api.issueDetail, issueId, reloadKey]);
 
   async function returnIssue() {
+    if (!canReturnIssue) return;
     setReturning(true);
     setReturnError("");
     setMessage("");
@@ -2318,6 +2348,7 @@ function IssueRecordDetailPage({ data }) {
             </dl>
           </section>
 
+          {canReturnIssue ? (
           <section className="rounded-lg border border-nexus-line bg-nexus-panel p-4">
             <h2 className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">Return Issue</h2>
             <p className="mt-3 text-sm text-zinc-500">
@@ -2339,6 +2370,7 @@ function IssueRecordDetailPage({ data }) {
               {returning ? "Returning..." : "Return Issue"}
             </Button>
           </section>
+          ) : null}
         </aside>
       </div>
     </Shell>
@@ -2757,6 +2789,7 @@ function RepairRecordDetailPage({ data }) {
   const [resolving, setResolving] = useState(false);
   const [resolveError, setResolveError] = useState("");
   const [message, setMessage] = useState("");
+  const canResolveRepair = Boolean(data.permissions?.canResolveRepair);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -2785,6 +2818,7 @@ function RepairRecordDetailPage({ data }) {
   }, [data.api.repairDetail, repairId, reloadKey]);
 
   async function resolveRepair() {
+    if (!canResolveRepair) return;
     setResolving(true);
     setResolveError("");
     setMessage("");
@@ -2897,6 +2931,7 @@ function RepairRecordDetailPage({ data }) {
             </dl>
           </section>
 
+          {canResolveRepair ? (
           <section className="rounded-lg border border-nexus-line bg-nexus-panel p-4">
             <h2 className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">Resolve Repair</h2>
             <p className="mt-3 text-sm text-zinc-500">
@@ -2929,6 +2964,7 @@ function RepairRecordDetailPage({ data }) {
               {resolving ? "Resolving..." : "Resolve Repair"}
             </Button>
           </section>
+          ) : null}
         </aside>
       </div>
     </Shell>
@@ -3950,6 +3986,9 @@ function DeliveryRecordDetailPage({ data }) {
   const [cancelError, setCancelError] = useState("");
 
   const isCancelled = record?.status === "cancelled" || record?.isactive === false;
+  const canEditDelivery = Boolean(data.permissions?.canEditDelivery);
+  const canCancelDelivery = Boolean(data.permissions?.canCancelDelivery);
+  const canCreateClientReturn = Boolean(data.permissions?.canCreateClientReturn);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -4013,6 +4052,7 @@ function DeliveryRecordDetailPage({ data }) {
   }
 
   async function saveDeliveryCorrection() {
+    if (!canEditDelivery) return;
     setSavingCorrection(true);
     setCorrectionError("");
     setCorrectionMessage("");
@@ -4050,6 +4090,7 @@ function DeliveryRecordDetailPage({ data }) {
   }
 
   async function cancelDeliveryRecord() {
+    if (!canCancelDelivery) return;
     setCancelling(true);
     setCancelError("");
     setCorrectionMessage("");
@@ -4095,20 +4136,26 @@ function DeliveryRecordDetailPage({ data }) {
         {record ? (
           <div className="flex flex-wrap items-center gap-3">
             <Status status={deliveryStatusLabel(record)} statusClass={deliveryStatusClass(record)} />
-            {!isCancelled ? (
+            {!isCancelled && (canCreateClientReturn || canEditDelivery || canCancelDelivery) ? (
               <>
-                <Button as="a" href={`/operations/client-returns/new/?delivery=${record.id}`} variant="outline">
-                  <Icon name="reset" className="h-4 w-4" />
-                  Create Client Return
-                </Button>
-                <Button type="button" variant="outline" onClick={() => setEditing((current) => !current)}>
-                  <Edit3 className="h-4 w-4" />
-                  Edit Details
-                </Button>
-                <Button type="button" variant="secondary" onClick={() => setCancelOpen((current) => !current)}>
-                  <RotateCcw className="h-4 w-4" />
-                  Cancel Record
-                </Button>
+                {canCreateClientReturn ? (
+                  <Button as="a" href={`/operations/client-returns/new/?delivery=${record.id}`} variant="outline">
+                    <Icon name="reset" className="h-4 w-4" />
+                    Create Client Return
+                  </Button>
+                ) : null}
+                {canEditDelivery ? (
+                  <Button type="button" variant="outline" onClick={() => setEditing((current) => !current)}>
+                    <Edit3 className="h-4 w-4" />
+                    Edit Details
+                  </Button>
+                ) : null}
+                {canCancelDelivery ? (
+                  <Button type="button" variant="secondary" onClick={() => setCancelOpen((current) => !current)}>
+                    <RotateCcw className="h-4 w-4" />
+                    Cancel Record
+                  </Button>
+                ) : null}
               </>
             ) : null}
           </div>
@@ -4137,7 +4184,7 @@ function DeliveryRecordDetailPage({ data }) {
         />
       ) : record ? (
         <>
-        {editing ? (
+        {editing && canEditDelivery ? (
           <DeliveryCorrectionPanel
             form={correctionForm}
             items={record.items || []}
@@ -4153,7 +4200,7 @@ function DeliveryRecordDetailPage({ data }) {
           />
         ) : null}
 
-        {cancelOpen ? (
+        {cancelOpen && canCancelDelivery ? (
           <section className="mb-5 rounded-lg border border-nexus-red/60 bg-red-500/10 p-5">
             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div>

@@ -164,6 +164,7 @@ Current Supplier and Client integration:
 - Receive Stock can select or create a Supplier inline.
 - Create Delivery can select or create a Client inline. The API still sends `customer_name` for compatibility while linking the `client` master record.
 - Create Client Return can select or create a Client inline.
+- Supplier/Client create and edit buttons use backend-provided permission flags. Viewer can read these pages but does not see save/create controls.
 
 Current Product Details movement integration:
 
@@ -241,3 +242,10 @@ Current Delivery Records integration:
   - Cancel Record requires a cancellation reason and uses the delivery cancel API.
   - Wrong delivered unit, product, or serial mistakes are handled by cancelling and recreating the record when linked units are still untouched sold units.
 - If cancellation is blocked because a linked stock unit is no longer an untouched sold unit, the detail screen shows the backend operational message.
+
+## Role-Aware Actions
+
+- Admin / IT lead accounts can use Django Admin when `is_staff` or superuser access is granted.
+- IT Support can use normal stock workflow actions exposed by its BIM Stock add/change/view permissions.
+- Viewer can open dashboard, inventory, master-data, records, and movement-history screens, but frontend create/edit/cancel/return/resolve controls are hidden where permission flags are available.
+- Backend APIs still enforce permissions directly; frontend hiding is usability, not security.

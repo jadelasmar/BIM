@@ -84,6 +84,26 @@ def _command_center_initial_data(
         "warning" if isinstance(low_stock, int) and low_stock > 0 else "neutral"
     )
 
+    can_create_delivery = user.has_perm(
+        stock_constants.ADD_DELIVERY_RECORD
+    ) and user.has_perm(stock_constants.CHANGE_PRODUCT_UNIT)
+    can_create_reservation = user.has_perm(
+        stock_constants.ADD_RESERVATION_RECORD
+    ) and user.has_perm(stock_constants.CHANGE_PRODUCT_UNIT)
+    can_create_issue = user.has_perm(
+        stock_constants.ADD_ISSUE_RECORD
+    ) and user.has_perm(stock_constants.CHANGE_PRODUCT_UNIT)
+    can_create_repair = user.has_perm(
+        stock_constants.ADD_REPAIR_RECORD
+    ) and user.has_perm(stock_constants.CHANGE_PRODUCT_UNIT)
+    can_create_client_return = user.has_perm(
+        stock_constants.ADD_CLIENT_RETURN_RECORD
+    ) and user.has_perm(stock_constants.CHANGE_PRODUCT_UNIT)
+    can_receive_stock = user.has_perm(
+        stock_constants.ADD_RECEIVING_RECORD
+    ) and user.has_perm(stock_constants.ADD_PRODUCT_UNIT)
+    can_change_product_unit = user.has_perm(stock_constants.CHANGE_PRODUCT_UNIT)
+
     return {
         "user": {
             "username": user.get_username(),
@@ -94,6 +114,41 @@ def _command_center_initial_data(
             or user.get_username()[:1].upper(),
             "isStaff": user.is_staff,
             "canAccessAdmin": can_access_admin,
+        },
+        "permissions": {
+            "canCreateProduct": user.has_perm(stock_constants.ADD_PRODUCT),
+            "canEditProduct": user.has_perm(stock_constants.CHANGE_PRODUCT),
+            "canAddStockUnit": user.has_perm(stock_constants.ADD_PRODUCT_UNIT),
+            "canEditStockUnit": can_change_product_unit,
+            "canReceiveStock": can_receive_stock,
+            "canEditReceiving": user.has_perm(stock_constants.CHANGE_RECEIVING_RECORD),
+            "canCancelReceiving": user.has_perm(stock_constants.CHANGE_RECEIVING_RECORD)
+            and can_change_product_unit,
+            "canCreateDelivery": can_create_delivery,
+            "canEditDelivery": user.has_perm(stock_constants.CHANGE_DELIVERY_RECORD),
+            "canCancelDelivery": user.has_perm(stock_constants.CHANGE_DELIVERY_RECORD)
+            and can_change_product_unit,
+            "canCreateReservation": can_create_reservation,
+            "canReleaseReservation": user.has_perm(
+                stock_constants.CHANGE_RESERVATION_RECORD
+            )
+            and can_change_product_unit,
+            "canCancelReservation": user.has_perm(
+                stock_constants.CHANGE_RESERVATION_RECORD
+            )
+            and can_change_product_unit,
+            "canCreateIssue": can_create_issue,
+            "canReturnIssue": user.has_perm(stock_constants.CHANGE_ISSUE_RECORD)
+            and can_change_product_unit,
+            "canCreateRepair": can_create_repair,
+            "canResolveRepair": user.has_perm(stock_constants.CHANGE_REPAIR_RECORD)
+            and can_change_product_unit,
+            "canCreateClientReturn": can_create_client_return,
+            "canCreateSupplier": user.has_perm(stock_constants.ADD_SUPPLIER),
+            "canEditSupplier": user.has_perm(stock_constants.CHANGE_SUPPLIER),
+            "canCreateClient": user.has_perm(stock_constants.ADD_CLIENT),
+            "canEditClient": user.has_perm(stock_constants.CHANGE_CLIENT),
+            "canViewMovementHistory": user.has_perm(stock_constants.VIEW_STOCK_MOVEMENT),
         },
         "csrfToken": get_token(request),
         "logoutHref": reverse("logout"),
@@ -301,6 +356,9 @@ def _build_command_center_initial_data(request, current_path=None):
     can_create_client_return = user.has_perm(
         stock_constants.ADD_CLIENT_RETURN_RECORD
     ) and user.has_perm(stock_constants.CHANGE_PRODUCT_UNIT)
+    can_receive_stock = user.has_perm(
+        stock_constants.ADD_RECEIVING_RECORD
+    ) and user.has_perm(stock_constants.ADD_PRODUCT_UNIT)
 
     metrics = [
         {
@@ -386,9 +444,9 @@ def _build_command_center_initial_data(request, current_path=None):
         },
         {
             "href": reverse("operations_receive_stock")
-            if user.has_perm(stock_constants.ADD_PRODUCT_UNIT)
+            if can_receive_stock
             else None,
-            "enabled": user.has_perm(stock_constants.ADD_PRODUCT_UNIT),
+            "enabled": can_receive_stock,
             "description": "Record supplier stock receipt",
             **ui_item("receive_stock"),
         },
@@ -401,15 +459,19 @@ def _build_command_center_initial_data(request, current_path=None):
             **ui_item("add_stock_unit"),
         },
         {
-            "href": None,
-            "enabled": False,
-            "description": "Coming later",
+            "href": reverse("supplier_new")
+            if user.has_perm(stock_constants.ADD_SUPPLIER)
+            else None,
+            "enabled": user.has_perm(stock_constants.ADD_SUPPLIER),
+            "description": "Create supplier master data",
             **ui_item("add_supplier"),
         },
         {
-            "href": None,
-            "enabled": False,
-            "description": "Coming later",
+            "href": reverse("client_new")
+            if user.has_perm(stock_constants.ADD_CLIENT)
+            else None,
+            "enabled": user.has_perm(stock_constants.ADD_CLIENT),
+            "description": "Create client master data",
             **ui_item("add_client"),
         },
     ]

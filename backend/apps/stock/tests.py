@@ -1686,6 +1686,7 @@ class BIMPOSAccessTests(TestCase):
         user.user_permissions.add(
             Permission.objects.get(codename="add_product"),
             Permission.objects.get(codename="add_productunit"),
+            Permission.objects.get(codename="add_receivingrecord"),
             Permission.objects.get(codename="add_deliveryrecord"),
             Permission.objects.get(codename="add_reservationrecord"),
             Permission.objects.get(codename="add_issuerecord"),
@@ -1829,6 +1830,7 @@ class BIMPOSAccessTests(TestCase):
         user.user_permissions.add(
             Permission.objects.get(codename="add_product"),
             Permission.objects.get(codename="add_productunit"),
+            Permission.objects.get(codename="add_receivingrecord"),
             Permission.objects.get(codename="add_deliveryrecord"),
             Permission.objects.get(codename="add_reservationrecord"),
             Permission.objects.get(codename="add_issuerecord"),
@@ -1860,10 +1862,10 @@ class BIMPOSAccessTests(TestCase):
         )
         self.assertFalse(actions_by_label["Add Supplier"]["enabled"])
         self.assertIsNone(actions_by_label["Add Supplier"]["href"])
-        self.assertEqual(actions_by_label["Add Supplier"]["description"], "Coming later")
+        self.assertEqual(actions_by_label["Add Supplier"]["description"], "Create supplier master data")
         self.assertFalse(actions_by_label["Add Client"]["enabled"])
         self.assertIsNone(actions_by_label["Add Client"]["href"])
-        self.assertEqual(actions_by_label["Add Client"]["description"], "Coming later")
+        self.assertEqual(actions_by_label["Add Client"]["description"], "Create client master data")
 
     def test_command_center_uses_final_sidebar_and_search_labels(self):
         user = User.objects.create_user(username="viewer", password="test-pass")
@@ -2021,6 +2023,7 @@ class BIMPOSAccessTests(TestCase):
         user.user_permissions.add(
             Permission.objects.get(codename="view_product"),
             Permission.objects.get(codename="view_supplier"),
+            Permission.objects.get(codename="add_receivingrecord"),
             Permission.objects.get(codename="add_productunit"),
         )
         self.client.force_login(user)
@@ -2045,6 +2048,7 @@ class BIMPOSAccessTests(TestCase):
         user.user_permissions.add(
             Permission.objects.get(codename="view_product"),
             Permission.objects.get(codename="view_supplier"),
+            Permission.objects.get(codename="add_receivingrecord"),
             Permission.objects.get(codename="add_productunit"),
         )
         self.client.force_login(user)
@@ -2195,12 +2199,42 @@ class BIMPOSAccessTests(TestCase):
         self.assertTrue(any(code.startswith("add_") for code in operations_manager_permissions))
         self.assertTrue(any(code.startswith("change_") for code in operations_manager_permissions))
         self.assertTrue(any(code.startswith("view_") for code in operations_manager_permissions))
-        self.assertTrue(all(not code.startswith("add_") for code in it_support_permissions))
+        self.assertIn("add_product", it_support_permissions)
+        self.assertIn("change_product", it_support_permissions)
+        self.assertIn("add_productunit", it_support_permissions)
+        self.assertIn("change_productunit", it_support_permissions)
+        self.assertIn("add_receivingrecord", it_support_permissions)
+        self.assertIn("add_deliveryrecord", it_support_permissions)
+        self.assertIn("add_reservationrecord", it_support_permissions)
+        self.assertIn("add_issuerecord", it_support_permissions)
+        self.assertIn("add_repairrecord", it_support_permissions)
+        self.assertIn("add_clientreturnrecord", it_support_permissions)
+        self.assertIn("add_supplier", it_support_permissions)
+        self.assertIn("add_client", it_support_permissions)
         self.assertTrue(all(not code.startswith("delete_") for code in it_support_permissions))
+        self.assertTrue(any(code.startswith("add_") for code in it_support_permissions))
         self.assertTrue(any(code.startswith("change_") for code in it_support_permissions))
         self.assertTrue(any(code.startswith("view_") for code in it_support_permissions))
         self.assertTrue(viewer_permissions)
         self.assertTrue(all(code.startswith("view_") for code in viewer_permissions))
+
+    def test_initial_data_exposes_stock_action_permissions(self):
+        user = User.objects.create_user(username="support", password="test-pass")
+        user.user_permissions.add(
+            Permission.objects.get(codename="change_receivingrecord"),
+            Permission.objects.get(codename="change_deliveryrecord"),
+            Permission.objects.get(codename="change_productunit"),
+        )
+        self.client.force_login(user)
+
+        response = self.client.get("/")
+
+        permissions = response.context["initial_data"]["permissions"]
+        self.assertTrue(permissions["canEditReceiving"])
+        self.assertTrue(permissions["canCancelReceiving"])
+        self.assertTrue(permissions["canEditDelivery"])
+        self.assertTrue(permissions["canCancelDelivery"])
+        self.assertFalse(permissions["canCreateProduct"])
 
 
 # Tests ProductUnit model fields that support pricing.

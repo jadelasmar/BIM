@@ -35,8 +35,8 @@ Test these areas end to end:
 Create a small set of office test users:
 
 - Admin / IT lead: can use Django admin, create users, assign groups, and perform all stock workflow tests.
-- IT staff user: can run normal office stock workflows such as receiving, reserving, issuing, repairing, delivering, and client returns.
-- View-only user: can log in and view dashboard, inventory, records, and movement history, but should not be able to create or change stock records.
+- IT staff user: should be in `IT Support`; can run normal office stock workflows such as product/unit entry, receiving, reserving, issuing, repairing, delivering, client returns, and supplier/client creation.
+- View-only user: should be in `Viewer`; can log in and view dashboard, inventory, suppliers, clients, records, and movement history, but should not be able to create or change stock records.
 
 Use the existing BIM Nexus groups where possible. Keep the number of users small for the first test so permission problems are easier to trace.
 
@@ -134,7 +134,7 @@ Suggested products:
     Confirm dashboard counts match the visible inventory status totals and Supplier/Client counts.
 
 26. Test non-admin permissions.
-    Log in as the IT staff user and confirm normal stock workflows are available. Log in as the View-only user and confirm write actions are blocked or hidden.
+    Log in as the IT staff user and confirm normal stock workflows are available without Django Admin user/group management. Log in as the View-only user and confirm write actions are blocked or hidden.
 
 ## Expected Results
 
@@ -192,8 +192,8 @@ Product movement history:
 Permissions:
 
 - Admin / IT lead can manage users and run all workflows.
-- IT staff user can run normal stock workflows.
-- View-only user can view records but cannot create or change stock records.
+- IT staff user can run normal stock workflows but cannot manage users, groups, permissions, or system settings.
+- View-only user can view records but cannot create or change stock records. Direct API attempts should be rejected.
 
 ## What To Record
 
