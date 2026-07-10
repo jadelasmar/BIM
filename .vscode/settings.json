@@ -44,17 +44,10 @@
     "**/node_modules": true,
     "**/.DS_Store": true
   },
-  "terminal.integrated.defaultProfile.windows": "BIM Backend venv",
-  "terminal.integrated.profiles.windows": {
-    "BIM Backend venv": {
-      "source": "PowerShell",
-      "args": [
-        "-NoExit",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-Command",
-        "& '${workspaceFolder}\\.venv\\Scripts\\Activate.ps1'; Set-Location '${workspaceFolder}\\backend'"
-      ]
-    }
-  }
+  "terminal.integrated.cwd": "${workspaceFolder}\\backend",
+  "terminal.integrated.env.windows": {
+    "VIRTUAL_ENV": "${workspaceFolder}\\.venv",
+    "PATH": "${workspaceFolder}\\.venv\\Scripts;${env:PATH}"
+  },
+  "python.terminal.activateEnvironment": false
 }

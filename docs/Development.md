@@ -39,7 +39,7 @@ When adding new required extensions, update `.vscode/extensions.json` and this s
 
 Project-level VS Code settings are stored in `.vscode/settings.json`. These settings define formatter behavior, ESLint validation, Tailwind language support, and ignored generated folders.
 
-The default VS Code terminal profile opens PowerShell in `backend/` with the project `.venv` activated.
+VS Code terminals open in `backend/` and use the project `.venv` through terminal environment variables. Python extension auto-activation is disabled so new terminals do not print an activation command.
 
 ## Backend Setup
 
