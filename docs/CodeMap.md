@@ -103,7 +103,7 @@ BIM Stock business app:
 - `selectors.py`: reusable read queries for dashboards/app shell
 - `services.py`: multi-model stock write workflows
 - `constants.py`: app label and permission strings
-- `roles.py`: prepared Administrator, Operations Manager, IT Support, and Viewer stock permissions
+- `roles.py`: prepared Administrator, IT Support, and Viewer stock permissions; removes the legacy Operations Manager group
 - `tests.py`: backend and source-inspection tests
 - `migrations/`: preserved migration history
 

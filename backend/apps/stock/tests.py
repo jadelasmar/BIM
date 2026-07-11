@@ -2168,21 +2168,17 @@ class BIMPOSAccessTests(TestCase):
         self.assertIsNone(inventory_module["href"])
 
     def test_bimpos_groups_are_prepared(self):
-        for group_name in ("Administrator", "Operations Manager", "IT Support", "Viewer"):
+        for group_name in ("Administrator", "IT Support", "Viewer"):
             self.assertTrue(Group.objects.filter(name=group_name).exists())
+        self.assertFalse(Group.objects.filter(name="Operations Manager").exists())
 
     def test_bimpos_groups_have_expected_permission_levels(self):
         administrator_group = Group.objects.get(name="Administrator")
-        operations_manager_group = Group.objects.get(name="Operations Manager")
         it_support_group = Group.objects.get(name="IT Support")
         viewer_group = Group.objects.get(name="Viewer")
 
         administrator_permissions = set(
             administrator_group.permissions.filter(content_type__app_label="bim_stock")
-            .values_list("codename", flat=True)
-        )
-        operations_manager_permissions = set(
-            operations_manager_group.permissions.filter(content_type__app_label="bim_stock")
             .values_list("codename", flat=True)
         )
         it_support_permissions = set(
@@ -2195,10 +2191,6 @@ class BIMPOSAccessTests(TestCase):
         )
 
         self.assertTrue(administrator_permissions)
-        self.assertTrue(all(not code.startswith("delete_") for code in operations_manager_permissions))
-        self.assertTrue(any(code.startswith("add_") for code in operations_manager_permissions))
-        self.assertTrue(any(code.startswith("change_") for code in operations_manager_permissions))
-        self.assertTrue(any(code.startswith("view_") for code in operations_manager_permissions))
         self.assertIn("add_product", it_support_permissions)
         self.assertIn("change_product", it_support_permissions)
         self.assertIn("add_productunit", it_support_permissions)
