@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.conf import settings
 from django.contrib.auth import login as auth_login
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
@@ -39,6 +40,7 @@ def _safe_next_url(request):
 @require_http_methods(["GET", "POST"])
 def login_view(request):
     redirect_to = _safe_next_url(request)
+    submitted_username = request.POST.get("username", "").strip()
     form = EmailOrUsernameAuthenticationForm(request, data=request.POST or None)
 
     if request.method == "POST" and form.is_valid():
@@ -62,6 +64,8 @@ def login_view(request):
                     "csrfToken": get_token(request),
                     "errors": errors,
                     "next": redirect_to if redirect_to != "/" else "",
+                    "adminEmail": settings.BIM_ADMIN_EMAIL,
+                    "username": submitted_username,
                 },
             },
         },

@@ -128,6 +128,7 @@ Use `.env.example` as a reference for office setup. Django currently reads these
 - `BIM_EMAIL_HOST_USER`
 - `BIM_EMAIL_HOST_PASSWORD`
 - `BIM_DEFAULT_FROM_EMAIL`
+- `BIM_ADMIN_EMAIL`: recipient for login-page account access requests; defaults to `jad.alasmar@bimpos.com` when unset.
 - `BIM_VITE_DEV_SERVER`
 
 ## Local Database

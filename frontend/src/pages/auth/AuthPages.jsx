@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Eye, Moon, Sun } from "../../constants/icons";
+import { Eye, EyeOff, Moon, Sun } from "../../constants/icons";
 import { Button, Input } from "../../components/ui";
 import { DEFAULT_THEME_STORAGE_KEY, applyTheme, currentTheme } from "../../hooks/useTheme";
 
@@ -50,13 +50,13 @@ function AuthShell({ title, subtitle, children }) {
   );
 }
 
-function FieldErrorList({ errors = [] }) {
+function FieldErrorList({ errors = [], id }) {
   if (!errors.length) {
     return null;
   }
 
   return (
-    <ul className="mb-2 list-disc pl-5 text-xs text-red-300">
+    <ul id={id} className="mb-2 list-disc pl-5 text-xs text-red-300">
       {errors.map((error) => (
         <li key={error}>{error}</li>
       ))}
@@ -64,13 +64,15 @@ function FieldErrorList({ errors = [] }) {
   );
 }
 
-function AuthInput({ label, name, type = "text", autoComplete, placeholder, errors }) {
+function AuthInput({ label, name, type = "text", autoComplete, placeholder, error, errors = [], ...props }) {
+  const errorId = `id_${name}_error`;
+  const hasError = Boolean(error || errors.length);
+
   return (
     <div className="grid gap-1.5">
       <label className="text-xs font-medium text-white" htmlFor={`id_${name}`}>
         {label}
       </label>
-      <FieldErrorList errors={errors} />
       <Input
         id={`id_${name}`}
         name={name}
@@ -78,26 +80,72 @@ function AuthInput({ label, name, type = "text", autoComplete, placeholder, erro
         variant="auth"
         autoComplete={autoComplete}
         placeholder={placeholder}
+        error={hasError}
+        aria-invalid={hasError}
+        aria-describedby={hasError ? errorId : undefined}
+        {...props}
       />
+      {error ? <p id={errorId} className="text-xs font-semibold text-red-300">{error}</p> : null}
+      {!error ? <FieldErrorList id={errorId} errors={errors} /> : null}
     </div>
   );
 }
 
 export function LoginPage({ data }) {
   const [showPassword, setShowPassword] = useState(false);
+  const [username, setUsername] = useState(data.username || "");
+  const [password, setPassword] = useState("");
+  const [fieldErrors, setFieldErrors] = useState({});
   const next = data.next || "";
+  const trimmedUsername = username.trim();
+  const mailtoParams = new URLSearchParams({
+    subject: "BIM Nexus - Account Access Request",
+    body: `Hello,\n\nI need help accessing BIM Nexus.\n\nEmail: ${trimmedUsername.includes("@") ? trimmedUsername : ""}\nUsername: ${trimmedUsername && !trimmedUsername.includes("@") ? trimmedUsername : ""}\n\nPlease send me a secure account setup or password reset link.\n\nApplication: BIM Nexus\nRequest: Account setup / password reset\n\nThank you.`,
+  });
+  const administratorMailto = `mailto:${data.adminEmail}?${mailtoParams.toString()}`;
+
+  function handleSubmit(event) {
+    const errors = {};
+
+    if (!trimmedUsername) {
+      errors.username = "Email or username is required.";
+    }
+    if (!password) {
+      errors.password = "Password is required.";
+    }
+
+    if (Object.keys(errors).length) {
+      event.preventDefault();
+      setFieldErrors(errors);
+      return;
+    }
+
+    event.currentTarget.elements.username.value = trimmedUsername;
+    setUsername(trimmedUsername);
+  }
 
   return (
     <AuthShell title={data.title || "Welcome Back"} subtitle="Internal IT Operations Platform">
       {data.errors?.length ? (
-        <p className="mb-4 rounded-md border border-red-300/30 bg-red-950/25 px-3 py-2 text-xs leading-5 text-red-300">
+        <p className="auth-error-alert mb-4 rounded-md border border-red-300/30 bg-red-950/25 px-3 py-2 text-xs leading-5 text-red-300" role="alert">
           {data.errors[0]}
         </p>
       ) : null}
 
-      <form className="grid gap-4" method="post" action={data.action || "/accounts/login/"}>
+      <form className="grid gap-4" method="post" action={data.action || "/accounts/login/"} onSubmit={handleSubmit} noValidate>
         <input type="hidden" name="csrfmiddlewaretoken" value={data.csrfToken} />
-        <AuthInput label="Email or Username" name="username" autoComplete="username" placeholder="Enter your Email or Username" />
+        <AuthInput
+          label="Email or Username"
+          name="username"
+          autoComplete="username"
+          placeholder="Enter your Email or Username"
+          value={username}
+          onChange={(event) => {
+            setUsername(event.target.value);
+            setFieldErrors((errors) => ({ ...errors, username: undefined }));
+          }}
+          error={fieldErrors.username}
+        />
 
         <div className="grid gap-1.5">
           <label className="text-xs font-medium text-white" htmlFor="id_password">
@@ -112,23 +160,37 @@ export function LoginPage({ data }) {
               autoComplete="current-password"
               placeholder="Enter your Password"
               className="pl-3 pr-10"
+              value={password}
+              onChange={(event) => {
+                setPassword(event.target.value);
+                setFieldErrors((errors) => ({ ...errors, password: undefined }));
+              }}
+              error={fieldErrors.password}
+              aria-invalid={Boolean(fieldErrors.password)}
+              aria-describedby={fieldErrors.password ? "id_password_error" : undefined}
             />
             <button
               type="button"
               onClick={() => setShowPassword((value) => !value)}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"
               aria-label={showPassword ? "Hide password" : "Show password"}
+              title={showPassword ? "Hide password" : "Show password"}
               aria-pressed={showPassword}
             >
-              <Eye className="h-4 w-4" />
+              {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </button>
           </div>
+          {fieldErrors.password ? (
+            <p id="id_password_error" className="text-xs font-semibold text-red-300">
+              {fieldErrors.password}
+            </p>
+          ) : null}
         </div>
 
         <p className="text-xs leading-5 text-zinc-400">
           First login or forgot password?{" "}
           <a
-            href="mailto:jad.alasmar@bimpos.com?subject=BIM%20Nexus%20setup%20link%20request&body=Hello%20Jad%2C%0D%0A%0D%0APlease%20send%20me%20a%20BIM%20Nexus%20password%20setup%20link.%0D%0A%0D%0AEmail%3A%20"
+            href={administratorMailto}
             className="font-semibold text-nexus-orange hover:underline"
           >
             Ask an administrator

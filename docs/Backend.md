@@ -86,7 +86,7 @@ Core views:
 
 Account views:
 
-- `login_view`: validates login and renders React login page data.
+- `login_view`: validates login and renders React login page data, including `BIM_ADMIN_EMAIL` and only the trimmed submitted identifier after a failed login. Password values are never returned in page data.
 - `password_setup_confirm`: validates setup token and renders React setup page data.
 
 Stock API views:

@@ -135,6 +135,12 @@ body {
   background-color: var(--bim-hover-surface);
 }
 
+[data-theme="light"] .auth-error-alert {
+  border-color: rgba(220, 38, 38, 0.55);
+  background-color: #fef2f2;
+  color: #991b1b;
+}
+
 summary::-webkit-details-marker {
   display: none;
 }

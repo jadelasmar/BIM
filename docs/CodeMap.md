@@ -26,7 +26,7 @@ Django command entry point. Run from `backend/`.
 
 Configuration package:
 
-- `settings.py`: installed apps, database, static/media, auth, email, Vite dev server, DRF settings
+- `settings.py`: installed apps, database, static/media, auth, email, configurable login administrator email, Vite dev server, DRF settings
 - `urls.py`: root URL includes
 - `asgi.py`
 - `wsgi.py`
@@ -83,7 +83,7 @@ Account layer on top of Django auth:
 - `forms.py`: login and password setup forms
 - `signals.py`: default group assignment
 - `utils.py`: setup-link helper
-- `views.py`: login/setup React page data
+- `views.py`: login/setup React page data, including configured administrator email and safe username restoration after failed login
 - `urls.py`: login/setup routes
 
 Important routes:
@@ -211,7 +211,7 @@ This file is the main remaining frontend split target.
 
 ### `frontend/src/pages/auth/AuthPages.jsx`
 
-React login and password setup pages. Django still validates and posts the forms.
+React login and password setup pages. Django remains authoritative for authentication; the login page adds required-field UX, accessible password visibility state, safe identifier preservation, and the configured administrator mail link.
 
 ### `frontend/src/components/common/Icon.jsx`
 

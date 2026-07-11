@@ -167,6 +167,10 @@ DEFAULT_FROM_EMAIL = os.environ.get(
     "BIM_DEFAULT_FROM_EMAIL",
     "BIM Nexus <noreply@bimpos.com>",
 )
+BIM_ADMIN_EMAIL = os.environ.get(
+    "BIM_ADMIN_EMAIL",
+    "jad.alasmar@bimpos.com",
+)
 
 BIM_VITE_DEV_SERVER = os.environ.get(
     "BIM_VITE_DEV_SERVER",

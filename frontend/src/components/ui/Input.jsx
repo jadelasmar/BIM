@@ -13,9 +13,12 @@ export default function Input({
   className = "",
   ...props
 }) {
+  const errorClasses = error
+    ? "border-nexus-red focus:border-nexus-red focus:ring-red-500/20"
+    : "border-nexus-line focus:border-nexus-orange focus:ring-nexus-orange/20";
   const input = (
     <input
-      className={`w-full rounded-md border border-nexus-line outline-none focus:border-nexus-orange focus:ring-2 focus:ring-nexus-orange/20 disabled:bg-zinc-800/80 disabled:text-zinc-500 ${variantClasses[variant]} ${className}`.trim()}
+      className={`w-full rounded-md border outline-none focus:ring-2 disabled:bg-zinc-800/80 disabled:text-zinc-500 ${errorClasses} ${variantClasses[variant]} ${className}`.trim()}
       {...props}
     />
   );

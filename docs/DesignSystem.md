@@ -51,6 +51,7 @@ Rules:
 
 - Use `lucide-react` only through `constants/icons.js`.
 - Do not import `lucide-react` directly in pages.
+- Password visibility controls use `Eye` while hidden and `EyeOff` while visible, with matching accessible labels and titles.
 - Default icon size: `h-4 w-4`.
 - Card/action icon size: `h-5 w-5`.
 - Status icon size: `h-3.5 w-3.5`.
@@ -131,6 +132,8 @@ min-h-9 w-full rounded-md border border-nexus-line bg-nexus-panel2 px-3 py-2 tex
 ```
 
 Use `text-nexus-orange` for required markers.
+
+Invalid inputs reuse the shared `Input` error state, including a red border/focus ring, adjacent error text, `aria-invalid`, and `aria-describedby`. Authentication alerts preserve the dark-mode treatment and use the `auth-error-alert` light-theme override for a pale red surface, visible red border, and dark red text.
 
 ## Tables
 

@@ -75,6 +75,8 @@ Current dedicated page folder:
 
 Most operational pages currently live in `routes/AppRouter.jsx`. Split pages gradually when feature work touches them.
 
+The login page keeps Django form authentication authoritative while providing client-side required-field feedback for the email/username and password fields. Failed authentication restores only the trimmed email/username through Django initial data; passwords are never restored. The password visibility control uses state-aware `Eye` and `EyeOff` icons, and the account-access mail link uses the backend-configured `BIM_ADMIN_EMAIL` value.
+
 The Command Center dashboard focuses on stock KPIs, system overview shortcuts, recent activity, recent deliveries, and recent receiving. Module navigation belongs in the sidebar rather than a duplicate dashboard modules section. Topbar Quick Add is limited to the common fast actions: Add Product, Add Unit, Receive Stock, and Create Delivery. Reservations, issues, repairs, client returns, receiving records, delivery records, and future movement history belong in the Operations hub. Supplier and Client cards show real active master-data counts and open the simple master-data modules.
 
 Good future page split targets:

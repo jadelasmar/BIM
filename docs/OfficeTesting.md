@@ -138,6 +138,13 @@ Suggested products:
 
 ## Expected Results
 
+Login:
+
+- Missing login identifiers and passwords show field-specific client feedback without submitting or clearing entered values.
+- Password visibility toggling changes both the icon and accessible label without clearing the password.
+- Failed authentication remains generic, preserves only the submitted email/username, and clears the password.
+- Ask an administrator opens the configured administrator email with an account-access request populated from the login identifier.
+
 Receive Stock:
 
 - Creates a Receiving Record.
