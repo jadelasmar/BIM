@@ -1,0 +1,25 @@
+#!/bin/sh
+
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
+if [ -z "$repo_root" ]; then
+  echo "BIM Nexus post-merge error: unable to resolve the repository root." >&2
+  exit 1
+fi
+
+python_executable="$repo_root/.venv/Scripts/python.exe"
+manage_py="$repo_root/backend/manage.py"
+
+if [ ! -f "$python_executable" ]; then
+  echo "BIM Nexus post-merge setup error: the virtual environment interpreter was not found at .venv/Scripts/python.exe." >&2
+  echo "Create the project .venv and install backend requirements before the next pull." >&2
+  exit 1
+fi
+
+echo "BIM Nexus post-merge: applying existing Django migrations..."
+if ! "$python_executable" "$manage_py" migrate --noinput; then
+  echo "BIM Nexus post-merge failure: Django migration failed. The git pull has already completed, but the local database may be outdated." >&2
+  echo "Resolve the migration error before starting BIM Nexus." >&2
+  exit 1
+fi
+
+echo "BIM Nexus post-merge: database migrations are current."

@@ -2,6 +2,17 @@ export default {
   content: ["./index.html", "./src/**/*.{js,jsx}"],
   theme: {
     extend: {
+      fontFamily: {
+        sans: [
+          "Inter",
+          "ui-sans-serif",
+          "system-ui",
+          "-apple-system",
+          "BlinkMacSystemFont",
+          "Segoe UI",
+          "sans-serif"
+        ]
+      },
       colors: {
         nexus: {
           page: "var(--bim-page)",
@@ -17,7 +28,11 @@ export default {
         }
       },
       boxShadow: {
-        panel: "0 1px 0 rgba(255,255,255,0.04) inset"
+        panel: "var(--bim-card-shadow)"
+      },
+      borderRadius: {
+        control: "var(--bim-radius-control)",
+        panel: "var(--bim-radius-panel)"
       }
     }
   },

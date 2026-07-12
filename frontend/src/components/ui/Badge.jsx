@@ -16,7 +16,7 @@ export default function Badge({ status, tone = "neutral", icon, children, classN
   const colorClass = meta?.className || toneClasses[tone] || toneClasses.neutral;
 
   return (
-    <span className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold ${colorClass} ${className}`.trim()}>
+    <span className={`inline-flex items-center gap-1 rounded-control px-2 py-1 text-xs font-medium leading-4 ${colorClass} ${className}`.trim()}>
       {iconName ? <Icon name={iconName} className="h-3.5 w-3.5" /> : null}
       {children}
     </span>

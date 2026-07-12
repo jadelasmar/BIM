@@ -77,6 +77,8 @@ Most operational pages currently live in `routes/AppRouter.jsx`. Split pages gra
 
 The login page keeps Django form authentication authoritative while providing client-side required-field feedback for the email/username and password fields. Failed authentication restores only the trimmed email/username through Django initial data; passwords are never restored. The password visibility control uses state-aware `Eye` and `EyeOff` icons, and the account-access mail link uses the backend-configured `BIM_ADMIN_EMAIL` value.
 
+The password setup page preserves submitted username, first name, and last name after backend validation errors. Both password fields always return empty after a failed submission. Required-field feedback is handled client-side before submission while Django remains authoritative for password strength, mismatch, token validity, and successful account creation.
+
 The Command Center dashboard focuses on stock KPIs, system overview shortcuts, recent activity, recent deliveries, and recent receiving. Module navigation belongs in the sidebar rather than a duplicate dashboard modules section. Topbar Quick Add is limited to the common fast actions: Add Product, Add Unit, Receive Stock, and Create Delivery. Reservations, issues, repairs, client returns, receiving records, delivery records, and future movement history belong in the Operations hub. Supplier and Client cards show real active master-data counts and open the simple master-data modules.
 
 Good future page split targets:

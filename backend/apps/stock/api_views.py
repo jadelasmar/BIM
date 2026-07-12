@@ -55,6 +55,15 @@ def _require_perm(user, permission):
         raise PermissionDenied("You do not have permission to use this API.")
 
 
+class WritePermissionRequiredMixin:
+    write_permissions = {}
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        for permission in self.write_permissions.get(request.method, ()):
+            _require_perm(request.user, permission)
+
+
 def _active_unit_filter(status=None):
     filters = Q(units__isactive=True)
     if status:
@@ -98,9 +107,10 @@ def _product_queryset():
     )
 
 
-class ProductListCreateAPIView(generics.ListCreateAPIView):
+class ProductListCreateAPIView(WritePermissionRequiredMixin, generics.ListCreateAPIView):
     serializer_class = ProductSerializer
     permission_classes = (permissions.IsAuthenticated,)
+    write_permissions = {"POST": (stock_constants.ADD_PRODUCT,)}
 
     def get_queryset(self):
         _require_perm(self.request.user, stock_constants.VIEW_PRODUCT)
@@ -131,9 +141,13 @@ class ProductListCreateAPIView(generics.ListCreateAPIView):
         serializer.save()
 
 
-class ProductDetailAPIView(generics.RetrieveUpdateAPIView):
+class ProductDetailAPIView(WritePermissionRequiredMixin, generics.RetrieveUpdateAPIView):
     serializer_class = ProductSerializer
     permission_classes = (permissions.IsAuthenticated,)
+    write_permissions = {
+        "PUT": (stock_constants.CHANGE_PRODUCT,),
+        "PATCH": (stock_constants.CHANGE_PRODUCT,),
+    }
 
     def get_queryset(self):
         _require_perm(self.request.user, stock_constants.VIEW_PRODUCT)
@@ -144,9 +158,10 @@ class ProductDetailAPIView(generics.RetrieveUpdateAPIView):
         serializer.save()
 
 
-class ProductUnitListCreateAPIView(generics.ListCreateAPIView):
+class ProductUnitListCreateAPIView(WritePermissionRequiredMixin, generics.ListCreateAPIView):
     serializer_class = ProductUnitSerializer
     permission_classes = (permissions.IsAuthenticated,)
+    write_permissions = {"POST": (stock_constants.ADD_PRODUCT_UNIT,)}
 
     def get_queryset(self):
         _require_perm(self.request.user, stock_constants.VIEW_PRODUCT_UNIT)
@@ -201,9 +216,13 @@ class ProductUnitListCreateAPIView(generics.ListCreateAPIView):
             )
 
 
-class ProductUnitDetailAPIView(generics.RetrieveUpdateAPIView):
+class ProductUnitDetailAPIView(WritePermissionRequiredMixin, generics.RetrieveUpdateAPIView):
     serializer_class = ProductUnitSerializer
     permission_classes = (permissions.IsAuthenticated,)
+    write_permissions = {
+        "PUT": (stock_constants.CHANGE_PRODUCT_UNIT,),
+        "PATCH": (stock_constants.CHANGE_PRODUCT_UNIT,),
+    }
 
     def get_queryset(self):
         _require_perm(self.request.user, stock_constants.VIEW_PRODUCT_UNIT)
@@ -257,9 +276,15 @@ class ProductStockMovementListAPIView(generics.ListAPIView):
         )
 
 
-class ClientReturnRecordListCreateAPIView(generics.ListCreateAPIView):
+class ClientReturnRecordListCreateAPIView(WritePermissionRequiredMixin, generics.ListCreateAPIView):
     serializer_class = ClientReturnRecordSerializer
     permission_classes = (permissions.IsAuthenticated,)
+    write_permissions = {
+        "POST": (
+            stock_constants.ADD_CLIENT_RETURN_RECORD,
+            stock_constants.CHANGE_PRODUCT_UNIT,
+        )
+    }
 
     def get_queryset(self):
         _require_perm(self.request.user, stock_constants.VIEW_CLIENT_RETURN_RECORD)
@@ -317,9 +342,15 @@ class ClientReturnRecordDetailAPIView(generics.RetrieveAPIView):
         )
 
 
-class DeliveryRecordListCreateAPIView(generics.ListCreateAPIView):
+class DeliveryRecordListCreateAPIView(WritePermissionRequiredMixin, generics.ListCreateAPIView):
     serializer_class = DeliveryRecordSerializer
     permission_classes = (permissions.IsAuthenticated,)
+    write_permissions = {
+        "POST": (
+            stock_constants.ADD_DELIVERY_RECORD,
+            stock_constants.CHANGE_PRODUCT_UNIT,
+        )
+    }
 
     def get_queryset(self):
         _require_perm(self.request.user, stock_constants.VIEW_DELIVERY_RECORD)
@@ -354,9 +385,13 @@ class DeliveryRecordListCreateAPIView(generics.ListCreateAPIView):
         serializer.save()
 
 
-class DeliveryRecordDetailAPIView(generics.RetrieveUpdateAPIView):
+class DeliveryRecordDetailAPIView(WritePermissionRequiredMixin, generics.RetrieveUpdateAPIView):
     serializer_class = DeliveryRecordSerializer
     permission_classes = (permissions.IsAuthenticated,)
+    write_permissions = {
+        "PUT": (stock_constants.CHANGE_DELIVERY_RECORD,),
+        "PATCH": (stock_constants.CHANGE_DELIVERY_RECORD,),
+    }
 
     def get_serializer_class(self):
         if self.request.method in ("PUT", "PATCH"):
@@ -404,9 +439,15 @@ class DeliveryRecordCancelAPIView(APIView):
         return Response(DeliveryRecordSerializer(delivery).data)
 
 
-class ReservationRecordListCreateAPIView(generics.ListCreateAPIView):
+class ReservationRecordListCreateAPIView(WritePermissionRequiredMixin, generics.ListCreateAPIView):
     serializer_class = ReservationRecordSerializer
     permission_classes = (permissions.IsAuthenticated,)
+    write_permissions = {
+        "POST": (
+            stock_constants.ADD_RESERVATION_RECORD,
+            stock_constants.CHANGE_PRODUCT_UNIT,
+        )
+    }
 
     def get_queryset(self):
         _require_perm(self.request.user, stock_constants.VIEW_RESERVATION_RECORD)
@@ -492,9 +533,15 @@ class ReservationRecordCancelAPIView(ReservationRecordReleaseAPIView):
     cancel = True
 
 
-class IssueRecordListCreateAPIView(generics.ListCreateAPIView):
+class IssueRecordListCreateAPIView(WritePermissionRequiredMixin, generics.ListCreateAPIView):
     serializer_class = IssueRecordSerializer
     permission_classes = (permissions.IsAuthenticated,)
+    write_permissions = {
+        "POST": (
+            stock_constants.ADD_ISSUE_RECORD,
+            stock_constants.CHANGE_PRODUCT_UNIT,
+        )
+    }
 
     def get_queryset(self):
         _require_perm(self.request.user, stock_constants.VIEW_ISSUE_RECORD)
@@ -573,9 +620,15 @@ class IssueRecordReturnAPIView(APIView):
         return Response(IssueRecordSerializer(issue).data)
 
 
-class RepairRecordListCreateAPIView(generics.ListCreateAPIView):
+class RepairRecordListCreateAPIView(WritePermissionRequiredMixin, generics.ListCreateAPIView):
     serializer_class = RepairRecordSerializer
     permission_classes = (permissions.IsAuthenticated,)
+    write_permissions = {
+        "POST": (
+            stock_constants.ADD_REPAIR_RECORD,
+            stock_constants.CHANGE_PRODUCT_UNIT,
+        )
+    }
 
     def get_queryset(self):
         _require_perm(self.request.user, stock_constants.VIEW_REPAIR_RECORD)
@@ -654,9 +707,15 @@ class RepairRecordResolveAPIView(APIView):
         return Response(RepairRecordSerializer(repair).data)
 
 
-class ReceivingRecordListCreateAPIView(generics.ListCreateAPIView):
+class ReceivingRecordListCreateAPIView(WritePermissionRequiredMixin, generics.ListCreateAPIView):
     serializer_class = ReceivingRecordSerializer
     permission_classes = (permissions.IsAuthenticated,)
+    write_permissions = {
+        "POST": (
+            stock_constants.ADD_RECEIVING_RECORD,
+            stock_constants.ADD_PRODUCT_UNIT,
+        )
+    }
 
     def get_queryset(self):
         _require_perm(self.request.user, stock_constants.VIEW_RECEIVING_RECORD)
@@ -691,9 +750,13 @@ class ReceivingRecordListCreateAPIView(generics.ListCreateAPIView):
         serializer.save()
 
 
-class ReceivingRecordDetailAPIView(generics.RetrieveUpdateAPIView):
+class ReceivingRecordDetailAPIView(WritePermissionRequiredMixin, generics.RetrieveUpdateAPIView):
     serializer_class = ReceivingRecordSerializer
     permission_classes = (permissions.IsAuthenticated,)
+    write_permissions = {
+        "PUT": (stock_constants.CHANGE_RECEIVING_RECORD,),
+        "PATCH": (stock_constants.CHANGE_RECEIVING_RECORD,),
+    }
 
     def get_serializer_class(self):
         if self.request.method in ("PUT", "PATCH"):
@@ -774,9 +837,10 @@ class InventorySummaryAPIView(APIView):
         )
 
 
-class CategoryListAPIView(generics.ListCreateAPIView):
+class CategoryListAPIView(WritePermissionRequiredMixin, generics.ListCreateAPIView):
     serializer_class = CategorySerializer
     permission_classes = (permissions.IsAuthenticated,)
+    write_permissions = {"POST": (stock_constants.ADD_CATEGORY,)}
 
     def get_queryset(self):
         _require_perm(self.request.user, stock_constants.VIEW_PRODUCT)
@@ -791,9 +855,10 @@ class CategoryListAPIView(generics.ListCreateAPIView):
         serializer.save()
 
 
-class BrandListAPIView(generics.ListCreateAPIView):
+class BrandListAPIView(WritePermissionRequiredMixin, generics.ListCreateAPIView):
     serializer_class = BrandSerializer
     permission_classes = (permissions.IsAuthenticated,)
+    write_permissions = {"POST": (stock_constants.ADD_BRAND,)}
 
     def get_queryset(self):
         _require_perm(self.request.user, stock_constants.VIEW_PRODUCT)
@@ -820,9 +885,10 @@ class ProductModelListAPIView(generics.ListAPIView):
         )
 
 
-class SupplierListAPIView(generics.ListCreateAPIView):
+class SupplierListAPIView(WritePermissionRequiredMixin, generics.ListCreateAPIView):
     serializer_class = SupplierSerializer
     permission_classes = (permissions.IsAuthenticated,)
+    write_permissions = {"POST": (stock_constants.ADD_SUPPLIER,)}
 
     def get_queryset(self):
         _require_perm(self.request.user, stock_constants.VIEW_SUPPLIER)
@@ -842,9 +908,13 @@ class SupplierListAPIView(generics.ListCreateAPIView):
         serializer.save()
 
 
-class SupplierDetailAPIView(generics.RetrieveUpdateAPIView):
+class SupplierDetailAPIView(WritePermissionRequiredMixin, generics.RetrieveUpdateAPIView):
     serializer_class = SupplierSerializer
     permission_classes = (permissions.IsAuthenticated,)
+    write_permissions = {
+        "PUT": (stock_constants.CHANGE_SUPPLIER,),
+        "PATCH": (stock_constants.CHANGE_SUPPLIER,),
+    }
 
     def get_queryset(self):
         _require_perm(self.request.user, stock_constants.VIEW_SUPPLIER)
@@ -855,9 +925,10 @@ class SupplierDetailAPIView(generics.RetrieveUpdateAPIView):
         serializer.save()
 
 
-class ClientListCreateAPIView(generics.ListCreateAPIView):
+class ClientListCreateAPIView(WritePermissionRequiredMixin, generics.ListCreateAPIView):
     serializer_class = ClientSerializer
     permission_classes = (permissions.IsAuthenticated,)
+    write_permissions = {"POST": (stock_constants.ADD_CLIENT,)}
 
     def get_queryset(self):
         _require_perm(self.request.user, stock_constants.VIEW_CLIENT)
@@ -877,9 +948,13 @@ class ClientListCreateAPIView(generics.ListCreateAPIView):
         serializer.save()
 
 
-class ClientDetailAPIView(generics.RetrieveUpdateAPIView):
+class ClientDetailAPIView(WritePermissionRequiredMixin, generics.RetrieveUpdateAPIView):
     serializer_class = ClientSerializer
     permission_classes = (permissions.IsAuthenticated,)
+    write_permissions = {
+        "PUT": (stock_constants.CHANGE_CLIENT,),
+        "PATCH": (stock_constants.CHANGE_CLIENT,),
+    }
 
     def get_queryset(self):
         _require_perm(self.request.user, stock_constants.VIEW_CLIENT)

@@ -58,18 +58,27 @@ Rules:
 
 ## Typography
 
-Common classes:
+Primary typeface:
 
-- Page title: `text-2xl font-bold text-white`
-- Page description: `mt-1 text-sm text-zinc-400`
-- Section label: `text-xs font-bold uppercase tracking-[0.24em] text-zinc-400`
-- Card title: `text-sm font-bold text-white`
+- Inter, bundled locally from the [official Inter project](https://github.com/rsms/inter) under the SIL Open Font License 1.1.
+- Source files and license: `frontend/src/assets/fonts/inter/`.
+- Supported bundled weights: 400 Regular, 500 Medium, 600 SemiBold, and 700 Bold.
+- Global fallback stack: `ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`.
+- Use `font-mono` only for technical values: record references, SKUs, serial numbers, IDs, and codes. Do not use it for labels, body copy, amounts, placeholders, or disabled form text.
+
+Shared typography classes:
+
+- Page title: `bim-page-title`
+- Page description: `bim-page-description`
+- Section title: `bim-section-title`
+- Card title: `bim-card-title`
+- Form label: `bim-label`
 - Body text: `text-sm`
-- Muted helper: `text-xs text-zinc-500`
-- Error text: `text-xs text-red-300`
+- Muted helper: `bim-helper-text`
+- Error text: `text-xs font-medium leading-5 text-red-300`
 - Identifiers: `font-mono text-xs text-nexus-orange`
 
-Avoid one-off font sizes unless a current pattern requires it.
+Use mixed-case headings with normal tracking. Avoid decorative uppercase and wide letter-spacing except for a true compact technical label. Avoid one-off font sizes unless a current pattern requires it.
 
 ## Spacing And Layout
 
@@ -82,7 +91,7 @@ Shell:
 
 Cards:
 
-- Default: `rounded-lg border border-nexus-line bg-nexus-panel`
+- Default: `bim-surface border`
 - Dense padding: `p-3` or `p-4`
 - Form/detail padding: `p-5`
 
@@ -95,19 +104,19 @@ Reusable component:
 Primary:
 
 ```text
-inline-flex h-9 items-center gap-2 rounded-md bg-nexus-orange px-4 font-semibold text-black
+inline-flex h-9 items-center gap-2 rounded-control bg-nexus-orange px-4 font-semibold text-black
 ```
 
 Secondary:
 
 ```text
-inline-flex h-9 items-center gap-2 rounded-md px-3 font-semibold text-zinc-200 hover:bg-nexus-panel
+inline-flex h-9 items-center gap-2 rounded-control px-3 font-medium text-zinc-200 hover:bg-nexus-panel2
 ```
 
 Outline:
 
 ```text
-inline-flex h-9 items-center gap-2 rounded-md border border-nexus-line px-3 font-semibold text-zinc-200 hover:bg-nexus-panel
+inline-flex h-9 items-center gap-2 rounded-control border border-nexus-line px-3 font-medium text-zinc-200 hover:bg-nexus-panel2
 ```
 
 Icon-only buttons need an `aria-label`.
@@ -122,18 +131,20 @@ Reusable component:
 Standard input:
 
 ```text
-h-10 w-full rounded-md border border-nexus-line bg-black px-3 text-sm text-zinc-200 outline-none placeholder:text-zinc-600
+h-10 w-full rounded-control border border-nexus-line bg-black px-3 text-sm text-zinc-200 outline-none placeholder:text-zinc-600
 ```
 
 Auth input:
 
 ```text
-min-h-9 w-full rounded-md border border-nexus-line bg-nexus-panel2 px-3 py-2 text-xs text-white outline-none placeholder:text-zinc-500
+min-h-10 w-full rounded-control border border-nexus-line bg-nexus-panel2 px-3 text-sm text-white outline-none placeholder:text-zinc-500
 ```
 
 Use `text-nexus-orange` for required markers.
 
 Invalid inputs reuse the shared `Input` error state, including a red border/focus ring, adjacent error text, `aria-invalid`, and `aria-describedby`. Authentication alerts preserve the dark-mode treatment and use the `auth-error-alert` light-theme override for a pale red surface, visible red border, and dark red text.
+
+Authentication forms use controlled inputs when values must survive client-side validation. Backend responses may restore non-sensitive identity fields, but password inputs always render empty after server validation.
 
 ## Tables
 
