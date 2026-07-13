@@ -727,6 +727,10 @@ class ReceivingRecordCancelAPIView(APIView):
             .prefetch_related("items", "items__product", "items__product_unit"),
             pk=pk,
         )
+        # Unlike the other five workflows, receiving items can exist without a linked
+        # ProductUnit yet (quantity-only lines) — cancel_receiving_record() only mutates
+        # units that are actually linked, so only require this permission when there's
+        # a unit to mutate.
         if any(item.product_unit_id for item in receiving.items.all()):
             _require_perm(request.user, stock_constants.CHANGE_PRODUCT_UNIT)
 
