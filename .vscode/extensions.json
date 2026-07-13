@@ -4,11 +4,10 @@
     "ms-python.python",
     "ms-python.vscode-pylance",
     "batisteo.vscode-django",
-    "scottbarkman.django-snippets",
+    "thebarkman.vscode-djaneiro",
     "usernamehw.errorlens",
     "dbaeumer.vscode-eslint",
     "esbenp.prettier-vscode",
-    "eamodio.gitlens",
     "qwtel.sqlite-viewer",
     "bradlc.vscode-tailwindcss"
   ]

@@ -25,22 +25,22 @@ function AuthShell({ title, subtitle, children }) {
         <button
           type="button"
           onClick={() => setThemeState(applyTheme(isLight ? "dark" : "light", DEFAULT_THEME_STORAGE_KEY))}
-          className="absolute right-0 top-[-46px] grid h-9 w-9 place-items-center rounded-md border border-nexus-line bg-nexus-panel text-zinc-200 shadow-panel"
+          className="absolute right-0 top-[-46px] grid h-9 w-9 place-items-center rounded-control border border-nexus-line bg-nexus-panel text-zinc-200 shadow-panel focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nexus-orange focus-visible:ring-offset-2 focus-visible:ring-offset-nexus-page"
           aria-label={isLight ? "Switch to dark theme" : "Switch to light theme"}
           title="Switch theme"
         >
           {isLight ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </button>
 
-        <section className="rounded-xl border border-nexus-line bg-nexus-panel p-3 shadow-panel" aria-labelledby="auth-title">
-          <header className="grid gap-4 pb-5 text-center">
+        <section className="rounded-xl border border-nexus-line bg-nexus-panel p-4 shadow-panel" aria-labelledby="auth-title">
+          <header className="grid gap-3 pb-5 text-center">
             <img className="bim-sidebar-logo-dark mx-auto h-auto w-[min(221px,100%)]" src={logoWhite} alt="BIM Nexus" />
             <img className="bim-sidebar-logo-light mx-auto h-auto w-[min(221px,100%)]" src={logoPrimary} alt="BIM Nexus" />
             <div>
-              <h1 id="auth-title" className="text-[21px] font-semibold leading-7 text-white">
+              <h1 id="auth-title" className="text-2xl font-semibold leading-8 text-white">
                 {title}
               </h1>
-              {subtitle ? <p className="text-xs leading-5 text-zinc-400">{subtitle}</p> : null}
+              {subtitle ? <p className="mt-1 text-sm leading-6 text-zinc-400">{subtitle}</p> : null}
             </div>
           </header>
           {children}
@@ -70,7 +70,7 @@ function AuthInput({ label, name, type = "text", autoComplete, placeholder, erro
 
   return (
     <div className="grid gap-1.5">
-      <label className="text-xs font-medium text-white" htmlFor={`id_${name}`}>
+      <label className="bim-label" htmlFor={`id_${name}`}>
         {label}
       </label>
       <Input
@@ -85,7 +85,7 @@ function AuthInput({ label, name, type = "text", autoComplete, placeholder, erro
         aria-describedby={hasError ? errorId : undefined}
         {...props}
       />
-      {error ? <p id={errorId} className="text-xs font-semibold text-red-300">{error}</p> : null}
+      {error ? <p id={errorId} className="text-xs font-medium leading-5 text-red-300">{error}</p> : null}
       {!error ? <FieldErrorList id={errorId} errors={errors} /> : null}
     </div>
   );
@@ -98,11 +98,14 @@ export function LoginPage({ data }) {
   const [fieldErrors, setFieldErrors] = useState({});
   const next = data.next || "";
   const trimmedUsername = username.trim();
-  const mailtoParams = new URLSearchParams({
-    subject: "BIM Nexus - Account Access Request",
-    body: `Hello,\n\nI need help accessing BIM Nexus.\n\nEmail: ${trimmedUsername.includes("@") ? trimmedUsername : ""}\nUsername: ${trimmedUsername && !trimmedUsername.includes("@") ? trimmedUsername : ""}\n\nPlease send me a secure account setup or password reset link.\n\nApplication: BIM Nexus\nRequest: Account setup / password reset\n\nThank you.`,
-  });
-  const administratorMailto = `mailto:${data.adminEmail}?${mailtoParams.toString()}`;
+  const emailValue = trimmedUsername.includes("@") ? trimmedUsername : "";
+  const usernameValue = trimmedUsername && !trimmedUsername.includes("@") ? trimmedUsername : "";
+  const subject = "BIM Nexus - Account Access Request";
+  const body = `Hello,\n\nI need help accessing BIM Nexus.\n\nEmail: ${emailValue}\nUsername: ${usernameValue}\n\nPlease send me a secure account setup or password reset link.\n\nApplication: BIM Nexus\nRequest: Account setup / password reset\n\nThank you.`;
+  const administratorMailto =
+    `mailto:${data.adminEmail}` +
+    `?subject=${encodeURIComponent(subject)}` +
+    `&body=${encodeURIComponent(body)}`;
 
   function handleSubmit(event) {
     const errors = {};
@@ -148,7 +151,7 @@ export function LoginPage({ data }) {
         />
 
         <div className="grid gap-1.5">
-          <label className="text-xs font-medium text-white" htmlFor="id_password">
+          <label className="bim-label" htmlFor="id_password">
             Password
           </label>
           <div className="relative">
@@ -199,7 +202,7 @@ export function LoginPage({ data }) {
         </p>
 
         <input type="hidden" name="next" value={next} />
-        <Button className="px-3 py-2 text-xs font-medium text-white" size="sm" type="submit" variant="primary">
+        <Button className="px-3" size="sm" type="submit" variant="primary">
           Sign In
         </Button>
       </form>
@@ -212,18 +215,49 @@ export function LoginPage({ data }) {
 }
 
 export function PasswordSetupPage({ data }) {
+  const [username, setUsername] = useState(data.username || "");
+  const [firstName, setFirstName] = useState(data.firstName || "");
+  const [lastName, setLastName] = useState(data.lastName || "");
+  const [password, setPassword] = useState("");
+  const [passwordConfirmation, setPasswordConfirmation] = useState("");
+  const [fieldErrors, setFieldErrors] = useState(data.errors || {});
+
   if (!data.validlink) {
     return (
       <AuthShell title={data.title || "This password setup link is invalid"}>
         <p className="mb-4 text-sm leading-6 text-zinc-400">Ask your BIM Nexus administrator to send a new password setup link.</p>
-        <Button as="a" className="px-3 py-2 text-sm font-bold text-white" href="/accounts/login/" size="sm" variant="primary">
+        <Button as="a" className="px-3" href="/accounts/login/" size="sm" variant="primary">
           Back to Login
         </Button>
       </AuthShell>
     );
   }
 
-  const errors = data.errors || {};
+  function clearFieldError(fieldName) {
+    setFieldErrors((errors) => ({ ...errors, [fieldName]: undefined }));
+  }
+
+  function handleSubmit(event) {
+    const errors = {};
+
+    if (!firstName.trim()) {
+      errors.first_name = ["First name is required."];
+    }
+    if (!lastName.trim()) {
+      errors.last_name = ["Last name is required."];
+    }
+    if (!password) {
+      errors.new_password1 = ["Password is required."];
+    }
+    if (!passwordConfirmation) {
+      errors.new_password2 = ["Password confirmation is required."];
+    }
+
+    if (Object.keys(errors).length) {
+      event.preventDefault();
+      setFieldErrors((currentErrors) => ({ ...currentErrors, ...errors }));
+    }
+  }
 
   return (
     <AuthShell title={data.title || "Create your BIM Nexus account"}>
@@ -231,15 +265,68 @@ export function PasswordSetupPage({ data }) {
         Confirm your name, choose your username and password. Leave username blank to use the suggested username from your email.
       </p>
 
-      <form className="grid gap-3.5" method="post" action={data.action}>
+      <form className="grid gap-3.5" method="post" action={data.action} onSubmit={handleSubmit} noValidate>
         <input type="hidden" name="csrfmiddlewaretoken" value={data.csrfToken} />
-        <FieldErrorList errors={errors.__all__} />
-        <AuthInput label="Username" name="username" autoComplete="username" placeholder={data.usernamePlaceholder} errors={errors.username} />
-        <AuthInput label="First name" name="first_name" autoComplete="given-name" errors={errors.first_name} />
-        <AuthInput label="Last name" name="last_name" autoComplete="family-name" errors={errors.last_name} />
-        <AuthInput label="New password" name="new_password1" type="password" autoComplete="new-password" errors={errors.new_password1} />
-        <AuthInput label="Confirm password" name="new_password2" type="password" autoComplete="new-password" errors={errors.new_password2} />
-        <Button className="px-3 py-2 text-sm font-bold text-white" size="lg" type="submit" variant="primary">
+        <FieldErrorList errors={fieldErrors.__all__} />
+        <AuthInput
+          label="Username"
+          name="username"
+          autoComplete="username"
+          placeholder={data.usernamePlaceholder}
+          errors={fieldErrors.username}
+          value={username}
+          onChange={(event) => {
+            setUsername(event.target.value);
+            clearFieldError("username");
+          }}
+        />
+        <AuthInput
+          label="First name"
+          name="first_name"
+          autoComplete="given-name"
+          errors={fieldErrors.first_name}
+          value={firstName}
+          onChange={(event) => {
+            setFirstName(event.target.value);
+            clearFieldError("first_name");
+          }}
+        />
+        <AuthInput
+          label="Last name"
+          name="last_name"
+          autoComplete="family-name"
+          errors={fieldErrors.last_name}
+          value={lastName}
+          onChange={(event) => {
+            setLastName(event.target.value);
+            clearFieldError("last_name");
+          }}
+        />
+        <AuthInput
+          label="New password"
+          name="new_password1"
+          type="password"
+          autoComplete="new-password"
+          errors={fieldErrors.new_password1}
+          value={password}
+          onChange={(event) => {
+            setPassword(event.target.value);
+            clearFieldError("new_password1");
+          }}
+        />
+        <AuthInput
+          label="Confirm password"
+          name="new_password2"
+          type="password"
+          autoComplete="new-password"
+          errors={fieldErrors.new_password2}
+          value={passwordConfirmation}
+          onChange={(event) => {
+            setPasswordConfirmation(event.target.value);
+            clearFieldError("new_password2");
+          }}
+        />
+        <Button className="px-3" size="lg" type="submit" variant="primary">
           Create Account
         </Button>
       </form>

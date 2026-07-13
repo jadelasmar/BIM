@@ -326,8 +326,8 @@ function SettingsPage({ data }) {
   return (
     <Shell data={data}>
       <header className="mb-5">
-        <h1 className="text-2xl font-bold text-white">Settings</h1>
-        <p className="mt-1 text-sm text-zinc-400">Manage BIM Nexus display preferences.</p>
+        <h1 className="bim-page-title">Settings</h1>
+        <p className="bim-page-description">Manage BIM Nexus display preferences.</p>
       </header>
 
       <section className="max-w-xl rounded-lg border border-nexus-line bg-nexus-panel p-5">
@@ -379,7 +379,7 @@ function PlaceholderPage({ data, title }) {
   return (
     <Shell data={data}>
       <header className="mb-5">
-        <h1 className="text-2xl font-bold text-white">{title}</h1>
+        <h1 className="bim-page-title">{title}</h1>
       </header>
 
       <section className="rounded-lg border border-nexus-line bg-nexus-panel p-6">
@@ -460,8 +460,8 @@ function MasterDataListPage({ data, type }) {
     <Shell data={data}>
       <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">{config.title}</h1>
-          <p className="mt-1 text-sm text-zinc-400">{config.description}</p>
+          <h1 className="bim-page-title">{config.title}</h1>
+          <p className="bim-page-description">{config.description}</p>
         </div>
         {canCreate ? (
           <Button as="a" href={data.routes[config.newRouteKey]} variant="primary">
@@ -634,8 +634,8 @@ function MasterDataDetailPage({ data, type, isNew = false }) {
           <a href={data.routes[config.routeKey]} className="mb-2 inline-flex text-sm font-semibold text-nexus-orange hover:text-orange-300">
             Back to {config.title}
           </a>
-          <h1 className="text-2xl font-bold text-white">{isNew ? `Add ${config.singular}` : config.singular}</h1>
-          <p className="mt-1 text-sm text-zinc-400">{config.description}</p>
+          <h1 className="bim-page-title">{isNew ? `Add ${config.singular}` : config.singular}</h1>
+          <p className="bim-page-description">{config.description}</p>
         </div>
         {canSave ? (
           <Button type="button" variant="primary" loading={saving} onClick={saveRecord}>
@@ -665,26 +665,27 @@ function MasterDataDetailPage({ data, type, isNew = false }) {
           <FormSection icon={config.icon} title={`${config.singular} Information`} subtitle="Operational master data only. No accounting or CRM behavior is created here.">
             <div className="grid gap-5 md:grid-cols-2">
               <Field label={`${config.singular} Name`} required>
-                <TextInput value={form.name} onChange={(value) => updateField("name", value)} placeholder={`${config.singular} name`} />
+                <TextInput disabled={!canSave} value={form.name} onChange={(value) => updateField("name", value)} placeholder={`${config.singular} name`} />
               </Field>
               <Field label="Contact Person">
-                <TextInput value={form.contact_person} onChange={(value) => updateField("contact_person", value)} placeholder="Contact name" />
+                <TextInput disabled={!canSave} value={form.contact_person} onChange={(value) => updateField("contact_person", value)} placeholder="Contact name" />
               </Field>
               <Field label="Phone">
-                <TextInput value={form.phone} onChange={(value) => updateField("phone", value)} placeholder="Phone number" />
+                <TextInput disabled={!canSave} value={form.phone} onChange={(value) => updateField("phone", value)} placeholder="Phone number" />
               </Field>
               <Field label="Email">
-                <TextInput type="email" value={form.email} onChange={(value) => updateField("email", value)} placeholder="Email address" />
+                <TextInput disabled={!canSave} type="email" value={form.email} onChange={(value) => updateField("email", value)} placeholder="Email address" />
               </Field>
             </div>
             <div className="mt-5">
               <Field label="Notes">
-                <TextInput value={form.notes} onChange={(value) => updateField("notes", value)} placeholder="Internal notes" />
+                <TextInput disabled={!canSave} value={form.notes} onChange={(value) => updateField("notes", value)} placeholder="Internal notes" />
               </Field>
             </div>
             <label className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-zinc-300">
               <input
                 type="checkbox"
+                disabled={!canSave}
                 checked={form.isactive}
                 onChange={(event) => updateField("isactive", event.target.checked)}
                 className="h-4 w-4 rounded border-nexus-line bg-black"
@@ -765,16 +766,17 @@ function OperationsPage({ data }) {
       tone: workflowMeta.stock_movement.tone
     }
   ];
+  const visibleWorkflows = workflows.filter((workflow) => workflow.enabled || !workflow.href);
 
   return (
     <Shell data={data}>
       <header className="mb-5">
-        <h1 className="text-2xl font-bold text-white">Operations</h1>
-        <p className="mt-1 text-sm text-zinc-400">Run stock entry and stock exit workflows.</p>
+        <h1 className="bim-page-title">Operations</h1>
+        <p className="bim-page-description">Run stock entry and stock exit workflows.</p>
       </header>
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {workflows.map((workflow) => {
+        {visibleWorkflows.map((workflow) => {
           const content = (
             <>
               <span className={`inline-flex rounded-lg p-3 ${toneClasses[workflow.tone] || toneClasses.neutral}`}>
@@ -810,6 +812,7 @@ function OperationsPage({ data }) {
 }
 
 function ReceivingRecordsPage({ data }) {
+  const canReceiveStock = Boolean(data.permissions?.canReceiveStock);
   const [records, setRecords] = useState([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -885,13 +888,15 @@ function ReceivingRecordsPage({ data }) {
     <Shell data={data}>
       <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Receiving Records</h1>
-          <p className="mt-1 text-sm text-zinc-400">Review operational stock-entry records.</p>
+          <h1 className="bim-page-title">Receiving Records</h1>
+          <p className="bim-page-description">Review operational stock-entry records.</p>
         </div>
-        <Button as="a" href={data.routes.receiveStock} variant="primary">
-          <Plus className="h-4 w-4" />
-          Receive Stock
-        </Button>
+        {canReceiveStock ? (
+          <Button as="a" href={data.routes.receiveStock} variant="primary">
+            <Plus className="h-4 w-4" />
+            Receive Stock
+          </Button>
+        ) : null}
       </header>
 
       <KpiGrid items={receivingKpis} />
@@ -1150,8 +1155,8 @@ function ReceivingRecordDetailPage({ data }) {
             <ChevronRight className="h-4 w-4 rotate-180" />
             Back to Receiving Records
           </a>
-          <h1 className="mt-3 text-2xl font-bold text-white">Receiving Record</h1>
-          <p className="mt-1 text-sm text-zinc-400">Operational stock-entry detail.</p>
+          <h1 className="mt-3 bim-page-title">Receiving Record</h1>
+          <p className="bim-page-description">Operational stock-entry detail.</p>
         </div>
         {record ? (
           <div className="flex flex-wrap items-center gap-3">
@@ -1252,16 +1257,16 @@ function ReceivingRecordDetailPage({ data }) {
             <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
               <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">Receiving Number</p>
+                  <p className="bim-section-title">Receiving Number</p>
                   <h2 className="mt-2 font-mono text-2xl font-bold text-nexus-orange">{record.receiving_number}</h2>
                 </div>
                 <div className="grid gap-3 text-sm md:min-w-48 md:text-right">
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">Received Date</p>
+                    <p className="bim-helper-text">Received Date</p>
                     <p className="mt-1 text-zinc-300">{formatDate(record.received_date)}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">Reference Number</p>
+                    <p className="bim-helper-text">Reference Number</p>
                     <p className="mt-1 font-mono text-xs text-zinc-300">{record.reference_number || "No reference"}</p>
                   </div>
                 </div>
@@ -1278,7 +1283,7 @@ function ReceivingRecordDetailPage({ data }) {
 
               {record.notes ? (
                 <div className="mt-5 rounded-lg border border-nexus-line bg-nexus-panel2 p-4">
-                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">Notes</p>
+                  <p className="bim-helper-text">Notes</p>
                   <p className="mt-2 text-sm text-zinc-300">{record.notes}</p>
                 </div>
               ) : null}
@@ -1288,7 +1293,7 @@ function ReceivingRecordDetailPage({ data }) {
           </div>
 
           <aside className="rounded-lg border border-nexus-line bg-nexus-panel p-4 xl:sticky xl:top-5 xl:self-start">
-            <h2 className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">Activity</h2>
+            <h2 className="bim-section-title">Activity</h2>
             <div className="mt-4 space-y-3 text-sm">
               <DetailRow label="Record Status" value={isCancelled ? "Cancelled" : "Recorded"} highlight />
               <DetailRow label="Created" value={formatDate(record.crdate)} />
@@ -1325,7 +1330,7 @@ function ReceivingCorrectionPanel({
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <h2 className="text-sm font-bold text-white">Edit receiving details</h2>
-          <p className="mt-1 text-sm text-zinc-400">
+          <p className="bim-page-description">
             Safe edits are limited to supplier, reference, date, notes, line cost, and line notes. For wrong product, quantity, or serial, cancel and recreate the record when the linked units are still unused.
           </p>
         </div>
@@ -1357,7 +1362,7 @@ function ReceivingCorrectionPanel({
 
       {items.length ? (
         <div className="mt-5 overflow-hidden rounded-lg border border-nexus-line">
-          <div className="grid gap-3 bg-zinc-800/80 px-4 py-3 text-xs font-bold uppercase tracking-[0.18em] text-zinc-400 md:grid-cols-[minmax(0,1fr)_130px_minmax(0,1fr)]">
+          <div className="grid gap-3 bg-zinc-800/80 px-4 py-3 bim-label md:grid-cols-[minmax(0,1fr)_130px_minmax(0,1fr)]">
             <span>Line</span>
             <span>Cost</span>
             <span>Notes</span>
@@ -1421,7 +1426,7 @@ function ReceivingItemsTable({ items }) {
                     <p className="mt-1 text-xs text-zinc-500">{item.product_unit ? `Unit #${item.product_unit}` : "No unit link"}</p>
                   </td>
                   <td className="px-4 py-4">
-                    <p className="font-mono text-xs text-zinc-300">{formatCurrency(item.cost)}</p>
+                    <p className="text-xs text-zinc-300">{formatCurrency(item.cost)}</p>
                     <p className="mt-1 text-xs text-zinc-500">Reference cost only</p>
                   </td>
                   <td className="px-4 py-4 text-zinc-400">{item.notes || "-"}</td>
@@ -1446,6 +1451,7 @@ function ReceivingItemsTable({ items }) {
 }
 
 function ReservationRecordsPage({ data }) {
+  const canCreateReservation = Boolean(data.permissions?.canCreateReservation);
   const [records, setRecords] = useState([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -1519,13 +1525,15 @@ function ReservationRecordsPage({ data }) {
     <Shell data={data}>
       <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Reservation Records</h1>
-          <p className="mt-1 text-sm text-zinc-400">Hold available stock for upcoming work without delivering it.</p>
+          <h1 className="bim-page-title">Reservation Records</h1>
+          <p className="bim-page-description">Hold available stock for upcoming work without delivering it.</p>
         </div>
-        <Button as="a" href={data.routes.createReservation} variant="primary">
-          <Plus className="h-4 w-4" />
-          Create Reservation
-        </Button>
+        {canCreateReservation ? (
+          <Button as="a" href={data.routes.createReservation} variant="primary">
+            <Plus className="h-4 w-4" />
+            Create Reservation
+          </Button>
+        ) : null}
       </header>
 
       <KpiGrid items={reservationKpis} />
@@ -1707,10 +1715,10 @@ function ReservationRecordDetailPage({ data }) {
             Back to reservations
           </a>
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-bold text-white">{record.reservation_number}</h1>
+            <h1 className="bim-page-title">{record.reservation_number}</h1>
             <Status status={reservationStatusLabel(record)} statusClass={record.status} />
           </div>
-          <p className="mt-1 text-sm text-zinc-400">Reserved stock must be released before delivery.</p>
+          <p className="bim-page-description">Reserved stock must be released before delivery.</p>
         </div>
       </header>
 
@@ -1751,7 +1759,7 @@ function ReservationRecordDetailPage({ data }) {
 
           {canReleaseReservation ? (
           <section className="rounded-lg border border-nexus-line bg-nexus-panel p-4">
-            <h2 className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">Release Reservation</h2>
+            <h2 className="bim-section-title">Release Reservation</h2>
             <p className="mt-3 text-sm text-zinc-500">
               Release only when this hold is no longer needed. Units return to available stock.
             </p>
@@ -1918,8 +1926,8 @@ function CreateReservationPage({ data }) {
         <div className="min-w-0">
           <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-white">Create Reservation</h1>
-              <p className="mt-1 text-sm text-zinc-400">Hold available stock without delivering it.</p>
+              <h1 className="bim-page-title">Create Reservation</h1>
+              <p className="bim-page-description">Hold available stock without delivering it.</p>
             </div>
             <div className="flex flex-wrap gap-3 text-sm">
               <a href="/operations/reservations/" className="inline-flex h-9 items-center gap-2 rounded-md px-3 font-semibold text-zinc-200 hover:bg-nexus-panel">
@@ -2043,6 +2051,7 @@ function SelectedUnitsTable({ units, onRemove, emptyText }) {
 }
 
 function IssueRecordsPage({ data }) {
+  const canCreateIssue = Boolean(data.permissions?.canCreateIssue);
   const [records, setRecords] = useState([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -2116,13 +2125,15 @@ function IssueRecordsPage({ data }) {
     <Shell data={data}>
       <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Issue Records</h1>
-          <p className="mt-1 text-sm text-zinc-400">Track temporary stock handoffs expected to come back.</p>
+          <h1 className="bim-page-title">Issue Records</h1>
+          <p className="bim-page-description">Track temporary stock handoffs expected to come back.</p>
         </div>
-        <Button as="a" href={data.routes.createIssue} variant="primary">
-          <Plus className="h-4 w-4" />
-          Create Issue
-        </Button>
+        {canCreateIssue ? (
+          <Button as="a" href={data.routes.createIssue} variant="primary">
+            <Plus className="h-4 w-4" />
+            Create Issue
+          </Button>
+        ) : null}
       </header>
 
       <KpiGrid items={issueKpis} />
@@ -2304,10 +2315,10 @@ function IssueRecordDetailPage({ data }) {
             Back to issues
           </a>
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-bold text-white">{record.issue_number}</h1>
+            <h1 className="bim-page-title">{record.issue_number}</h1>
             <Status status={issueStatusLabel(record)} statusClass={record.status} />
           </div>
-          <p className="mt-1 text-sm text-zinc-400">Issued units must be returned before delivery.</p>
+          <p className="bim-page-description">Issued units must be returned before delivery.</p>
         </div>
       </header>
 
@@ -2350,7 +2361,7 @@ function IssueRecordDetailPage({ data }) {
 
           {canReturnIssue ? (
           <section className="rounded-lg border border-nexus-line bg-nexus-panel p-4">
-            <h2 className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">Return Issue</h2>
+            <h2 className="bim-section-title">Return Issue</h2>
             <p className="mt-3 text-sm text-zinc-500">
               Return only when all linked units are back and still untouched issued units.
             </p>
@@ -2523,8 +2534,8 @@ function CreateIssuePage({ data }) {
         <div className="min-w-0">
           <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-white">Create Issue</h1>
-              <p className="mt-1 text-sm text-zinc-400">Temporarily issue available stock that is expected to come back.</p>
+              <h1 className="bim-page-title">Create Issue</h1>
+              <p className="bim-page-description">Temporarily issue available stock that is expected to come back.</p>
             </div>
             <div className="flex flex-wrap gap-3 text-sm">
               <a href="/operations/issues/" className="inline-flex h-9 items-center gap-2 rounded-md px-3 font-semibold text-zinc-200 hover:bg-nexus-panel">
@@ -2617,6 +2628,7 @@ function CreateIssuePage({ data }) {
 }
 
 function RepairRecordsPage({ data }) {
+  const canCreateRepair = Boolean(data.permissions?.canCreateRepair);
   const [records, setRecords] = useState([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -2690,13 +2702,15 @@ function RepairRecordsPage({ data }) {
     <Shell data={data}>
       <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Repair Records</h1>
-          <p className="mt-1 text-sm text-zinc-400">Track available stock moved into repair, testing, or diagnosis.</p>
+          <h1 className="bim-page-title">Repair Records</h1>
+          <p className="bim-page-description">Track available stock moved into repair, testing, or diagnosis.</p>
         </div>
-        <Button as="a" href={data.routes.createRepair} variant="primary">
-          <Plus className="h-4 w-4" />
-          Create Repair
-        </Button>
+        {canCreateRepair ? (
+          <Button as="a" href={data.routes.createRepair} variant="primary">
+            <Plus className="h-4 w-4" />
+            Create Repair
+          </Button>
+        ) : null}
       </header>
 
       <KpiGrid items={repairKpis} />
@@ -2886,10 +2900,10 @@ function RepairRecordDetailPage({ data }) {
             Back to repairs
           </a>
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-bold text-white">{record.repair_number}</h1>
+            <h1 className="bim-page-title">{record.repair_number}</h1>
             <Status status={repairStatusLabel(record)} statusClass={record.status === "resolved" ? record.resolution || "available" : "repair"} />
           </div>
-          <p className="mt-1 text-sm text-zinc-400">Reserved, issued, and sold units must use their own workflows before repair.</p>
+          <p className="bim-page-description">Reserved, issued, and sold units must use their own workflows before repair.</p>
         </div>
       </header>
 
@@ -2933,7 +2947,7 @@ function RepairRecordDetailPage({ data }) {
 
           {canResolveRepair ? (
           <section className="rounded-lg border border-nexus-line bg-nexus-panel p-4">
-            <h2 className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">Resolve Repair</h2>
+            <h2 className="bim-section-title">Resolve Repair</h2>
             <p className="mt-3 text-sm text-zinc-500">
               Resolve only when all linked units are still untouched repair units.
             </p>
@@ -3117,8 +3131,8 @@ function CreateRepairPage({ data }) {
         <div className="min-w-0">
           <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-white">Create Repair</h1>
-              <p className="mt-1 text-sm text-zinc-400">Move active available stock into repair, testing, or diagnosis.</p>
+              <h1 className="bim-page-title">Create Repair</h1>
+              <p className="bim-page-description">Move active available stock into repair, testing, or diagnosis.</p>
             </div>
             <div className="flex flex-wrap gap-3 text-sm">
               <a href="/operations/repairs/" className="inline-flex h-9 items-center gap-2 rounded-md px-3 font-semibold text-zinc-200 hover:bg-nexus-panel">
@@ -3229,6 +3243,7 @@ function reservationStatusLabel(record) {
 }
 
 function ClientReturnRecordsPage({ data }) {
+  const canCreateClientReturn = Boolean(data.permissions?.canCreateClientReturn);
   const [records, setRecords] = useState([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -3302,13 +3317,15 @@ function ClientReturnRecordsPage({ data }) {
     <Shell data={data}>
       <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Client Returns</h1>
-          <p className="mt-1 text-sm text-zinc-400">Record sold units that came back from a client.</p>
+          <h1 className="bim-page-title">Client Returns</h1>
+          <p className="bim-page-description">Record sold units that came back from a client.</p>
         </div>
-        <Button as="a" href={data.routes.createClientReturn} variant="primary">
-          <Plus className="h-4 w-4" />
-          Create Client Return
-        </Button>
+        {canCreateClientReturn ? (
+          <Button as="a" href={data.routes.createClientReturn} variant="primary">
+            <Plus className="h-4 w-4" />
+            Create Client Return
+          </Button>
+        ) : null}
       </header>
 
       <KpiGrid items={returnKpis} />
@@ -3450,10 +3467,10 @@ function ClientReturnRecordDetailPage({ data }) {
             Back to client returns
           </a>
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-bold text-white">{record.return_number}</h1>
+            <h1 className="bim-page-title">{record.return_number}</h1>
             <Status status={clientReturnResolutionLabel(record.resolution)} statusClass={record.resolution} />
           </div>
-          <p className="mt-1 text-sm text-zinc-400">
+          <p className="bim-page-description">
             Client return is not a delivery cancellation and not a financial refund or credit.
           </p>
         </div>
@@ -3680,8 +3697,8 @@ function CreateClientReturnPage({ data }) {
         <div className="min-w-0">
           <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-white">Create Client Return</h1>
-              <p className="mt-1 text-sm text-zinc-400">
+              <h1 className="bim-page-title">Create Client Return</h1>
+              <p className="bim-page-description">
                 Record sold stock returned by a client. This is not a delivery cancellation and not a financial refund or credit.
               </p>
             </div>
@@ -3796,6 +3813,7 @@ function clientReturnResolutionLabel(resolution) {
 }
 
 function DeliveryRecordsPage({ data }) {
+  const canCreateDelivery = Boolean(data.permissions?.canCreateDelivery);
   const [records, setRecords] = useState([]);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
@@ -3871,13 +3889,15 @@ function DeliveryRecordsPage({ data }) {
     <Shell data={data}>
       <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Delivery Records</h1>
-          <p className="mt-1 text-sm text-zinc-400">Review operational stock-out records.</p>
+          <h1 className="bim-page-title">Delivery Records</h1>
+          <p className="bim-page-description">Review operational stock-out records.</p>
         </div>
-        <Button as="a" href={data.routes.createDelivery} variant="primary">
-          <Plus className="h-4 w-4" />
-          Create Delivery
-        </Button>
+        {canCreateDelivery ? (
+          <Button as="a" href={data.routes.createDelivery} variant="primary">
+            <Plus className="h-4 w-4" />
+            Create Delivery
+          </Button>
+        ) : null}
       </header>
 
       <KpiGrid items={deliveryKpis} />
@@ -4130,8 +4150,8 @@ function DeliveryRecordDetailPage({ data }) {
             <ChevronRight className="h-4 w-4 rotate-180" />
             Back to Delivery Records
           </a>
-          <h1 className="mt-3 text-2xl font-bold text-white">Delivery Record</h1>
-          <p className="mt-1 text-sm text-zinc-400">Operational stock-out detail.</p>
+          <h1 className="mt-3 bim-page-title">Delivery Record</h1>
+          <p className="bim-page-description">Operational stock-out detail.</p>
         </div>
         {record ? (
           <div className="flex flex-wrap items-center gap-3">
@@ -4237,16 +4257,16 @@ function DeliveryRecordDetailPage({ data }) {
             <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
               <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">Delivery Number</p>
+                  <p className="bim-section-title">Delivery Number</p>
                   <h2 className="mt-2 font-mono text-2xl font-bold text-nexus-orange">{record.delivery_number}</h2>
                 </div>
                 <div className="grid gap-3 text-sm md:min-w-48 md:text-right">
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">Delivery Date</p>
+                    <p className="bim-helper-text">Delivery Date</p>
                     <p className="mt-1 text-zinc-300">{formatDate(record.delivery_date)}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">Status</p>
+                    <p className="bim-helper-text">Status</p>
                     <p className="mt-1 text-zinc-300">{deliveryStatusLabel(record)}</p>
                   </div>
                 </div>
@@ -4263,7 +4283,7 @@ function DeliveryRecordDetailPage({ data }) {
 
               {record.notes ? (
                 <div className="mt-5 rounded-lg border border-nexus-line bg-nexus-panel2 p-4">
-                  <p className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-500">Notes</p>
+                  <p className="bim-helper-text">Notes</p>
                   <p className="mt-2 text-sm text-zinc-300">{record.notes}</p>
                 </div>
               ) : null}
@@ -4273,7 +4293,7 @@ function DeliveryRecordDetailPage({ data }) {
           </div>
 
           <aside className="rounded-lg border border-nexus-line bg-nexus-panel p-4 xl:sticky xl:top-5 xl:self-start">
-            <h2 className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">Activity</h2>
+            <h2 className="bim-section-title">Activity</h2>
             <div className="mt-4 space-y-3 text-sm">
               <DetailRow label="Record Status" value={deliveryStatusLabel(record)} highlight />
               <DetailRow label="Created" value={formatDate(record.crdate)} />
@@ -4309,7 +4329,7 @@ function DeliveryCorrectionPanel({
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <h2 className="text-sm font-bold text-white">Edit delivery details</h2>
-          <p className="mt-1 text-sm text-zinc-400">
+          <p className="bim-page-description">
             Safe edits are limited to client, receiver, delivery date, notes, and item notes.
           </p>
         </div>
@@ -4681,8 +4701,8 @@ function InventoryHeader({ actions }) {
   return (
     <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
       <div>
-        <h1 className="text-2xl font-bold text-white">BIM Stock</h1>
-        <p className="mt-1 text-sm text-zinc-400">Manage products and stock availability.</p>
+        <h1 className="bim-page-title">BIM Stock</h1>
+        <p className="bim-page-description">Manage products and stock availability.</p>
       </div>
       <div className="flex items-center gap-3 text-sm">
         <button
@@ -4864,7 +4884,7 @@ function ProductDetail({ product, canAccessAdmin = false }) {
   return (
     <aside className="rounded-lg border border-nexus-line bg-nexus-panel xl:sticky xl:top-5 xl:h-[calc(100vh-2.5rem)]">
       <div className="flex items-center justify-between border-b border-nexus-line px-4 py-4">
-        <h2 className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">Product Detail</h2>
+        <h2 className="bim-section-title">Product Detail</h2>
         <button
           aria-label="Close product detail panel coming later"
           className="cursor-not-allowed text-zinc-600"
@@ -4891,7 +4911,7 @@ function ProductDetail({ product, canAccessAdmin = false }) {
         </dl>
 
         <div className="border-t border-nexus-line pt-5">
-          <h3 className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">Stock Summary</h3>
+          <h3 className="bim-section-title">Stock Summary</h3>
           <div className="mt-4">
             <div className="flex justify-between text-sm">
               <span className="text-zinc-400">Stock Availability</span>
@@ -4933,7 +4953,7 @@ function ProductDetail({ product, canAccessAdmin = false }) {
           Full View
         </Button>
         <div className="hidden">
-          <h3 className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-400">Optional</h3>
+          <h3 className="bim-label">Optional</h3>
           {optionalFields.map(([label, done]) => (
             <p key={label} className={`text-sm ${done ? "text-zinc-300" : "text-zinc-600"}`}>
               {done ? "âœ“" : "â—‹"} {label}
@@ -4942,7 +4962,7 @@ function ProductDetail({ product, canAccessAdmin = false }) {
         </div>
 
         <div className="hidden">
-          <h3 className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-400">Optional</h3>
+          <h3 className="bim-label">Optional</h3>
           {optionalFields.map(([label, done]) => (
             <p key={label} className={`text-sm ${done ? "text-zinc-300" : "text-zinc-600"}`}>
               {done ? "âœ“" : "â—‹"} {label}
@@ -5046,7 +5066,7 @@ function ProductDetailsPage({ data }) {
             <Avatar product={product} />
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-bold text-white">{product.display_name}</h1>
+                <h1 className="bim-page-title">{product.display_name}</h1>
                 <ProductStatus product={product} />
               </div>
               <p className="mt-2 text-sm text-zinc-400">
@@ -5993,8 +6013,8 @@ function StockEntryPage({ data, mode = "add-unit" }) {
         <div className="min-w-0">
           <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-white">{isReceiving ? "Receive Stock" : "Add Unit"}</h1>
-              <p className="mt-1 text-sm text-zinc-400">
+              <h1 className="bim-page-title">{isReceiving ? "Receive Stock" : "Add Unit"}</h1>
+              <p className="bim-page-description">
                 {isReceiving
                   ? "Record supplier stock received with reference details."
                   : "Add physical inventory units without supplier or receipt details."}
@@ -6030,7 +6050,7 @@ function StockEntryPage({ data, mode = "add-unit" }) {
             <div className="mb-5 flex items-center justify-between rounded-lg border border-nexus-line bg-nexus-panel2 p-4">
               <div>
                 <p className="text-xs text-zinc-500">{isReceiving ? "Receiving Reference" : "Entry Reference"} (auto-generated)</p>
-                <p className="mt-1 font-mono text-sm font-bold text-zinc-500">Not created yet</p>
+                <p className="mt-1 text-sm font-semibold text-zinc-500">Not created yet</p>
               </div>
               <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-black">Draft</span>
             </div>
@@ -6163,7 +6183,7 @@ function StockEntryPage({ data, mode = "add-unit" }) {
         <aside className="space-y-4">
           <section className="rounded-lg border border-nexus-line bg-nexus-panel">
             <div className="flex items-center justify-between border-b border-nexus-line px-4 py-4">
-              <h2 className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">{isReceiving ? "Receiving Summary" : "Unit Summary"}</h2>
+              <h2 className="bim-section-title">{isReceiving ? "Receiving Summary" : "Unit Summary"}</h2>
               <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-black">Draft</span>
             </div>
             <dl className="divide-y divide-nexus-line p-4">
@@ -6330,8 +6350,8 @@ function CreateDeliveryPage({ data }) {
         <div className="min-w-0">
           <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-white">Create Delivery</h1>
-              <p className="mt-1 text-sm text-zinc-400">Record outgoing stock and update unit status.</p>
+              <h1 className="bim-page-title">Create Delivery</h1>
+              <p className="bim-page-description">Record outgoing stock and update unit status.</p>
             </div>
             <div className="flex flex-wrap gap-3 text-sm">
               <a href="/inventory/" className="inline-flex h-9 items-center gap-2 rounded-md px-3 font-semibold text-zinc-200 hover:bg-nexus-panel">
@@ -6359,7 +6379,7 @@ function CreateDeliveryPage({ data }) {
             <div className="mb-5 flex items-center justify-between rounded-lg border border-nexus-line bg-nexus-panel2 p-4">
               <div>
                 <p className="text-xs text-zinc-500">Delivery Reference (auto-generated)</p>
-                <p className="mt-1 font-mono text-sm font-bold text-zinc-500">Not created yet</p>
+                <p className="mt-1 text-sm font-semibold text-zinc-500">Not created yet</p>
               </div>
               <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-black">Draft</span>
             </div>
@@ -6452,7 +6472,7 @@ function CreateDeliveryPage({ data }) {
         <aside className="space-y-4">
           <section className="rounded-lg border border-nexus-line bg-nexus-panel">
             <div className="flex items-center justify-between border-b border-nexus-line px-4 py-4">
-              <h2 className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">Delivery Summary</h2>
+              <h2 className="bim-section-title">Delivery Summary</h2>
               <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-black">Draft</span>
             </div>
             <dl className="divide-y divide-nexus-line p-4">
@@ -6486,7 +6506,7 @@ function AddProductHeader({ saving, onReset, onSave, onSaveAnother }) {
     <header className="mb-5 border-b border-nexus-line pb-4">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
       <div>
-        <h1 className="text-2xl font-bold text-white">Add Product</h1>
+        <h1 className="bim-page-title">Add Product</h1>
       </div>
       <div className="flex flex-wrap items-center gap-3 text-sm">
         <Button onClick={onReset} type="button" variant="secondary">
@@ -6544,7 +6564,7 @@ function TextInput({ value, onChange, placeholder, disabled = false, type = "tex
       value={value}
       onChange={(event) => onChange?.(event.target.value)}
       placeholder={placeholder}
-      className="disabled:font-mono"
+      className=""
     />
   );
 }
@@ -6730,7 +6750,7 @@ function AddProductPreview({
     <aside className="space-y-4 xl:sticky xl:top-5 xl:h-fit">
       <section className="rounded-lg border border-nexus-line bg-nexus-panel">
       <div className="border-b border-nexus-line px-4 py-4">
-        <h2 className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">Live Preview</h2>
+        <h2 className="bim-section-title">Live Preview</h2>
       </div>
       <div className="space-y-5 p-4">
         <div className="flex gap-3">
@@ -6770,7 +6790,7 @@ function AddProductPreview({
         </div>
 
         <div className="space-y-2 border-t border-nexus-line pt-4">
-          <h3 className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-400">Required</h3>
+          <h3 className="bim-label">Required</h3>
           {missing.map(([label, done]) => (
             <p key={label} className={`text-sm ${done ? "text-zinc-300" : "text-zinc-600"}`}>
               {done ? "âœ“" : "â—‹"} {label}
@@ -6778,7 +6798,7 @@ function AddProductPreview({
           ))}
         </div>
         <div className="space-y-2 border-t border-nexus-line pt-4">
-          <h3 className="text-xs font-bold uppercase tracking-[0.18em] text-zinc-400">Optional</h3>
+          <h3 className="bim-label">Optional</h3>
           {optionalFields.map(([label, done]) => (
             <p key={label} className={`text-sm ${done ? "text-zinc-300" : "text-zinc-600"}`}>
               {done ? "âœ“" : "â—‹"} {label}
@@ -6789,7 +6809,7 @@ function AddProductPreview({
       </section>
 
       <section className="rounded-lg border border-nexus-line bg-nexus-panel p-4">
-        <h2 className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">Product Lifecycle</h2>
+        <h2 className="bim-section-title">Product Lifecycle</h2>
         <div className="mt-4 space-y-4 text-sm">
           <LifecycleStep number="1" title="Product Created" detail="You are here" active />
           <LifecycleStep number="2" title="Stock Received or Added" detail="Via receiving record or adjustment" />
@@ -6851,7 +6871,11 @@ function DetailRow({ label, value, highlight = false, strong = false }) {
 
 function QuickAddMenu({ actions }) {
   const quickActionLabels = new Set(["Add Product", "Add Unit", "Receive Stock", "Create Delivery"]);
-  const visibleActions = actions.filter((action) => quickActionLabels.has(action.label));
+  const visibleActions = actions.filter(
+    (action) => quickActionLabels.has(action.label) && action.enabled && action.href
+  );
+
+  if (!visibleActions.length) return null;
 
   return (
     <details className="relative">
@@ -6860,25 +6884,15 @@ function QuickAddMenu({ actions }) {
         Quick Add
       </summary>
       <div className="absolute right-0 z-20 mt-2 w-64 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel shadow-2xl">
-        {visibleActions.map((action) =>
-          action.enabled && action.href ? (
-            <a key={action.label} href={action.href} className="flex items-start gap-3 border-b border-nexus-line px-3 py-3 last:border-b-0 hover:bg-nexus-panel2">
-              <ActionIcon name={action.icon} tone={action.tone} />
-              <span>
-                <span className="block text-sm font-semibold text-white">{action.label}</span>
-                <span className="block text-xs text-zinc-500">{action.description}</span>
-              </span>
-            </a>
-          ) : (
-            <span key={action.label} className="flex items-start gap-3 border-b border-nexus-line px-3 py-3 opacity-50 last:border-b-0">
-              <ActionIcon name={action.icon} tone={action.tone} />
-              <span>
-                <span className="block text-sm font-semibold text-white">{action.label}</span>
-                <span className="block text-xs text-zinc-500">{action.description}</span>
-              </span>
+        {visibleActions.map((action) => (
+          <a key={action.label} href={action.href} className="flex items-start gap-3 border-b border-nexus-line px-3 py-3 last:border-b-0 hover:bg-nexus-panel2">
+            <ActionIcon name={action.icon} tone={action.tone} />
+            <span>
+              <span className="block text-sm font-semibold text-white">{action.label}</span>
+              <span className="block text-xs text-zinc-500">{action.description}</span>
             </span>
-          )
-        )}
+          </a>
+        ))}
       </div>
     </details>
   );
@@ -7133,7 +7147,7 @@ function Status({ status, statusClass }) {
 function PanelHeader({ title, action, actionHref, badge }) {
   return (
     <div className="flex items-center justify-between gap-3 px-4 py-3">
-      <h2 className="text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">{title}</h2>
+      <h2 className="bim-section-title">{title}</h2>
       {badge ? <Badge className="rounded-full bg-nexus-orange px-2 py-1 font-bold text-white">{badge}</Badge> : null}
       {action && actionHref ? (
         <a className="inline-flex items-center gap-1 text-xs font-semibold text-nexus-orange hover:text-orange-300" href={actionHref}>
@@ -7148,7 +7162,7 @@ function PanelHeader({ title, action, actionHref, badge }) {
 }
 
 function SectionTitle({ title }) {
-  return <h2 className="mb-3 text-xs font-bold uppercase tracking-[0.24em] text-zinc-400">{title}</h2>;
+  return <h2 className="mb-3 bim-section-title">{title}</h2>;
 }
 
 function ActionIcon({ name, tone = "neutral" }) {

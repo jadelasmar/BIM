@@ -20,24 +20,24 @@ Recommended extensions:
 - Error Lens
 - ESLint
 - Prettier
-- GitLens
 - SQLite Viewer
 - Tailwind CSS IntelliSense
 
 Purpose:
 
 - Python and Pylance are used for Django backend development.
-- Django and Djaneiro help with Django syntax and snippets.
-- ESLint and Prettier are used for frontend code quality and formatting.
+- Django and Djaneiro provide Django template and project support.
+- Error Lens surfaces editor diagnostics inline.
+- ESLint and Prettier are available for frontend editing, but are not run automatically because the project does not currently include their configuration.
+- SQLite Viewer supports inspection of the local development database.
 - Tailwind CSS IntelliSense is used for Tailwind class autocomplete and validation.
-- SQLite Viewer is used to inspect the local development database.
-- GitLens is used to review file history and changes.
-- Error Lens is used to show warnings and errors inline.
 - Codex is used as the coding assistant.
+
+Ruff is not currently configured as a project tool. Add it only with project configuration and a documented verification command; do not enable formatter-on-save globally.
 
 When adding new required extensions, update `.vscode/extensions.json` and this section.
 
-Project-level VS Code settings are stored in `.vscode/settings.json`. These settings define formatter behavior, ESLint validation, Tailwind language support, and ignored generated folders.
+Project-level VS Code settings are stored in `.vscode/settings.json`. These settings keep format-on-save disabled, select the project virtual environment, define Tailwind language support, and hide generated folders.
 
 VS Code terminals open in `backend/` and use the project `.venv` through terminal environment variables. Python extension auto-activation is disabled so new terminals do not print an activation command.
 
@@ -73,6 +73,8 @@ backend/static/frontend/
 ```
 
 Do not edit generated build files manually.
+
+When Django runs with `DEBUG=true`, the Vite manifest is re-read for each rendered page so a new `npm run build` is picked up without restarting Django. Production mode caches the manifest for efficiency and should be restarted after deploying a new frontend build.
 
 ## Vite Dev Server
 
@@ -114,6 +116,28 @@ Whitespace check:
 ```powershell
 git diff --check
 ```
+
+## Automatic Migrations After Pull
+
+This repository includes `.githooks/post-merge`. After a successful merge-based `git pull`, the hook automatically runs existing Django migrations with:
+
+```powershell
+.\.venv\Scripts\python.exe backend\manage.py migrate --noinput
+```
+
+Activate the versioned hooks once for each local clone:
+
+```powershell
+git config --local core.hooksPath .githooks
+```
+
+The hook resolves the repository root internally, so it does not depend on the terminal's current directory. It requires the local interpreter at `.venv/Scripts/python.exe`.
+
+If the virtual environment is missing, the hook prints a setup error and exits non-zero. If a migration fails, it prints a prominent failure message and exits non-zero so an outdated database does not go unnoticed. A failing `post-merge` hook cannot undo a pull that Git has already merged successfully; resolve the reported migration error before starting BIM Nexus.
+
+The hook only applies migration files already committed to the repository. It never runs `makemigrations` and never creates migration files automatically.
+
+`post-merge` runs for merge-based pulls only. Rebase-based pulls do not invoke this hook and remain outside the current automatic-migration scope.
 
 ## Environment Variables
 

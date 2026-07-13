@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Git hooks execute through a POSIX shell and require LF shebang lines on Windows.
+.githooks/* text eol=lf

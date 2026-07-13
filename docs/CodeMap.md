@@ -38,7 +38,7 @@ Shared shell and Command Center:
 - `views.py`: builds `initial_data`, renders React shell, serves Command Center JSON
 - `urls.py`: protected shell routes
 - `ui_config.py`: backend UI labels, icons, tones
-- `templatetags/vite.py`: Vite manifest/dev-server asset loading
+- `templatetags/vite.py`: Vite manifest/dev-server asset loading; reloads the manifest in debug mode and caches it in production
 
 Important routes:
 
@@ -83,7 +83,7 @@ Account layer on top of Django auth:
 - `forms.py`: login and password setup forms
 - `signals.py`: default group assignment
 - `utils.py`: setup-link helper
-- `views.py`: login/setup React page data, including configured administrator email and safe username restoration after failed login
+- `views.py`: login/setup React page data, including configured administrator email, safe login identifier restoration, and non-sensitive password-setup field preservation
 - `urls.py`: login/setup routes
 
 Important routes:
@@ -211,7 +211,7 @@ This file is the main remaining frontend split target.
 
 ### `frontend/src/pages/auth/AuthPages.jsx`
 
-React login and password setup pages. Django remains authoritative for authentication; the login page adds required-field UX, accessible password visibility state, safe identifier preservation, and the configured administrator mail link.
+React login and password setup pages. Django remains authoritative for authentication; the pages add required-field UX, accessible error states, safe non-sensitive field preservation, password clearing after backend errors, accessible password visibility state, and the configured administrator mail link.
 
 ### `frontend/src/components/common/Icon.jsx`
 

@@ -2228,6 +2228,55 @@ class BIMPOSAccessTests(TestCase):
         self.assertTrue(permissions["canCancelDelivery"])
         self.assertFalse(permissions["canCreateProduct"])
 
+    def test_viewer_cannot_open_write_pages(self):
+        user = User.objects.create_user(username="strict-viewer", password="test-pass")
+        user.groups.add(Group.objects.get(name="Viewer"))
+        self.client.force_login(user)
+
+        write_routes = (
+            "/inventory/products/new/",
+            "/inventory/stock-units/new/",
+            "/operations/receiving/new/",
+            "/operations/deliveries/new/",
+            "/operations/reservations/new/",
+            "/operations/issues/new/",
+            "/operations/repairs/new/",
+            "/operations/client-returns/new/",
+            "/suppliers/new/",
+            "/clients/new/",
+        )
+
+        for route in write_routes:
+            with self.subTest(route=route):
+                self.assertEqual(self.client.get(route).status_code, 403)
+
+    def test_frontend_hides_viewer_write_controls(self):
+        routes_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "quickActionLabels.has(action.label) && action.enabled && action.href",
+            routes_source,
+        )
+        self.assertIn("if (!visibleActions.length) return null;", routes_source)
+        self.assertIn('disabled={!canSave}', routes_source)
+        self.assertIn(
+            "workflows.filter((workflow) => workflow.enabled || !workflow.href)",
+            routes_source,
+        )
+        for permission in (
+            "canReceiveStock",
+            "canCreateReservation",
+            "canCreateIssue",
+            "canCreateRepair",
+            "canCreateClientReturn",
+            "canCreateDelivery",
+        ):
+            with self.subTest(permission=permission):
+                self.assertIn(
+                    f"Boolean(data.permissions?.{permission})",
+                    routes_source,
+                )
+
 
 # Tests ProductUnit model fields that support pricing.
 class ProductUnitModelTests(SimpleTestCase):
@@ -2536,6 +2585,62 @@ class InventoryApiTests(TestCase):
         response = self.client.get("/api/stock/products/")
 
         self.assertIn(response.status_code, (401, 403))
+
+    def test_viewer_write_requests_are_denied_before_validation(self):
+        user = User.objects.create_user(username="api-viewer", password="test-pass")
+        user.groups.add(Group.objects.get(name="Viewer"))
+        self.client.force_login(user)
+
+        collection_endpoints = (
+            "/api/stock/products/",
+            "/api/stock/product-units/",
+            "/api/stock/receiving-records/",
+            "/api/stock/deliveries/",
+            "/api/stock/reservations/",
+            "/api/stock/issues/",
+            "/api/stock/repairs/",
+            "/api/stock/client-returns/",
+            "/api/stock/categories/",
+            "/api/stock/brands/",
+            "/api/stock/suppliers/",
+            "/api/stock/clients/",
+        )
+
+        for endpoint in collection_endpoints:
+            with self.subTest(endpoint=endpoint):
+                self.assertEqual(
+                    self.client.post(endpoint, {}, content_type="application/json").status_code,
+                    403,
+                )
+
+        patch_endpoints = (
+            f"/api/stock/products/{self.product.pk}/",
+            f"/api/stock/product-units/{ProductUnit.objects.get(serial_number='API-AVAILABLE').pk}/",
+            f"/api/stock/suppliers/{self.supplier.pk}/",
+        )
+
+        for endpoint in patch_endpoints:
+            with self.subTest(endpoint=endpoint):
+                self.assertEqual(
+                    self.client.patch(endpoint, {}, content_type="application/json").status_code,
+                    403,
+                )
+
+        action_endpoints = (
+            "/api/stock/receiving-records/999/cancel/",
+            "/api/stock/deliveries/999/cancel/",
+            "/api/stock/reservations/999/release/",
+            "/api/stock/reservations/999/cancel/",
+            "/api/stock/issues/999/return/",
+            "/api/stock/repairs/999/resolve/",
+        )
+
+        for endpoint in action_endpoints:
+            with self.subTest(endpoint=endpoint):
+                self.assertEqual(
+                    self.client.post(endpoint, {}, content_type="application/json").status_code,
+                    403,
+                )
 
     def test_product_api_lists_active_products_with_counts_and_filters(self):
         user = self._user_with_permissions("view_product")

@@ -7,17 +7,37 @@
     "file": "assets/logo-white-DsK07wrs.svg",
     "src": "src/assets/brand/logo-white.svg"
   },
+  "src/assets/fonts/inter/Inter-Bold.woff2": {
+    "file": "assets/Inter-Bold-BOs3KVhN.woff2",
+    "src": "src/assets/fonts/inter/Inter-Bold.woff2"
+  },
+  "src/assets/fonts/inter/Inter-Medium.woff2": {
+    "file": "assets/Inter-Medium-CDhBSFyE.woff2",
+    "src": "src/assets/fonts/inter/Inter-Medium.woff2"
+  },
+  "src/assets/fonts/inter/Inter-Regular.woff2": {
+    "file": "assets/Inter-Regular-COLGFB3M.woff2",
+    "src": "src/assets/fonts/inter/Inter-Regular.woff2"
+  },
+  "src/assets/fonts/inter/Inter-SemiBold.woff2": {
+    "file": "assets/Inter-SemiBold-BAEEcJ4E.woff2",
+    "src": "src/assets/fonts/inter/Inter-SemiBold.woff2"
+  },
   "src/main.jsx": {
-    "file": "assets/main-O_dlssmF.js",
+    "file": "assets/main-E7MBKWRh.js",
     "name": "main",
     "src": "src/main.jsx",
     "isEntry": true,
     "css": [
-      "assets/main-BiG7bDhV.css"
+      "assets/main-DDy09xMc.css"
     ],
     "assets": [
       "assets/logo-primary-lYLJjCe0.svg",
-      "assets/logo-white-DsK07wrs.svg"
+      "assets/logo-white-DsK07wrs.svg",
+      "assets/Inter-Regular-COLGFB3M.woff2",
+      "assets/Inter-Medium-CDhBSFyE.woff2",
+      "assets/Inter-SemiBold-BAEEcJ4E.woff2",
+      "assets/Inter-Bold-BOs3KVhN.woff2"
     ]
   }
 }

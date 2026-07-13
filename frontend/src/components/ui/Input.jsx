@@ -1,6 +1,6 @@
 const variantClasses = {
   standard: "h-10 bg-black px-3 text-sm text-zinc-200 placeholder:text-zinc-600",
-  auth: "min-h-9 bg-nexus-panel2 px-3 py-2 text-xs text-white placeholder:text-zinc-500"
+  auth: "min-h-10 bg-nexus-panel2 px-3 text-sm text-white placeholder:text-zinc-500"
 };
 
 export default function Input({
@@ -18,7 +18,7 @@ export default function Input({
     : "border-nexus-line focus:border-nexus-orange focus:ring-nexus-orange/20";
   const input = (
     <input
-      className={`w-full rounded-md border outline-none focus:ring-2 disabled:bg-zinc-800/80 disabled:text-zinc-500 ${errorClasses} ${variantClasses[variant]} ${className}`.trim()}
+      className={`w-full rounded-control border outline-none transition-colors focus:ring-2 disabled:cursor-not-allowed disabled:bg-zinc-800/80 disabled:text-zinc-500 ${errorClasses} ${variantClasses[variant]} ${className}`.trim()}
       {...props}
     />
   );
@@ -31,8 +31,8 @@ export default function Input({
     <label className={`block ${wrapperClassName}`.trim()}>
       <span className={labelClassName}>{label}</span>
       <span className="mt-2 block">{input}</span>
-      {helperText ? <p className="mt-2 text-xs text-zinc-500">{helperText}</p> : null}
-      {error ? <p className="mt-2 text-xs font-semibold text-red-300">{error}</p> : null}
+      {helperText ? <p className="mt-2 bim-helper-text">{helperText}</p> : null}
+      {error ? <p className="mt-2 text-xs font-medium leading-5 text-red-300">{error}</p> : null}
     </label>
   );
 }

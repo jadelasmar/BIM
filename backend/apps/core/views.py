@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
+from django.core.exceptions import PermissionDenied
 from django.http import JsonResponse
 from django.middleware.csrf import get_token
 from django.shortcuts import render
@@ -24,6 +25,38 @@ from apps.stock.selectors import (
     user_can_use_stock_operations,
     user_can_view_stock,
 )
+
+
+WRITE_PAGE_PERMISSIONS = {
+    "inventory_add_product": (stock_constants.ADD_PRODUCT,),
+    "inventory_add_stock_unit": (stock_constants.ADD_PRODUCT_UNIT,),
+    "operations_receive_stock": (
+        stock_constants.ADD_RECEIVING_RECORD,
+        stock_constants.ADD_PRODUCT_UNIT,
+    ),
+    "operations_create_delivery": (
+        stock_constants.ADD_DELIVERY_RECORD,
+        stock_constants.CHANGE_PRODUCT_UNIT,
+    ),
+    "operations_create_reservation": (
+        stock_constants.ADD_RESERVATION_RECORD,
+        stock_constants.CHANGE_PRODUCT_UNIT,
+    ),
+    "operations_create_issue": (
+        stock_constants.ADD_ISSUE_RECORD,
+        stock_constants.CHANGE_PRODUCT_UNIT,
+    ),
+    "operations_create_repair": (
+        stock_constants.ADD_REPAIR_RECORD,
+        stock_constants.CHANGE_PRODUCT_UNIT,
+    ),
+    "operations_create_client_return": (
+        stock_constants.ADD_CLIENT_RETURN_RECORD,
+        stock_constants.CHANGE_PRODUCT_UNIT,
+    ),
+    "supplier_new": (stock_constants.ADD_SUPPLIER,),
+    "client_new": (stock_constants.ADD_CLIENT,),
+}
 
 
 def _format_count(value):
@@ -551,6 +584,13 @@ def command_center_data(request):
 
 @login_required
 def module_launcher(request, *args, **kwargs):
+    route_name = request.resolver_match.url_name
+    required_permissions = WRITE_PAGE_PERMISSIONS.get(route_name, ())
+    if required_permissions and not all(
+        request.user.has_perm(permission) for permission in required_permissions
+    ):
+        raise PermissionDenied
+
     initial_data = _build_command_center_initial_data(request)
 
     context = {

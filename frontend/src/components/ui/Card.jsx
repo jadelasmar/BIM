@@ -1,6 +1,6 @@
 export function Card({ as: Component = "section", className = "", children, ...props }) {
   return (
-    <Component className={`rounded-lg border border-nexus-line bg-nexus-panel ${className}`.trim()} {...props}>
+    <Component className={`bim-surface border ${className}`.trim()} {...props}>
       {children}
     </Component>
   );
@@ -16,7 +16,7 @@ export function CardHeader({ className = "", children, ...props }) {
 
 export function CardTitle({ as: Component = "h2", className = "", children, ...props }) {
   return (
-    <Component className={`text-xs font-bold uppercase tracking-[0.24em] text-zinc-400 ${className}`.trim()} {...props}>
+    <Component className={`bim-section-title ${className}`.trim()} {...props}>
       {children}
     </Component>
   );
@@ -24,7 +24,7 @@ export function CardTitle({ as: Component = "h2", className = "", children, ...p
 
 export function CardDescription({ className = "", children, ...props }) {
   return (
-    <p className={`mt-1 text-sm text-zinc-500 ${className}`.trim()} {...props}>
+    <p className={`mt-1 text-sm leading-6 text-zinc-500 ${className}`.trim()} {...props}>
       {children}
     </p>
   );
