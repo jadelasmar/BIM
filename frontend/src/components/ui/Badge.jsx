@@ -1,13 +1,14 @@
 import Icon from "../common/Icon";
 import { statusMeta } from "../../constants/statusStyles";
+import { TONE_COLORS } from "../../constants/toneColors";
 
 const toneClasses = {
-  neutral: "bg-zinc-500/15 text-zinc-400",
-  primary: "bg-amber-500/15 text-nexus-orange",
-  success: "bg-green-500/15 text-green-400",
-  warning: "bg-amber-500/15 text-amber-400",
-  danger: "bg-red-500/15 text-red-400",
-  info: "bg-blue-500/15 text-blue-400"
+  neutral: TONE_COLORS.zincSoft15,
+  primary: TONE_COLORS.amberSoft15Nexus,
+  success: TONE_COLORS.greenSoft15,
+  warning: TONE_COLORS.amberSoft15Amber,
+  danger: TONE_COLORS.redSoft15,
+  info: TONE_COLORS.blueSoft15
 };
 
 export default function Badge({ status, tone = "neutral", icon, children, className = "" }) {

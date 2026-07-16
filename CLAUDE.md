@@ -80,3 +80,14 @@ Django needs `BIM_VITE_DEV_SERVER` set (see `backend/bim/settings.py`) to point 
 - New permissions → add to `stock/constants.py` first, wire into `roles.py` group definitions if it should be included in Administrator/IT Support/Viewer.
 - New frontend page → check `constants/uiRegistry.js` and `components/ui/` first; reuse the existing primitives (`Card`, `Badge`, `Button`, `SearchBar`, `EmptyState`) rather than building new ones, to keep the design consistent.
 - Before any structural refactor (especially `AppRouter.jsx`), check `apps/stock/tests.py` for source-file assertions that would break.
+
+## Workflow: human-in-the-loop testing
+
+The user tests changes manually in the browser and reports back specific bugs or feedback — this is not a fully autonomous pipeline.
+
+- Keep changes scoped to what was asked. Avoid drive-by refactors or "while I'm here" fixes, even if they seem correct — they make the user's manual review harder and obscure what actually changed for a given fix. This does not override convention #3 above: if a reported bug is in one workflow's guard logic (reserve/issue/repair/return/cancel/resolve), check the other five workflows for the same bug as usual, since that's a documented project convention, not scope creep. Just call out clearly in the summary which files changed and why, so a multi-file fix is still easy to review.
+- For a small, well-defined bug fix (one component, one endpoint, one visual issue), it's fine to skip the full `superpowers` spec/plan flow and just make the fix directly, run the relevant backend/frontend check, and report what changed.
+- For a new feature, a schema change, or anything touching multiple files/apps, use `superpowers:subagent-driven-development` or `superpowers:executing-plans` as usual — the size of the change decides which path applies, not habit.
+- Don't write new automated tests for every one-line fix the user reports; match test effort to the size of the change, per existing testing guidelines in `AGENTS.md`.
+- After a fix, state plainly what to test and how (e.g. "reload the receiving page and confirm the cancel button now works for IT Support users") so the user's manual pass is fast and targeted.
+- If a reported bug turns out to require a larger or riskier change than described, say so and propose the plan/spec path before proceeding, rather than quietly expanding scope.

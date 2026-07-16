@@ -1,17 +1,19 @@
+import { TONE_COLORS } from "./toneColors";
+
 export const statusStyles = {
-  available: "bg-green-500/15 text-green-400",
-  cancelled: "bg-red-500/15 text-red-400",
-  delivered: "bg-blue-500/15 text-blue-400",
-  inactive: "bg-zinc-500/15 text-zinc-400",
-  issued: "bg-indigo-500/15 text-indigo-400",
-  low_stock: "bg-amber-500/15 text-amber-400",
-  out_of_stock: "bg-red-500/15 text-red-400",
-  received: "bg-emerald-500/15 text-emerald-400",
-  released: "bg-cyan-500/15 text-cyan-400",
-  repair: "bg-red-500/15 text-red-400",
-  reserved: "bg-amber-500/15 text-amber-400",
-  sold: "bg-purple-500/15 text-purple-400",
-  transfer: "bg-sky-500/15 text-sky-400"
+  available: TONE_COLORS.greenSoft15,
+  cancelled: TONE_COLORS.redSoft15,
+  delivered: TONE_COLORS.blueSoft15,
+  inactive: TONE_COLORS.zincSoft15,
+  issued: TONE_COLORS.indigoSoft15,
+  low_stock: TONE_COLORS.amberSoft15Amber,
+  out_of_stock: TONE_COLORS.redSoft15,
+  received: TONE_COLORS.emeraldSoft15,
+  released: TONE_COLORS.cyanSoft15,
+  repair: TONE_COLORS.redSoft15,
+  reserved: TONE_COLORS.amberSoft15Amber,
+  sold: TONE_COLORS.purpleSoft15,
+  transfer: TONE_COLORS.skySoft15
 };
 
 export const statusMeta = {

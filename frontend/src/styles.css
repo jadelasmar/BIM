@@ -39,9 +39,13 @@
   --bim-orange: #ff9b23;
   --bim-orange-hover: #ff9b23;
   --bim-green: #22c55e;
-  --bim-red: #ef4444;
-  --bim-blue: #3b82f6;
-  --bim-purple: #8b5cf6;
+  /* red/blue/purple below are one shade lighter than the original brand 500-tier
+     value (red-400/blue-400/violet-400) -- the 500 value fails 4.5:1 against the
+     --bim-panel-2 surface in dark mode (~4.3:1); see the light block for why these
+     tokens need a theme-aware split at all. */
+  --bim-red: #f87171;
+  --bim-blue: #60a5fa;
+  --bim-purple: #a78bfa;
   --bim-page: #0f0f10;
   --bim-panel: #18181b;
   --bim-panel-2: #202024;
@@ -51,6 +55,22 @@
   --bim-muted: #a1a1aa;
   --bim-card-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 12px 32px rgba(0, 0, 0, 0.12);
   --bim-focus-ring: rgba(255, 155, 35, 0.3);
+  --bim-orange-focus: #ff9b23;
+  --bim-orange-text: #ff9b23;
+  /* Text colors for the 13 toneColors.js "soft chip" entries that use a raw
+     Tailwind -400 shade (not a --bim-* brand token). Dark values are the original
+     -400 hex, unchanged -- these already pass 4.5:1 in dark mode. Light values are
+     set in the light block below. */
+  --tone-red-text: #f87171;
+  --tone-green-text: #4ade80;
+  --tone-emerald-text: #34d399;
+  --tone-blue-text: #60a5fa;
+  --tone-amber-text: #fbbf24;
+  --tone-indigo-text: #818cf8;
+  --tone-cyan-text: #22d3ee;
+  --tone-purple-text: #c084fc;
+  --tone-sky-text: #38bdf8;
+  --tone-yellow-text: #facc15;
   --bim-error-surface: rgba(239, 68, 68, 0.1);
   --bim-error-text: #fca5a5;
   --bim-disabled-surface: #27272a;
@@ -62,6 +82,16 @@
 }
 
 :root[data-theme="light"] {
+  /* red/green/blue/purple are flat (dark-tuned) everywhere else in this file; these
+     four are the only ones with genuine brand/status meaning across the app, so they
+     get a real light-mode value here instead of just inheriting the dark one. Each
+     is the shallowest step down the Tailwind scale that clears 4.5:1 against every
+     surface it's actually rendered on (plain panel/panel-2/page AND the tinted chip
+     backgrounds in toneColors.js) -- see the design-system audit for the full matrix. */
+  --bim-red: #b91c1c;
+  --bim-green: #15803d;
+  --bim-blue: #2563eb;
+  --bim-purple: #7c3aed;
   --bim-page: #fafafa;
   --bim-panel: #ffffff;
   --bim-panel-2: #f8fafc;
@@ -75,6 +105,26 @@
   --bim-table-header: #f8fafc;
   --bim-card-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px rgba(15, 23, 42, 0.04);
   --bim-focus-ring: rgba(234, 120, 18, 0.24);
+  /* Base orange (#ff9b23) is ~2:1 against light-mode surfaces; this deeper shade keeps
+     focus indicators at/above the 3:1 non-text contrast minimum on white/near-white inputs. */
+  --bim-orange-focus: #ea580c;
+  /* --bim-orange-focus (#ea580c, ~3.56:1) clears the 3:1 non-text minimum but not the
+     4.5:1 text minimum. This deeper shade is for orange text/links on light surfaces. */
+  --bim-orange-text: #c2410c;
+  /* Each is the shallowest Tailwind shade (verified by script against the entry's
+     actual blended chip background, not raw white) that clears 4.5:1 in light mode.
+     greenSoft15 (green-800) and amberSoft15Amber (amber-800) needed a 3-step jump --
+     flagged for a visual sanity check, everything else is a 1-2 step darkening. */
+  --tone-red-text: #b91c1c; /* red-700 */
+  --tone-green-text: #166534; /* green-800 */
+  --tone-emerald-text: #047857; /* emerald-700 */
+  --tone-blue-text: #1d4ed8; /* blue-700 */
+  --tone-amber-text: #92400e; /* amber-800 */
+  --tone-indigo-text: #4f46e5; /* indigo-600 */
+  --tone-cyan-text: #0e7490; /* cyan-700 */
+  --tone-purple-text: #7e22ce; /* purple-700 */
+  --tone-sky-text: #0369a1; /* sky-700 */
+  --tone-yellow-text: #a16207; /* yellow-700 */
   --bim-error-surface: #fef2f2;
   --bim-error-text: #991b1b;
   --bim-disabled-surface: #f1f5f9;
@@ -218,6 +268,12 @@ textarea {
   border-color: rgba(220, 38, 38, 0.55);
   background-color: #fef2f2;
   color: #991b1b;
+}
+
+/* Softens the password-visibility icon in light mode so it doesn't outweigh the
+   (intentionally faint) input border; kept just above the 3:1 non-text contrast floor. */
+[data-theme="light"] .bim-auth-eye-toggle {
+  opacity: 0.8;
 }
 
 summary::-webkit-details-marker {

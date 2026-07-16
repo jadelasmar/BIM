@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Eye, EyeOff, Moon, Sun } from "../../constants/icons";
 import { Button, Input } from "../../components/ui";
 import { DEFAULT_THEME_STORAGE_KEY, applyTheme, currentTheme } from "../../hooks/useTheme";
@@ -25,14 +25,17 @@ function AuthShell({ title, subtitle, children }) {
         <button
           type="button"
           onClick={() => setThemeState(applyTheme(isLight ? "dark" : "light", DEFAULT_THEME_STORAGE_KEY))}
-          className="absolute right-0 top-[-46px] grid h-9 w-9 place-items-center rounded-control border border-nexus-line bg-nexus-panel text-zinc-200 shadow-panel focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-nexus-orange focus-visible:ring-offset-2 focus-visible:ring-offset-nexus-page"
+          className="absolute right-0 top-[-46px] grid h-9 w-9 place-items-center rounded-control border border-nexus-line bg-nexus-panel text-zinc-200 shadow-panel focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--bim-orange-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-nexus-page"
           aria-label={isLight ? "Switch to dark theme" : "Switch to light theme"}
           title="Switch theme"
         >
           {isLight ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
         </button>
 
-        <section className="rounded-xl border border-nexus-line bg-nexus-panel p-4 shadow-panel" aria-labelledby="auth-title">
+        <section
+          className={`rounded-xl border bg-nexus-panel p-4 shadow-panel ${isLight ? "border-nexus-line" : "border-white/10"}`}
+          aria-labelledby="auth-title"
+        >
           <header className="grid gap-3 pb-5 text-center">
             <img className="bim-sidebar-logo-dark mx-auto h-auto w-[min(221px,100%)]" src={logoWhite} alt="BIM Nexus" />
             <img className="bim-sidebar-logo-light mx-auto h-auto w-[min(221px,100%)]" src={logoPrimary} alt="BIM Nexus" />
@@ -96,6 +99,8 @@ export function LoginPage({ data }) {
   const [username, setUsername] = useState(data.username || "");
   const [password, setPassword] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingRef = useRef(false);
   const next = data.next || "";
   const trimmedUsername = username.trim();
   const emailValue = trimmedUsername.includes("@") ? trimmedUsername : "";
@@ -108,6 +113,12 @@ export function LoginPage({ data }) {
     `&body=${encodeURIComponent(body)}`;
 
   function handleSubmit(event) {
+    if (submittingRef.current) {
+      // Re-entrant call from the deferred form.requestSubmit() below — let it
+      // through as a real, native submission.
+      return;
+    }
+
     const errors = {};
 
     if (!trimmedUsername) {
@@ -123,8 +134,25 @@ export function LoginPage({ data }) {
       return;
     }
 
-    event.currentTarget.elements.username.value = trimmedUsername;
+    // This form does a native full-page POST (success redirects to the dashboard,
+    // failure re-renders this same page from the server) — there's no client-side
+    // fetch to hook a loading state to. On a fast server response (e.g. an invalid-
+    // credentials re-render, which is quicker than the success path's redirect +
+    // dashboard fetch), the browser can replace the document before ever painting
+    // the "Loading..." state. Defer the real submission by two animation frames so
+    // a paint is guaranteed first, then resubmit natively.
+    event.preventDefault();
+    const form = event.currentTarget;
+    form.elements.username.value = trimmedUsername;
     setUsername(trimmedUsername);
+    submittingRef.current = true;
+    setIsSubmitting(true);
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        form.requestSubmit();
+      });
+    });
   }
 
   return (
@@ -175,7 +203,7 @@ export function LoginPage({ data }) {
             <button
               type="button"
               onClick={() => setShowPassword((value) => !value)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white"
+              className="bim-auth-eye-toggle absolute right-3 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center text-zinc-500 hover:text-white"
               aria-label={showPassword ? "Hide password" : "Show password"}
               title={showPassword ? "Hide password" : "Show password"}
               aria-pressed={showPassword}
@@ -194,7 +222,7 @@ export function LoginPage({ data }) {
           First login or forgot password?{" "}
           <a
             href={administratorMailto}
-            className="font-semibold text-nexus-orange hover:underline"
+            className="font-semibold text-[var(--bim-orange-text)] hover:underline"
           >
             Ask an administrator
           </a>{" "}
@@ -202,12 +230,12 @@ export function LoginPage({ data }) {
         </p>
 
         <input type="hidden" name="next" value={next} />
-        <Button className="px-3" size="sm" type="submit" variant="primary">
+        <Button className="px-3" size="sm" type="submit" variant="primary" loading={isSubmitting}>
           Sign In
         </Button>
       </form>
 
-      <p className="mt-5 text-center text-[10px] leading-4 text-zinc-500">
+      <p className="mt-5 text-center text-[10px] leading-4 text-zinc-400">
         Built for <strong className="font-medium text-white">BIMPOS</strong>
       </p>
     </AuthShell>
