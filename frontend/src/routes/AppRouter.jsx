@@ -1,7 +1,9 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Camera,
+  Check,
   ChevronRight,
+  Circle,
   Edit3,
   Eye,
   Filter,
@@ -6792,16 +6794,18 @@ function AddProductPreview({
         <div className="space-y-2 border-t border-nexus-line pt-4">
           <h3 className="bim-label">Required</h3>
           {missing.map(([label, done]) => (
-            <p key={label} className={`text-sm ${done ? "text-zinc-300" : "text-zinc-600"}`}>
-              {done ? "âœ“" : "â—‹"} {label}
+            <p key={label} className={`flex items-center gap-1.5 text-sm ${done ? "text-zinc-300" : "text-zinc-600"}`}>
+              {done ? <Check className="h-3.5 w-3.5 shrink-0" /> : <Circle className="h-3.5 w-3.5 shrink-0" />}
+              {label}
             </p>
           ))}
         </div>
         <div className="space-y-2 border-t border-nexus-line pt-4">
           <h3 className="bim-label">Optional</h3>
           {optionalFields.map(([label, done]) => (
-            <p key={label} className={`text-sm ${done ? "text-zinc-300" : "text-zinc-600"}`}>
-              {done ? "âœ“" : "â—‹"} {label}
+            <p key={label} className={`flex items-center gap-1.5 text-sm ${done ? "text-zinc-300" : "text-zinc-600"}`}>
+              {done ? <Check className="h-3.5 w-3.5 shrink-0" /> : <Circle className="h-3.5 w-3.5 shrink-0" />}
+              {label}
             </p>
           ))}
         </div>
@@ -6898,6 +6902,38 @@ function QuickAddMenu({ actions }) {
   );
 }
 
+function parseCardCount(value) {
+  if (typeof value === "number") {
+    return value;
+  }
+  if (typeof value !== "string") {
+    return NaN;
+  }
+  const parsed = Number(value.replace(/,/g, ""));
+  return Number.isFinite(parsed) ? parsed : NaN;
+}
+
+// Command Center icon tint: neutral by default for every card, full stop. Only
+// the three cards below carry real severity/state, and each is computed here
+// from the live count rather than trusted from item.tone -- the backend's
+// low_stock_tone/out_of_stock_tone (apps/core/views.py) happen to compute the
+// same thing, but this doesn't rely on that staying true. Any card not listed
+// here -- including one added later -- renders neutral automatically; nothing
+// silently inherits a static backend tone the way the Clients card once did.
+function dynamicIconTone(item) {
+  const count = parseCardCount(item.value);
+  if (item.label === "Available Stock") {
+    return count > 0 ? "green" : "neutral";
+  }
+  if (item.label === "Low Stock Alerts") {
+    return count > 0 ? "warning" : "neutral";
+  }
+  if (item.label === "Out of Stock Products") {
+    return count > 0 ? "danger" : "neutral";
+  }
+  return "neutral";
+}
+
 function KpiGrid({ items }) {
   return (
     <section className="grid gap-3 md:grid-cols-2 2xl:grid-cols-4" aria-label="Key metrics">
@@ -6915,7 +6951,7 @@ function KpiGrid({ items }) {
           <>
             <div className="flex items-start justify-between gap-3">
               <p className="text-sm font-medium text-zinc-400">{item.label}</p>
-              <span className={`rounded-md p-2 ${toneClasses[item.tone] || toneClasses.neutral}`}>
+              <span className={`rounded-md p-2 ${toneClasses[dynamicIconTone(item)] || toneClasses.neutral}`}>
                 <Icon name={item.icon} />
               </span>
             </div>
@@ -6968,7 +7004,7 @@ function Overview({ items }) {
           }`;
           const content = (
             <>
-              <span className={`rounded-md p-2 ${toneClasses[item.tone] || toneClasses.neutral}`}>
+              <span className={`rounded-md p-2 ${toneClasses[dynamicIconTone(item)] || toneClasses.neutral}`}>
                 <Icon name={item.icon} />
               </span>
               <div className="min-w-0 flex-1">

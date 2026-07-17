@@ -4,8 +4,10 @@ import {
   BookOpen,
   Box,
   Camera,
+  Check,
   CheckCircle2,
   ChevronRight,
+  Circle,
   ClipboardList,
   Clock3,
   Cpu,
@@ -46,7 +48,9 @@ import {
 
 export {
   Camera,
+  Check,
   ChevronRight,
+  Circle,
   Edit3,
   Eye,
   EyeOff,

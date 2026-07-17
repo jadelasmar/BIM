@@ -264,6 +264,28 @@ textarea {
   background-color: var(--bim-hover-surface);
 }
 
+/* Generic light-mode remap for variant-prefixed zinc/black/white utilities. Tailwind
+   compiles e.g. `disabled:bg-zinc-800/80` to its own selector, entirely separate from
+   the bare `.bg-zinc-800` class above -- the bare-class rules don't (and structurally
+   can't) also match the variant form, which is why the same "dark box in light mode"
+   bug kept reappearing in different components (SKU Preview, SelectInput,
+   SearchableCreatableSelect) despite fixing it once. These match on the literal class
+   text instead of an exact selector, so they catch the pattern regardless of which
+   component uses it -- add a new rule here, not a one-off bare-class override, if a
+   future variant+zinc/black/white combination needs one. See the variant-class gap
+   audit for the full investigation. */
+[data-theme="light"] [class*="disabled:bg-zinc-800/80"]:disabled {
+  background-color: var(--bim-disabled-surface);
+}
+
+[data-theme="light"] [class*="disabled:text-zinc-500"]:disabled {
+  color: var(--bim-muted);
+}
+
+[data-theme="light"] .group:hover [class*="group-hover:text-zinc-300"] {
+  color: var(--bim-text);
+}
+
 [data-theme="light"] .auth-error-alert {
   border-color: rgba(220, 38, 38, 0.55);
   background-color: #fef2f2;

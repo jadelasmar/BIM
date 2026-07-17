@@ -26,7 +26,7 @@ export default function Input({
     : `border-nexus-line ${focusClasses[variant]}`;
   const input = (
     <input
-      className={`w-full rounded-control border outline-none transition-colors focus:ring-2 disabled:cursor-not-allowed disabled:bg-zinc-800/80 disabled:text-zinc-500 ${errorClasses} ${variantClasses[variant]} ${className}`.trim()}
+      className={`w-full rounded-control border outline-none transition-colors focus:ring-2 disabled:cursor-not-allowed disabled:bg-[var(--bim-disabled-surface)] disabled:text-[var(--bim-muted)] ${errorClasses} ${variantClasses[variant]} ${className}`.trim()}
       {...props}
     />
   );
