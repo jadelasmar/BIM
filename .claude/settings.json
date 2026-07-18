@@ -1,18 +1,36 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "model": "opusplan",
+  "effortLevel": "high",
+  "initialPermissionMode": "acceptEdits",
   "permissions": {
     "allow": [
-      "Bash",
-      "Read",
-      "Glob",
-      "Grep"
+      "Edit",
+      "Write",
+      "Bash(*)",
+      "Bash(rm:*claude*scratchpad*)",
+      "Bash(rm -f:*claude*scratchpad*)"
     ],
     "ask": [
-      "Bash(python manage.py shell:*)",
-      "Bash(python manage.py dbshell:*)",
       "Bash(python manage.py migrate:*)",
       "Bash(python manage.py makemigrations)",
-      "Bash(sqlite3:*)"
+      "Bash(python manage.py flush:*)",
+      "Bash(python manage.py loaddata:*)",
+      "Bash(python manage.py dbshell:*)",
+      "Bash(python manage.py sqlmigrate:*)",
+      "Bash(python manage.py dumpdata:*)",
+      "Bash(rm -rf:*)",
+      "Bash(git push:*)",
+      "Bash(git reset:*)",
+      "Bash(git commit:*)"
+    ],
+    "deny": [
+      "Edit(backend/static/frontend/**)",
+      "Write(backend/static/frontend/**)",
+      "Read(.env)",
+      "Read(.env.*)",
+      "Read(**/*.pem)",
+      "Read(**/db.sqlite3)"
     ]
   }
 }

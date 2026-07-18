@@ -9,7 +9,7 @@ export default function SearchBar({
   ...props
 }) {
   return (
-    <label className={`flex h-10 items-center gap-3 rounded-control border border-nexus-line bg-black px-3 text-zinc-500 transition-colors focus-within:border-nexus-orange focus-within:ring-2 focus-within:ring-nexus-orange/20 ${className}`.trim()}>
+    <label className={`flex h-10 items-center gap-3 rounded-control border border-nexus-line bg-black px-3 text-zinc-500 transition-colors focus-within:border-[var(--bim-orange-focus)] focus-within:ring-2 focus-within:ring-[rgb(var(--bim-orange-focus-rgb)/20%)] ${className}`.trim()}>
       <Search className="h-4 w-4" aria-hidden="true" />
       <input
         value={value}

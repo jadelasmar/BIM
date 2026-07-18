@@ -4,3 +4,4 @@ export { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 export { default as EmptyState } from "./EmptyState";
 export { default as Input } from "./Input";
 export { default as SearchBar } from "./SearchBar";
+export { ToastProvider, useToast } from "./Toast";

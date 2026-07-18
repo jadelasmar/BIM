@@ -37,7 +37,11 @@
 :root {
   --bim-font-family: "Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --bim-orange: #ff9b23;
-  --bim-orange-hover: #ff9b23;
+  /* Was defined but never referenced anywhere -- activating it here for hover/
+     group-hover TEXT specifically (distinct from --bim-orange-focus's border/ring
+     role and --bim-orange-text's static-text role). Dark value is unchanged from
+     what hover:text-orange-300 already rendered; only the light value is new. */
+  --bim-orange-hover: #fdba74;
   --bim-green: #22c55e;
   /* red/blue/purple below are one shade lighter than the original brand 500-tier
      value (red-400/blue-400/violet-400) -- the 500 value fails 4.5:1 against the
@@ -46,6 +50,20 @@
   --bim-red: #f87171;
   --bim-blue: #60a5fa;
   --bim-purple: #a78bfa;
+  /* RGB-channel companions (space-separated, no commas -- matches Tailwind's own
+     internal color-token format) for every --bim-* color that's used anywhere with
+     a Tailwind opacity modifier (e.g. border-nexus-red/60, ring-[var(--bim-orange-
+     focus)]/40). Tailwind cannot apply an opacity modifier to a var() reference --
+     it needs the literal R G B numbers at build time to inject an alpha channel, and
+     a CSS custom property is opaque to it until the browser resolves it at runtime.
+     Every affected call site now uses the CSS-native form instead:
+     bg-[rgb(var(--bim-red-rgb)/60%)] -- which needs no Tailwind opacity support at
+     all, since the alpha is already part of the literal rgb() value. See the
+     opacity-on-var() audit for the full list of what this replaced. */
+  --bim-red-rgb: 248 113 113;
+  --bim-green-rgb: 34 197 94;
+  --bim-orange-rgb: 255 155 35;
+  --bim-orange-focus-rgb: 255 155 35;
   --bim-page: #0f0f10;
   --bim-panel: #18181b;
   --bim-panel-2: #202024;
@@ -54,6 +72,11 @@
   --bim-text: #f4f4f5;
   --bim-muted: #a1a1aa;
   --bim-card-shadow: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 12px 32px rgba(0, 0, 0, 0.12);
+  /* Deeper/more spread than --bim-card-shadow, for a hover-elevation lift on
+     clickable cards (KPI/Overview). The plain bg-shift alone measured ~1.05-1.09
+     luminance ratio -- near-imperceptible -- so this carries real signal alongside
+     the hover border-color change; see --bim-muted reuse at the call site. */
+  --bim-card-shadow-hover: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 16px 40px rgba(0, 0, 0, 0.35);
   --bim-focus-ring: rgba(255, 155, 35, 0.3);
   --bim-orange-focus: #ff9b23;
   --bim-orange-text: #ff9b23;
@@ -92,6 +115,9 @@
   --bim-green: #15803d;
   --bim-blue: #2563eb;
   --bim-purple: #7c3aed;
+  --bim-red-rgb: 185 28 28;
+  --bim-green-rgb: 21 128 61;
+  --bim-orange-rgb: 255 155 35;
   --bim-page: #fafafa;
   --bim-panel: #ffffff;
   --bim-panel-2: #f8fafc;
@@ -104,13 +130,22 @@
   --bim-hover-surface: #f9fafb;
   --bim-table-header: #f8fafc;
   --bim-card-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 8px 24px rgba(15, 23, 42, 0.04);
+  --bim-card-shadow-hover: 0 2px 4px rgba(15, 23, 42, 0.08), 0 16px 40px rgba(15, 23, 42, 0.12);
   --bim-focus-ring: rgba(234, 120, 18, 0.24);
   /* Base orange (#ff9b23) is ~2:1 against light-mode surfaces; this deeper shade keeps
      focus indicators at/above the 3:1 non-text contrast minimum on white/near-white inputs. */
   --bim-orange-focus: #ea580c;
+  --bim-orange-focus-rgb: 234 88 12;
   /* --bim-orange-focus (#ea580c, ~3.56:1) clears the 3:1 non-text minimum but not the
      4.5:1 text minimum. This deeper shade is for orange text/links on light surfaces. */
   --bim-orange-text: #c2410c;
+  /* One step darker than --bim-orange-text (orange-800 vs orange-700) so hover
+     reads as a distinct, more-emphasized state rather than identical to resting
+     text -- mirrors dark mode's hover:text-orange-300 being lighter than resting
+     nexus-orange. Flagged as a visual sanity-check item: this is a bigger jump
+     than --bim-orange-text's, same category as green-800/amber-800 in the badge
+     work. */
+  --bim-orange-hover: #9a3412;
   /* Each is the shallowest Tailwind shade (verified by script against the entry's
      actual blended chip background, not raw white) that clears 4.5:1 in light mode.
      greenSoft15 (green-800) and amberSoft15Amber (amber-800) needed a 3-step jump --
@@ -244,8 +279,14 @@ textarea {
   box-shadow: var(--bim-card-shadow);
 }
 
-[data-theme="light"] .bg-nexus-panel.border,
-[data-theme="light"] .bg-nexus-panel.border-nexus-line {
+/* :not(:focus) is deliberate: without it, this rule's specificity (0,3,0 --
+   attribute + 2 classes) beats a focus ring's box-shadow rule (0,2,0 -- class +
+   :focus), so any focusable .bg-nexus-panel.border/.border-nexus-line element
+   (e.g. the KPI/Overview cards) got its focus ring silently overwritten by the
+   plain resting shadow in light mode only -- dark mode has no such override to
+   compete with, which is why the ring only ever showed in dark mode. */
+[data-theme="light"] .bg-nexus-panel.border:not(:focus),
+[data-theme="light"] .bg-nexus-panel.border-nexus-line:not(:focus) {
   box-shadow: var(--bim-card-shadow);
 }
 

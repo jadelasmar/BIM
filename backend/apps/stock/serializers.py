@@ -218,13 +218,12 @@ class ProductSerializer(serializers.ModelSerializer):
         model_name = attrs.get("model_name_input", "").strip()
 
         if not model and not (brand and model_name):
-            raise serializers.ValidationError(
-                {
-                    "model_name_input": (
-                        "Select an existing model or enter a brand and model name."
-                    )
-                }
-            )
+            errors = {}
+            if not brand:
+                errors["brand"] = "Brand is required to save a Model name."
+            if not model_name:
+                errors["model_name_input"] = "Enter a Model name."
+            raise serializers.ValidationError(errors)
 
         return attrs
 

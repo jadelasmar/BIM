@@ -32,7 +32,8 @@ import {
   CardTitle,
   EmptyState,
   Input,
-  SearchBar
+  SearchBar,
+  useToast
 } from "../components/ui";
 import { statusMeta } from "../constants/statusStyles";
 import { toneClasses, workflowMeta } from "../constants/uiRegistry";
@@ -146,7 +147,7 @@ function Sidebar({ data, secondaryNavigation, isOpen, onClose }) {
             >
               <Icon
                 name={item.icon}
-                className={`h-4 w-4 ${item.active ? "text-nexus-orange" : "text-zinc-500 group-hover:text-zinc-300"}`}
+                className={`h-4 w-4 ${item.active ? "text-[var(--bim-orange-text)]" : "text-zinc-500 group-hover:text-zinc-300"}`}
               />
               {item.name}
             </a>
@@ -173,7 +174,7 @@ function Sidebar({ data, secondaryNavigation, isOpen, onClose }) {
                 >
                   <Icon
                     name={item.icon}
-                    className={`h-4 w-4 ${item.active ? "text-nexus-orange" : "text-zinc-500 group-hover:text-zinc-300"}`}
+                    className={`h-4 w-4 ${item.active ? "text-[var(--bim-orange-text)]" : "text-zinc-500 group-hover:text-zinc-300"}`}
                   />
                   {item.name}
                 </a>
@@ -334,7 +335,7 @@ function SettingsPage({ data }) {
 
       <section className="max-w-xl rounded-lg border border-nexus-line bg-nexus-panel p-5">
         <div className="flex items-start gap-3 border-b border-nexus-line pb-5">
-          <span className="rounded-lg bg-nexus-orange/10 p-2 text-nexus-orange">
+          <span className="rounded-lg bg-[rgb(var(--bim-orange-rgb)/10%)] p-2 text-[var(--bim-orange-text)]">
             <Settings className="h-5 w-5" />
           </span>
           <div>
@@ -354,7 +355,7 @@ function SettingsPage({ data }) {
               onClick={() => setTheme(value)}
               className={`rounded-lg border p-4 text-left ${
                 theme === value
-                  ? "border-nexus-orange bg-nexus-orange/10"
+                  ? "border-[var(--bim-orange-focus)] bg-[rgb(var(--bim-orange-rgb)/10%)]"
                   : "border-nexus-line bg-nexus-panel2"
               }`}
             >
@@ -514,7 +515,7 @@ function MasterDataTable({ config, records, loading, error }) {
               records.map((record) => (
                 <tr key={record.id} className="border-t border-nexus-line hover:bg-zinc-900/70">
                   <td className="px-4 py-4">
-                    <a href={`${config.path}${record.id}/`} className="font-semibold text-white hover:text-nexus-orange">
+                    <a href={`${config.path}${record.id}/`} className="font-semibold text-white hover:text-[var(--bim-orange-hover)]">
                       {record.name}
                     </a>
                     <p className="mt-1 text-xs text-zinc-500">{record.notes || "Operational master data"}</p>
@@ -559,7 +560,8 @@ function MasterDataDetailPage({ data, type, isNew = false }) {
   });
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const { showSuccess, showError } = useToast();
 
   useEffect(() => {
     if (isNew || !recordId) return undefined;
@@ -567,7 +569,7 @@ function MasterDataDetailPage({ data, type, isNew = false }) {
 
     async function loadRecord() {
       setLoading(true);
-      setError("");
+      setLoadError("");
       try {
         const response = await fetch(`${data.api[config.apiKey]}${recordId}/`, { signal: controller.signal });
         if (!response.ok) {
@@ -582,9 +584,9 @@ function MasterDataDetailPage({ data, type, isNew = false }) {
           notes: record.notes || "",
           isactive: record.isactive !== false
         });
-      } catch (loadError) {
-        if (loadError.name !== "AbortError") {
-          setError(loadError.message);
+      } catch (loadFailure) {
+        if (loadFailure.name !== "AbortError") {
+          setLoadError(loadFailure.message);
         }
       } finally {
         setLoading(false);
@@ -602,7 +604,6 @@ function MasterDataDetailPage({ data, type, isNew = false }) {
   async function saveRecord() {
     if (!canSave) return;
     setSaving(true);
-    setError("");
     try {
       if (!form.name.trim()) {
         throw new Error(`${config.singular} name is required.`);
@@ -621,9 +622,10 @@ function MasterDataDetailPage({ data, type, isNew = false }) {
         throw new Error(firstApiError(details) || `Could not save ${config.singular.toLowerCase()}.`);
       }
       const saved = await response.json();
+      showSuccess(`${config.singular} saved.`);
       window.location.assign(`${config.path}${saved.id}/`);
     } catch (saveError) {
-      setError(saveError.message);
+      showError(saveError.message);
     } finally {
       setSaving(false);
     }
@@ -633,7 +635,7 @@ function MasterDataDetailPage({ data, type, isNew = false }) {
     <Shell data={data}>
       <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <a href={data.routes[config.routeKey]} className="mb-2 inline-flex text-sm font-semibold text-nexus-orange hover:text-orange-300">
+          <a href={data.routes[config.routeKey]} className="mb-2 inline-flex text-sm font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
             Back to {config.title}
           </a>
           <h1 className="bim-page-title">{isNew ? `Add ${config.singular}` : config.singular}</h1>
@@ -647,9 +649,9 @@ function MasterDataDetailPage({ data, type, isNew = false }) {
         ) : null}
       </header>
 
-      {error ? (
-        <div className="mb-4 rounded-lg border border-nexus-red/60 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-200">
-          {error}
+      {loadError ? (
+        <div className="mb-4 rounded-lg border border-[rgb(var(--bim-red-rgb)/60%)] bg-red-500/10 px-4 py-3 text-sm font-semibold text-[var(--tone-red-text)]">
+          {loadError}
         </div>
       ) : null}
       {!canSave ? (
@@ -791,7 +793,7 @@ function OperationsPage({ data }) {
                 {workflow.detail}
               </p>
               <div className="mt-5 border-t border-nexus-line pt-3 text-sm font-semibold">
-                <span className={workflow.enabled ? "text-nexus-orange" : "text-zinc-600"}>
+                <span className={workflow.enabled ? "text-[var(--bim-orange-text)]" : "text-zinc-600"}>
                   {workflow.enabled ? "Open" : "Pending"}
                 </span>
               </div>
@@ -799,7 +801,7 @@ function OperationsPage({ data }) {
           );
 
           return workflow.enabled && workflow.href ? (
-            <a key={workflow.title} href={workflow.href} className="rounded-lg border border-nexus-line bg-nexus-panel p-5 hover:border-nexus-orange/80">
+            <a key={workflow.title} href={workflow.href} className="rounded-lg border border-nexus-line bg-nexus-panel p-5 hover:border-[rgb(var(--bim-orange-focus-rgb)/80%)]">
               {content}
             </a>
           ) : (
@@ -945,7 +947,7 @@ function ReceivingRecordsTable({ records, loading, error }) {
               records.map((record) => (
                 <tr key={record.id} className="border-t border-nexus-line hover:bg-zinc-900/70">
                   <td className="px-4 py-4">
-                    <p className="font-mono text-xs font-bold text-nexus-orange">{record.receiving_number}</p>
+                    <p className="font-mono text-xs font-bold text-[var(--bim-orange-text)]">{record.receiving_number}</p>
                     <p className="mt-1 text-xs text-zinc-500">Created by {record.created_by_name || "-"}</p>
                   </td>
                   <td className="px-4 py-4">
@@ -1005,7 +1007,7 @@ function ReceivingRecordDetailPage({ data }) {
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelling, setCancelling] = useState(false);
-  const [cancelError, setCancelError] = useState("");
+  const { showError } = useToast();
 
   const isCancelled = record?.status === "cancelled" || record?.isactive === false;
   const canEditReceiving = Boolean(data.permissions?.canEditReceiving);
@@ -1119,7 +1121,6 @@ function ReceivingRecordDetailPage({ data }) {
   async function cancelReceivingRecord() {
     if (!canCancelReceiving) return;
     setCancelling(true);
-    setCancelError("");
     setCorrectionMessage("");
     try {
       if (!cancelReason.trim()) {
@@ -1143,7 +1144,7 @@ function ReceivingRecordDetailPage({ data }) {
       setCorrectionMessage("Receiving record cancelled. Linked available stock units were made inactive.");
       setReloadKey((current) => current + 1);
     } catch (cancelSaveError) {
-      setCancelError(cancelSaveError.message);
+      showError(cancelSaveError.message);
     } finally {
       setCancelling(false);
     }
@@ -1153,7 +1154,7 @@ function ReceivingRecordDetailPage({ data }) {
     <Shell data={data}>
       <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <a href={data.routes.receivingRecords} className="inline-flex items-center gap-2 text-sm font-semibold text-nexus-orange hover:text-orange-300">
+          <a href={data.routes.receivingRecords} className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
             <ChevronRight className="h-4 w-4 rotate-180" />
             Back to Receiving Records
           </a>
@@ -1184,7 +1185,7 @@ function ReceivingRecordDetailPage({ data }) {
       </header>
 
       {correctionMessage ? (
-        <section className="mb-4 rounded-lg border border-nexus-green/50 bg-green-500/10 px-4 py-3 text-sm font-semibold text-green-200">
+        <section className="mb-4 rounded-lg border border-[rgb(var(--bim-green-rgb)/50%)] bg-green-500/10 px-4 py-3 text-sm font-semibold text-green-200">
           {correctionMessage}
         </section>
       ) : null}
@@ -1194,7 +1195,7 @@ function ReceivingRecordDetailPage({ data }) {
           Loading receiving record...
         </section>
       ) : error ? (
-        <section className="rounded-lg border border-nexus-red/60 bg-red-500/10 p-6 text-sm font-semibold text-red-200">
+        <section className="rounded-lg border border-[rgb(var(--bim-red-rgb)/60%)] bg-red-500/10 p-6 text-sm font-semibold text-[var(--tone-red-text)]">
           {error}
         </section>
       ) : notFound ? (
@@ -1223,11 +1224,11 @@ function ReceivingRecordDetailPage({ data }) {
         ) : null}
 
         {cancelOpen && canCancelReceiving ? (
-          <section className="mb-5 rounded-lg border border-nexus-red/60 bg-red-500/10 p-5">
+          <section className="mb-5 rounded-lg border border-[rgb(var(--bim-red-rgb)/60%)] bg-red-500/10 p-5">
             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div>
-                <h2 className="text-sm font-bold text-red-100">Cancel receiving record</h2>
-                <p className="mt-1 text-sm text-red-200/80">
+                <h2 className="text-sm font-bold text-[var(--tone-red-text)]">Cancel receiving record</h2>
+                <p className="mt-1 text-sm text-[rgb(var(--bim-red-rgb)/80%)]">
                   Cancellation is only allowed while linked stock units are still available and unused. Wrong product, quantity, or serial entries should be cancelled and recreated when safe.
                 </p>
               </div>
@@ -1241,7 +1242,6 @@ function ReceivingRecordDetailPage({ data }) {
                 <TextInput value={cancelReason} onChange={setCancelReason} placeholder="Explain the receiving mistake" />
               </Field>
             </div>
-            {cancelError ? <p className="mt-3 text-sm font-semibold text-red-200">{cancelError}</p> : null}
             <div className="mt-4 flex flex-wrap gap-3">
               <Button type="button" variant="danger" loading={cancelling} onClick={cancelReceivingRecord}>
                 <RotateCcw className="h-4 w-4" />
@@ -1260,7 +1260,7 @@ function ReceivingRecordDetailPage({ data }) {
               <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                 <div>
                   <p className="bim-section-title">Receiving Number</p>
-                  <h2 className="mt-2 font-mono text-2xl font-bold text-nexus-orange">{record.receiving_number}</h2>
+                  <h2 className="mt-2 font-mono text-2xl font-bold text-[var(--bim-orange-text)]">{record.receiving_number}</h2>
                 </div>
                 <div className="grid gap-3 text-sm md:min-w-48 md:text-right">
                   <div>
@@ -1385,7 +1385,7 @@ function ReceivingCorrectionPanel({
         </div>
       ) : null}
 
-      {error ? <p className="mt-3 text-sm font-semibold text-red-200">{error}</p> : null}
+      {error ? <p className="mt-3 text-sm font-semibold text-[var(--tone-red-text)]">{error}</p> : null}
       <div className="mt-5 flex flex-wrap gap-3">
         <Button type="button" variant="primary" loading={saving} onClick={onSave}>
           <Save className="h-4 w-4" />
@@ -1582,7 +1582,7 @@ function ReservationRecordsTable({ records, loading, error }) {
               records.map((record) => (
                 <tr key={record.id} className="border-t border-nexus-line hover:bg-zinc-900/70">
                   <td className="px-4 py-4">
-                    <a href={`/operations/reservations/${record.id}/`} className="font-mono text-xs font-bold text-nexus-orange hover:text-orange-300">
+                    <a href={`/operations/reservations/${record.id}/`} className="font-mono text-xs font-bold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
                       {record.reservation_number}
                     </a>
                     <p className="mt-1 text-xs text-zinc-500">Reserved by {record.reserved_by_name || "-"}</p>
@@ -1625,8 +1625,8 @@ function ReservationRecordDetailPage({ data }) {
   const [reloadKey, setReloadKey] = useState(0);
   const [releaseReason, setReleaseReason] = useState("");
   const [releasing, setReleasing] = useState(false);
-  const [releaseError, setReleaseError] = useState("");
   const [message, setMessage] = useState("");
+  const { showError } = useToast();
   const canReleaseReservation = Boolean(data.permissions?.canReleaseReservation);
 
   useEffect(() => {
@@ -1658,7 +1658,6 @@ function ReservationRecordDetailPage({ data }) {
   async function releaseReservation() {
     if (!canReleaseReservation) return;
     setReleasing(true);
-    setReleaseError("");
     setMessage("");
     try {
       if (!releaseReason.trim()) {
@@ -1681,7 +1680,7 @@ function ReservationRecordDetailPage({ data }) {
       setMessage("Reservation released. Linked reserved units were moved back to available stock.");
       setReloadKey((current) => current + 1);
     } catch (releaseSaveError) {
-      setReleaseError(releaseSaveError.message);
+      showError(releaseSaveError.message);
     } finally {
       setReleasing(false);
     }
@@ -1700,7 +1699,7 @@ function ReservationRecordDetailPage({ data }) {
   if (error || !record) {
     return (
       <Shell data={data}>
-        <div className="rounded-lg border border-nexus-red/60 bg-red-500/10 p-6 text-red-200">
+        <div className="rounded-lg border border-[rgb(var(--bim-red-rgb)/60%)] bg-red-500/10 p-6 text-[var(--tone-red-text)]">
           {error || "Reservation record was not found."}
         </div>
       </Shell>
@@ -1713,7 +1712,7 @@ function ReservationRecordDetailPage({ data }) {
     <Shell data={data}>
       <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <a href="/operations/reservations/" className="mb-2 inline-flex text-sm font-semibold text-nexus-orange hover:text-orange-300">
+          <a href="/operations/reservations/" className="mb-2 inline-flex text-sm font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
             Back to reservations
           </a>
           <div className="flex flex-wrap items-center gap-3">
@@ -1725,7 +1724,7 @@ function ReservationRecordDetailPage({ data }) {
       </header>
 
       {message ? (
-        <div className="mb-4 rounded-lg border border-nexus-green/60 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-200">
+        <div className="mb-4 rounded-lg border border-[rgb(var(--bim-green-rgb)/60%)] bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-200">
           {message}
         </div>
       ) : null}
@@ -1775,7 +1774,6 @@ function ReservationRecordDetailPage({ data }) {
                 />
               </Field>
             </div>
-            {releaseError ? <p className="mt-3 text-sm font-semibold text-red-300">{releaseError}</p> : null}
             <Button type="button" onClick={releaseReservation} disabled={!isActive || releasing} className="mt-4 w-full" variant="primary">
               <RotateCcw className="h-4 w-4" />
               {releasing ? "Releasing..." : "Release Reservation"}
@@ -1809,7 +1807,7 @@ function ReservationItemsTable({ items }) {
               {items.map((item) => (
                 <tr key={item.id} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
                   <td className="px-4 py-3 font-semibold text-white">{item.product_name}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-nexus-orange">{item.product_sku || "-"}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-[var(--bim-orange-text)]">{item.product_sku || "-"}</td>
                   <td className="px-4 py-3 text-zinc-400">#{item.product_unit}</td>
                   <td className="px-4 py-3 font-mono text-xs text-zinc-300">{item.serial_number || "-"}</td>
                   <td className="px-4 py-3">
@@ -1842,7 +1840,8 @@ function CreateReservationPage({ data }) {
   const [query, setQuery] = useState("");
   const [selectedUnits, setSelectedUnits] = useState([]);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const { showSuccess, showError } = useToast();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1854,9 +1853,9 @@ function CreateReservationPage({ data }) {
       setUnits(response.ok ? await response.json() : []);
     }
 
-    loadUnits().catch((loadError) => {
-      if (loadError.name !== "AbortError") {
-        setError("Could not load available stock units.");
+    loadUnits().catch((loadFailure) => {
+      if (loadFailure.name !== "AbortError") {
+        setLoadError("Could not load available stock units.");
       }
     });
 
@@ -1887,7 +1886,6 @@ function CreateReservationPage({ data }) {
 
   async function saveReservation() {
     setSaving(true);
-    setError("");
     try {
       if (!form.reservedFor.trim() || !selectedUnits.length) {
         throw new Error("Reserved for and at least one available stock unit are required.");
@@ -1914,9 +1912,10 @@ function CreateReservationPage({ data }) {
       }
 
       const created = await response.json();
+      showSuccess("Reservation created.");
       window.location.assign(created.id ? `/operations/reservations/${created.id}/` : data.routes.reservationRecords);
     } catch (saveError) {
-      setError(saveError.message);
+      showError(saveError.message);
     } finally {
       setSaving(false);
     }
@@ -1943,9 +1942,9 @@ function CreateReservationPage({ data }) {
             </div>
           </header>
 
-          {error ? (
-            <div className="mb-4 rounded-lg border border-nexus-red/60 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-200">
-              {error}
+          {loadError ? (
+            <div className="mb-4 rounded-lg border border-[rgb(var(--bim-red-rgb)/60%)] bg-red-500/10 px-4 py-3 text-sm font-semibold text-[var(--tone-red-text)]">
+              {loadError}
             </div>
           ) : null}
 
@@ -1983,7 +1982,7 @@ function CreateReservationPage({ data }) {
                   >
                     <span>
                       <span className="block text-sm font-bold text-white">{unit.product_name}</span>
-                      <span className="font-mono text-xs text-nexus-orange">{unit.serial_number}</span>
+                      <span className="font-mono text-xs text-[var(--bim-orange-text)]">{unit.serial_number}</span>
                     </span>
                     <Plus className="h-4 w-4 text-zinc-500" />
                   </button>
@@ -2029,7 +2028,7 @@ function SelectedUnitsTable({ units, onRemove, emptyText }) {
             {units.map((unit) => (
               <tr key={unit.id} className="border-t border-nexus-line">
                 <td className="px-4 py-3 font-semibold text-white">{unit.product_name}</td>
-                <td className="px-4 py-3 font-mono text-xs text-nexus-orange">{unit.product_sku || "-"}</td>
+                <td className="px-4 py-3 font-mono text-xs text-[var(--bim-orange-text)]">{unit.product_sku || "-"}</td>
                 <td className="px-4 py-3 font-mono text-xs text-zinc-300">{unit.serial_number}</td>
                 <td className="px-4 py-3">
                   <Status status={unit.status_label || unit.status} statusClass={unit.status} />
@@ -2182,7 +2181,7 @@ function IssueRecordsTable({ records, loading, error }) {
               records.map((record) => (
                 <tr key={record.id} className="border-t border-nexus-line hover:bg-zinc-900/70">
                   <td className="px-4 py-4">
-                    <a href={`/operations/issues/${record.id}/`} className="font-mono text-xs font-bold text-nexus-orange hover:text-orange-300">
+                    <a href={`/operations/issues/${record.id}/`} className="font-mono text-xs font-bold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
                       {record.issue_number}
                     </a>
                     <p className="mt-1 text-xs text-zinc-500">Issued by {record.issued_by_name || "-"}</p>
@@ -2225,8 +2224,8 @@ function IssueRecordDetailPage({ data }) {
   const [reloadKey, setReloadKey] = useState(0);
   const [returnReason, setReturnReason] = useState("");
   const [returning, setReturning] = useState(false);
-  const [returnError, setReturnError] = useState("");
   const [message, setMessage] = useState("");
+  const { showError } = useToast();
   const canReturnIssue = Boolean(data.permissions?.canReturnIssue);
 
   useEffect(() => {
@@ -2258,7 +2257,6 @@ function IssueRecordDetailPage({ data }) {
   async function returnIssue() {
     if (!canReturnIssue) return;
     setReturning(true);
-    setReturnError("");
     setMessage("");
     try {
       if (!returnReason.trim()) {
@@ -2281,7 +2279,7 @@ function IssueRecordDetailPage({ data }) {
       setMessage("Issue returned. Linked issued units were moved back to available stock.");
       setReloadKey((current) => current + 1);
     } catch (returnSaveError) {
-      setReturnError(returnSaveError.message);
+      showError(returnSaveError.message);
     } finally {
       setReturning(false);
     }
@@ -2300,7 +2298,7 @@ function IssueRecordDetailPage({ data }) {
   if (error || !record) {
     return (
       <Shell data={data}>
-        <div className="rounded-lg border border-nexus-red/60 bg-red-500/10 p-6 text-red-200">
+        <div className="rounded-lg border border-[rgb(var(--bim-red-rgb)/60%)] bg-red-500/10 p-6 text-[var(--tone-red-text)]">
           {error || "Issue record was not found."}
         </div>
       </Shell>
@@ -2313,7 +2311,7 @@ function IssueRecordDetailPage({ data }) {
     <Shell data={data}>
       <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <a href="/operations/issues/" className="mb-2 inline-flex text-sm font-semibold text-nexus-orange hover:text-orange-300">
+          <a href="/operations/issues/" className="mb-2 inline-flex text-sm font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
             Back to issues
           </a>
           <div className="flex flex-wrap items-center gap-3">
@@ -2325,7 +2323,7 @@ function IssueRecordDetailPage({ data }) {
       </header>
 
       {message ? (
-        <div className="mb-4 rounded-lg border border-nexus-green/60 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-200">
+        <div className="mb-4 rounded-lg border border-[rgb(var(--bim-green-rgb)/60%)] bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-200">
           {message}
         </div>
       ) : null}
@@ -2377,7 +2375,6 @@ function IssueRecordDetailPage({ data }) {
                 />
               </Field>
             </div>
-            {returnError ? <p className="mt-3 text-sm font-semibold text-red-300">{returnError}</p> : null}
             <Button type="button" onClick={returnIssue} disabled={!isActive || returning} className="mt-4 w-full" variant="primary">
               <RotateCcw className="h-4 w-4" />
               {returning ? "Returning..." : "Return Issue"}
@@ -2411,7 +2408,7 @@ function IssueItemsTable({ items }) {
               {items.map((item) => (
                 <tr key={item.id} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
                   <td className="px-4 py-3 font-semibold text-white">{item.product_name}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-nexus-orange">{item.product_sku || "-"}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-[var(--bim-orange-text)]">{item.product_sku || "-"}</td>
                   <td className="px-4 py-3 text-zinc-400">#{item.product_unit}</td>
                   <td className="px-4 py-3 font-mono text-xs text-zinc-300">{item.serial_number || "-"}</td>
                   <td className="px-4 py-3">
@@ -2447,7 +2444,8 @@ function CreateIssuePage({ data }) {
   const [query, setQuery] = useState("");
   const [selectedUnits, setSelectedUnits] = useState([]);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const { showSuccess, showError } = useToast();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -2459,9 +2457,9 @@ function CreateIssuePage({ data }) {
       setUnits(response.ok ? await response.json() : []);
     }
 
-    loadUnits().catch((loadError) => {
-      if (loadError.name !== "AbortError") {
-        setError("Could not load available stock units.");
+    loadUnits().catch((loadFailure) => {
+      if (loadFailure.name !== "AbortError") {
+        setLoadError("Could not load available stock units.");
       }
     });
 
@@ -2492,7 +2490,6 @@ function CreateIssuePage({ data }) {
 
   async function saveIssue() {
     setSaving(true);
-    setError("");
     try {
       if (!form.issuedTo.trim() || !selectedUnits.length) {
         throw new Error("Issued to and at least one available stock unit are required.");
@@ -2522,9 +2519,10 @@ function CreateIssuePage({ data }) {
       }
 
       const created = await response.json();
+      showSuccess("Issue created.");
       window.location.assign(created.id ? `/operations/issues/${created.id}/` : data.routes.issueRecords);
     } catch (saveError) {
-      setError(saveError.message);
+      showError(saveError.message);
     } finally {
       setSaving(false);
     }
@@ -2551,9 +2549,9 @@ function CreateIssuePage({ data }) {
             </div>
           </header>
 
-          {error ? (
-            <div className="mb-4 rounded-lg border border-nexus-red/60 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-200">
-              {error}
+          {loadError ? (
+            <div className="mb-4 rounded-lg border border-[rgb(var(--bim-red-rgb)/60%)] bg-red-500/10 px-4 py-3 text-sm font-semibold text-[var(--tone-red-text)]">
+              {loadError}
             </div>
           ) : null}
 
@@ -2600,7 +2598,7 @@ function CreateIssuePage({ data }) {
                   >
                     <span>
                       <span className="block text-sm font-bold text-white">{unit.product_name}</span>
-                      <span className="font-mono text-xs text-nexus-orange">{unit.serial_number}</span>
+                      <span className="font-mono text-xs text-[var(--bim-orange-text)]">{unit.serial_number}</span>
                     </span>
                     <Plus className="h-4 w-4 text-zinc-500" />
                   </button>
@@ -2759,7 +2757,7 @@ function RepairRecordsTable({ records, loading, error }) {
               records.map((record) => (
                 <tr key={record.id} className="border-t border-nexus-line hover:bg-zinc-900/70">
                   <td className="px-4 py-4">
-                    <a href={`/operations/repairs/${record.id}/`} className="font-mono text-xs font-bold text-nexus-orange hover:text-orange-300">
+                    <a href={`/operations/repairs/${record.id}/`} className="font-mono text-xs font-bold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
                       {record.repair_number}
                     </a>
                     <p className="mt-1 text-xs text-zinc-500">Sent by {record.sent_by_name || "-"}</p>
@@ -2803,8 +2801,8 @@ function RepairRecordDetailPage({ data }) {
   const [resolution, setResolution] = useState("available");
   const [resolutionNotes, setResolutionNotes] = useState("");
   const [resolving, setResolving] = useState(false);
-  const [resolveError, setResolveError] = useState("");
   const [message, setMessage] = useState("");
+  const { showError } = useToast();
   const canResolveRepair = Boolean(data.permissions?.canResolveRepair);
 
   useEffect(() => {
@@ -2836,7 +2834,6 @@ function RepairRecordDetailPage({ data }) {
   async function resolveRepair() {
     if (!canResolveRepair) return;
     setResolving(true);
-    setResolveError("");
     setMessage("");
     try {
       if (!resolutionNotes.trim()) {
@@ -2866,7 +2863,7 @@ function RepairRecordDetailPage({ data }) {
       );
       setReloadKey((current) => current + 1);
     } catch (resolveSaveError) {
-      setResolveError(resolveSaveError.message);
+      showError(resolveSaveError.message);
     } finally {
       setResolving(false);
     }
@@ -2885,7 +2882,7 @@ function RepairRecordDetailPage({ data }) {
   if (error || !record) {
     return (
       <Shell data={data}>
-        <div className="rounded-lg border border-nexus-red/60 bg-red-500/10 p-6 text-red-200">
+        <div className="rounded-lg border border-[rgb(var(--bim-red-rgb)/60%)] bg-red-500/10 p-6 text-[var(--tone-red-text)]">
           {error || "Repair record was not found."}
         </div>
       </Shell>
@@ -2898,7 +2895,7 @@ function RepairRecordDetailPage({ data }) {
     <Shell data={data}>
       <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <a href="/operations/repairs/" className="mb-2 inline-flex text-sm font-semibold text-nexus-orange hover:text-orange-300">
+          <a href="/operations/repairs/" className="mb-2 inline-flex text-sm font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
             Back to repairs
           </a>
           <div className="flex flex-wrap items-center gap-3">
@@ -2910,7 +2907,7 @@ function RepairRecordDetailPage({ data }) {
       </header>
 
       {message ? (
-        <div className="mb-4 rounded-lg border border-nexus-green/60 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-200">
+        <div className="mb-4 rounded-lg border border-[rgb(var(--bim-green-rgb)/60%)] bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-200">
           {message}
         </div>
       ) : null}
@@ -2974,7 +2971,6 @@ function RepairRecordDetailPage({ data }) {
                 />
               </Field>
             </div>
-            {resolveError ? <p className="mt-3 text-sm font-semibold text-red-300">{resolveError}</p> : null}
             <Button type="button" onClick={resolveRepair} disabled={!isActive || resolving} className="mt-4 w-full" variant="primary">
               <RotateCcw className="h-4 w-4" />
               {resolving ? "Resolving..." : "Resolve Repair"}
@@ -3008,7 +3004,7 @@ function RepairItemsTable({ items }) {
               {items.map((item) => (
                 <tr key={item.id} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
                   <td className="px-4 py-3 font-semibold text-white">{item.product_name}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-nexus-orange">{item.product_sku || "-"}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-[var(--bim-orange-text)]">{item.product_sku || "-"}</td>
                   <td className="px-4 py-3 text-zinc-400">#{item.product_unit}</td>
                   <td className="px-4 py-3 font-mono text-xs text-zinc-300">{item.serial_number || "-"}</td>
                   <td className="px-4 py-3">
@@ -3044,7 +3040,8 @@ function CreateRepairPage({ data }) {
   const [query, setQuery] = useState("");
   const [selectedUnits, setSelectedUnits] = useState([]);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const { showSuccess, showError } = useToast();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -3056,9 +3053,9 @@ function CreateRepairPage({ data }) {
       setUnits(response.ok ? await response.json() : []);
     }
 
-    loadUnits().catch((loadError) => {
-      if (loadError.name !== "AbortError") {
-        setError("Could not load available stock units.");
+    loadUnits().catch((loadFailure) => {
+      if (loadFailure.name !== "AbortError") {
+        setLoadError("Could not load available stock units.");
       }
     });
 
@@ -3089,7 +3086,6 @@ function CreateRepairPage({ data }) {
 
   async function saveRepair() {
     setSaving(true);
-    setError("");
     try {
       if (!form.repairReason.trim() || !selectedUnits.length) {
         throw new Error("Repair reason and at least one available stock unit are required.");
@@ -3119,9 +3115,10 @@ function CreateRepairPage({ data }) {
       }
 
       const created = await response.json();
+      showSuccess("Repair created.");
       window.location.assign(created.id ? `/operations/repairs/${created.id}/` : data.routes.repairRecords);
     } catch (saveError) {
-      setError(saveError.message);
+      showError(saveError.message);
     } finally {
       setSaving(false);
     }
@@ -3148,9 +3145,9 @@ function CreateRepairPage({ data }) {
             </div>
           </header>
 
-          {error ? (
-            <div className="mb-4 rounded-lg border border-nexus-red/60 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-200">
-              {error}
+          {loadError ? (
+            <div className="mb-4 rounded-lg border border-[rgb(var(--bim-red-rgb)/60%)] bg-red-500/10 px-4 py-3 text-sm font-semibold text-[var(--tone-red-text)]">
+              {loadError}
             </div>
           ) : null}
 
@@ -3197,7 +3194,7 @@ function CreateRepairPage({ data }) {
                   >
                     <span>
                       <span className="block text-sm font-bold text-white">{unit.product_name}</span>
-                      <span className="font-mono text-xs text-nexus-orange">{unit.serial_number}</span>
+                      <span className="font-mono text-xs text-[var(--bim-orange-text)]">{unit.serial_number}</span>
                     </span>
                     <Plus className="h-4 w-4 text-zinc-500" />
                   </button>
@@ -3374,7 +3371,7 @@ function ClientReturnRecordsTable({ records, loading, error }) {
               records.map((record) => (
                 <tr key={record.id} className="border-t border-nexus-line hover:bg-zinc-900/70">
                   <td className="px-4 py-4">
-                    <a href={`/operations/client-returns/${record.id}/`} className="font-mono text-xs font-bold text-nexus-orange hover:text-orange-300">
+                    <a href={`/operations/client-returns/${record.id}/`} className="font-mono text-xs font-bold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
                       {record.return_number}
                     </a>
                     <p className="mt-1 text-xs text-zinc-500">{record.delivery_number || "delivery linked by item"}</p>
@@ -3454,7 +3451,7 @@ function ClientReturnRecordDetailPage({ data }) {
   if (error || !record) {
     return (
       <Shell data={data}>
-        <div className="rounded-lg border border-nexus-red/60 bg-red-500/10 p-6 text-red-200">
+        <div className="rounded-lg border border-[rgb(var(--bim-red-rgb)/60%)] bg-red-500/10 p-6 text-[var(--tone-red-text)]">
           {error || "Client return record was not found."}
         </div>
       </Shell>
@@ -3465,7 +3462,7 @@ function ClientReturnRecordDetailPage({ data }) {
     <Shell data={data}>
       <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <a href={data.routes.clientReturnRecords} className="mb-2 inline-flex text-sm font-semibold text-nexus-orange hover:text-orange-300">
+          <a href={data.routes.clientReturnRecords} className="mb-2 inline-flex text-sm font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
             Back to client returns
           </a>
           <div className="flex flex-wrap items-center gap-3">
@@ -3533,7 +3530,7 @@ function ClientReturnItemsTable({ items }) {
               {items.map((item) => (
                 <tr key={item.id} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
                   <td className="px-4 py-3 font-semibold text-white">{item.product_name}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-nexus-orange">{item.product_sku || "-"}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-[var(--bim-orange-text)]">{item.product_sku || "-"}</td>
                   <td className="px-4 py-3 text-zinc-400">{item.delivery_number || "-"}</td>
                   <td className="px-4 py-3 font-mono text-xs text-zinc-300">{item.serial_number || "-"}</td>
                   <td className="px-4 py-3">
@@ -3571,7 +3568,8 @@ function CreateClientReturnPage({ data }) {
   const [query, setQuery] = useState("");
   const [selectedUnits, setSelectedUnits] = useState([]);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const { showSuccess, showError } = useToast();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -3585,9 +3583,9 @@ function CreateClientReturnPage({ data }) {
       setClients(clientsResponse.ok ? await clientsResponse.json() : []);
     }
 
-    loadUnits().catch((loadError) => {
-      if (loadError.name !== "AbortError") {
-        setError("Could not load sold stock units.");
+    loadUnits().catch((loadFailure) => {
+      if (loadFailure.name !== "AbortError") {
+        setLoadError("Could not load sold stock units.");
       }
     });
 
@@ -3649,7 +3647,6 @@ function CreateClientReturnPage({ data }) {
 
   async function saveClientReturn() {
     setSaving(true);
-    setError("");
     try {
       const selectedClient = clients.find((client) => String(client.id) === String(form.client));
       if (!selectedClient || !selectedUnits.length) {
@@ -3685,9 +3682,10 @@ function CreateClientReturnPage({ data }) {
       }
 
       const created = await response.json();
+      showSuccess("Client return created.");
       window.location.assign(created.id ? `/operations/client-returns/${created.id}/` : data.routes.clientReturnRecords);
     } catch (saveError) {
-      setError(saveError.message);
+      showError(saveError.message);
     } finally {
       setSaving(false);
     }
@@ -3716,9 +3714,9 @@ function CreateClientReturnPage({ data }) {
             </div>
           </header>
 
-          {error ? (
-            <div className="mb-4 rounded-lg border border-nexus-red/60 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-200">
-              {error}
+          {loadError ? (
+            <div className="mb-4 rounded-lg border border-[rgb(var(--bim-red-rgb)/60%)] bg-red-500/10 px-4 py-3 text-sm font-semibold text-[var(--tone-red-text)]">
+              {loadError}
             </div>
           ) : null}
 
@@ -3780,7 +3778,7 @@ function CreateClientReturnPage({ data }) {
                   >
                     <span>
                       <span className="block text-sm font-bold text-white">{unit.product_name}</span>
-                      <span className="font-mono text-xs text-nexus-orange">{unit.serial_number}</span>
+                      <span className="font-mono text-xs text-[var(--bim-orange-text)]">{unit.serial_number}</span>
                     </span>
                     <Plus className="h-4 w-4 text-zinc-500" />
                   </button>
@@ -3946,7 +3944,7 @@ function DeliveryRecordsTable({ records, loading, error }) {
               records.map((record) => (
                 <tr key={record.id} className="border-t border-nexus-line hover:bg-zinc-900/70">
                   <td className="px-4 py-4">
-                    <a href={`/operations/deliveries/${record.id}/`} className="font-mono text-xs font-bold text-nexus-orange hover:text-orange-300">
+                    <a href={`/operations/deliveries/${record.id}/`} className="font-mono text-xs font-bold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
                       {record.delivery_number}
                     </a>
                     <p className="mt-1 text-xs text-zinc-500">Created by {record.created_by_name || "-"}</p>
@@ -4005,7 +4003,7 @@ function DeliveryRecordDetailPage({ data }) {
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelling, setCancelling] = useState(false);
-  const [cancelError, setCancelError] = useState("");
+  const { showError } = useToast();
 
   const isCancelled = record?.status === "cancelled" || record?.isactive === false;
   const canEditDelivery = Boolean(data.permissions?.canEditDelivery);
@@ -4114,7 +4112,6 @@ function DeliveryRecordDetailPage({ data }) {
   async function cancelDeliveryRecord() {
     if (!canCancelDelivery) return;
     setCancelling(true);
-    setCancelError("");
     setCorrectionMessage("");
     try {
       if (!cancelReason.trim()) {
@@ -4138,7 +4135,7 @@ function DeliveryRecordDetailPage({ data }) {
       setCorrectionMessage("Delivery record cancelled. Linked untouched sold units were moved back to available stock.");
       setReloadKey((current) => current + 1);
     } catch (cancelSaveError) {
-      setCancelError(cancelSaveError.message);
+      showError(cancelSaveError.message);
     } finally {
       setCancelling(false);
     }
@@ -4148,7 +4145,7 @@ function DeliveryRecordDetailPage({ data }) {
     <Shell data={data}>
       <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <a href={data.routes.deliveryRecords} className="inline-flex items-center gap-2 text-sm font-semibold text-nexus-orange hover:text-orange-300">
+          <a href={data.routes.deliveryRecords} className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
             <ChevronRight className="h-4 w-4 rotate-180" />
             Back to Delivery Records
           </a>
@@ -4185,7 +4182,7 @@ function DeliveryRecordDetailPage({ data }) {
       </header>
 
       {correctionMessage ? (
-        <section className="mb-4 rounded-lg border border-nexus-green/50 bg-green-500/10 px-4 py-3 text-sm font-semibold text-green-200">
+        <section className="mb-4 rounded-lg border border-[rgb(var(--bim-green-rgb)/50%)] bg-green-500/10 px-4 py-3 text-sm font-semibold text-green-200">
           {correctionMessage}
         </section>
       ) : null}
@@ -4195,7 +4192,7 @@ function DeliveryRecordDetailPage({ data }) {
           Loading delivery record...
         </section>
       ) : error ? (
-        <section className="rounded-lg border border-nexus-red/60 bg-red-500/10 p-6 text-sm font-semibold text-red-200">
+        <section className="rounded-lg border border-[rgb(var(--bim-red-rgb)/60%)] bg-red-500/10 p-6 text-sm font-semibold text-[var(--tone-red-text)]">
           {error}
         </section>
       ) : notFound ? (
@@ -4223,11 +4220,11 @@ function DeliveryRecordDetailPage({ data }) {
         ) : null}
 
         {cancelOpen && canCancelDelivery ? (
-          <section className="mb-5 rounded-lg border border-nexus-red/60 bg-red-500/10 p-5">
+          <section className="mb-5 rounded-lg border border-[rgb(var(--bim-red-rgb)/60%)] bg-red-500/10 p-5">
             <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
               <div>
-                <h2 className="text-sm font-bold text-red-100">Cancel delivery record</h2>
-                <p className="mt-1 text-sm text-red-200/80">
+                <h2 className="text-sm font-bold text-[var(--tone-red-text)]">Cancel delivery record</h2>
+                <p className="mt-1 text-sm text-[rgb(var(--bim-red-rgb)/80%)]">
                   Cancellation is only allowed while linked units are still active, sold, and untouched. Wrong unit, product, or serial entries should be cancelled and recreated when safe.
                 </p>
               </div>
@@ -4241,7 +4238,6 @@ function DeliveryRecordDetailPage({ data }) {
                 <TextInput value={cancelReason} onChange={setCancelReason} placeholder="Explain the delivery mistake" />
               </Field>
             </div>
-            {cancelError ? <p className="mt-3 text-sm font-semibold text-red-200">{cancelError}</p> : null}
             <div className="mt-4 flex flex-wrap gap-3">
               <Button type="button" variant="danger" loading={cancelling} onClick={cancelDeliveryRecord}>
                 <RotateCcw className="h-4 w-4" />
@@ -4260,7 +4256,7 @@ function DeliveryRecordDetailPage({ data }) {
               <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
                 <div>
                   <p className="bim-section-title">Delivery Number</p>
-                  <h2 className="mt-2 font-mono text-2xl font-bold text-nexus-orange">{record.delivery_number}</h2>
+                  <h2 className="mt-2 font-mono text-2xl font-bold text-[var(--bim-orange-text)]">{record.delivery_number}</h2>
                 </div>
                 <div className="grid gap-3 text-sm md:min-w-48 md:text-right">
                   <div>
@@ -4384,7 +4380,7 @@ function DeliveryCorrectionPanel({
         </div>
       </div>
 
-      {error ? <p className="mt-3 text-sm font-semibold text-red-200">{error}</p> : null}
+      {error ? <p className="mt-3 text-sm font-semibold text-[var(--tone-red-text)]">{error}</p> : null}
       <div className="mt-5 flex flex-wrap gap-3">
         <Button type="button" variant="primary" loading={saving} onClick={onSave}>
           <Save className="h-4 w-4" />
@@ -4478,10 +4474,7 @@ function Header({ data }) {
   return (
     <header className="pb-5">
       <div className="min-w-0">
-        <p className="flex items-center gap-2 text-sm font-semibold text-zinc-300">
-          <span className="h-2 w-2 rounded-full bg-nexus-blue/80" />
-          {greeting}
-        </p>
+        <p className="text-sm font-semibold text-zinc-300">{greeting}</p>
         <h1 className="mt-2 text-2xl font-bold tracking-tight text-white">{data.hero.title}</h1>
         <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-zinc-400">
           <span>{data.hero.subtitle}</span>
@@ -4770,7 +4763,7 @@ function InventoryTable({ products, selectedId, onSelect, loading, error }) {
                 <tr
                   key={product.id}
                   className={`cursor-pointer border-t border-nexus-line hover:bg-zinc-900/70 ${
-                    selectedId === product.id ? "bg-amber-950/20 outline outline-1 outline-nexus-orange/50" : ""
+                    selectedId === product.id ? "bg-amber-950/20 outline outline-1 outline-[rgb(var(--bim-orange-focus-rgb)/50%)]" : ""
                   }`}
                   onClick={() => onSelect(product.id)}
                 >
@@ -4788,7 +4781,7 @@ function InventoryTable({ products, selectedId, onSelect, loading, error }) {
                     <p className="text-zinc-200">{product.brand_name}</p>
                     <p className="mt-1 font-mono text-xs text-zinc-500">{product.model_name}</p>
                   </td>
-                  <td className="px-4 py-4 font-mono text-xs text-nexus-orange">{product.sku}</td>
+                  <td className="px-4 py-4 font-mono text-xs text-[var(--bim-orange-text)]">{product.sku}</td>
                   <td className="px-4 py-4">
                     <StockBar product={product} />
                   </td>
@@ -4834,7 +4827,7 @@ function StockBar({ product }) {
   return (
     <div className="w-28">
       <p className="text-xs font-semibold text-white">
-        <span className={outOfStock ? "text-nexus-red" : low ? "text-nexus-orange" : "text-white"}>{product.available_units}</span>
+        <span className={outOfStock ? "text-nexus-red" : low ? "text-[var(--bim-orange-text)]" : "text-white"}>{product.available_units}</span>
         <span className="text-zinc-500"> / {product.total_units}</span>
       </p>
       <div className="mt-2 h-1 rounded-full bg-zinc-800">
@@ -4917,7 +4910,7 @@ function ProductDetail({ product, canAccessAdmin = false }) {
           <div className="mt-4">
             <div className="flex justify-between text-sm">
               <span className="text-zinc-400">Stock Availability</span>
-              <span className="font-bold text-nexus-orange">{availability}%</span>
+              <span className="font-bold text-[var(--bim-orange-text)]">{availability}%</span>
             </div>
             <div className="mt-2 h-1.5 rounded-full bg-zinc-800">
               <div className="h-1.5 rounded-full bg-nexus-orange" style={{ width: `${availability}%` }} />
@@ -4933,10 +4926,10 @@ function ProductDetail({ product, canAccessAdmin = false }) {
         {canAccessAdmin ? (
           <a
             href={`/admin/bim_stock/productunit/?q=${encodeURIComponent(product.sku)}`}
-            className="flex items-center justify-between rounded-lg border border-nexus-line bg-nexus-panel2 px-4 py-3 hover:border-nexus-orange/70"
+            className="flex items-center justify-between rounded-lg border border-nexus-line bg-nexus-panel2 px-4 py-3 hover:border-[rgb(var(--bim-orange-focus-rgb)/70%)]"
           >
             <span className="inline-flex items-center gap-3 text-sm font-semibold text-white">
-              <Package className="h-4 w-4 text-nexus-orange" />
+              <Package className="h-4 w-4 text-[var(--bim-orange-text)]" />
               Stock Units
             </span>
             <ChevronRight className="h-4 w-4 text-zinc-500" />
@@ -5040,7 +5033,7 @@ function ProductDetailsPage({ data }) {
   if (error || !product) {
     return (
       <Shell data={data}>
-        <div className="rounded-lg border border-nexus-red/60 bg-red-500/10 p-6 text-red-200">
+        <div className="rounded-lg border border-[rgb(var(--bim-red-rgb)/60%)] bg-red-500/10 p-6 text-[var(--tone-red-text)]">
           {error || "Product was not found."}
         </div>
       </Shell>
@@ -5072,7 +5065,7 @@ function ProductDetailsPage({ data }) {
                 <ProductStatus product={product} />
               </div>
               <p className="mt-2 text-sm text-zinc-400">
-                <span className="font-mono font-bold text-nexus-orange">{product.sku}</span>
+                <span className="font-mono font-bold text-[var(--bim-orange-text)]">{product.sku}</span>
                 <span className="mx-2">â€¢</span>
                 {product.category_name}
                 <span className="mx-2">â€¢</span>
@@ -5123,7 +5116,7 @@ function ProductDetailsPage({ data }) {
         ].map(([label, count], index) => (
           <button
             key={label}
-            className={`border-b-2 px-4 py-3 ${index === 0 ? "border-nexus-orange text-nexus-orange" : "border-transparent text-zinc-400"}`}
+            className={`border-b-2 px-4 py-3 ${index === 0 ? "border-[var(--bim-orange-focus)] text-[var(--bim-orange-text)]" : "border-transparent text-zinc-400"}`}
           >
             {label} {count !== "" ? <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">{count}</span> : null}
           </button>
@@ -5161,7 +5154,7 @@ function ProductDetailsPage({ data }) {
                 <div className="mt-4">
                   <div className="flex justify-between text-sm">
                     <span className="text-zinc-400">In-stock rate</span>
-                    <span className="font-bold text-nexus-orange">{stockPercent}%</span>
+                    <span className="font-bold text-[var(--bim-orange-text)]">{stockPercent}%</span>
                   </div>
                   <div className="mt-2 h-1.5 rounded-full bg-zinc-800">
                     <div className="h-1.5 rounded-full bg-nexus-orange" style={{ width: `${stockPercent}%` }} />
@@ -5208,7 +5201,7 @@ function ProductDetailsPage({ data }) {
               No stock movements recorded yet.
             </p>
           )}
-          <a href={`/inventory/products/${product.id}/`} className="block border-t border-nexus-line px-4 py-4 text-center text-sm font-semibold text-nexus-orange hover:bg-nexus-panel2">
+          <a href={`/inventory/products/${product.id}/`} className="block border-t border-nexus-line px-4 py-4 text-center text-sm font-semibold text-[var(--bim-orange-text)] hover:bg-nexus-panel2">
             View product detail
           </a>
         </aside>
@@ -5247,7 +5240,7 @@ function ProductMovementHistory({ movements, accessDenied }) {
                   <tr key={movement.id} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
                     <td className="px-4 py-3 text-zinc-400">{formatDate(movement.movement_date || movement.crdate)}</td>
                     <td className="px-4 py-3 font-semibold text-white">{movement.movement_type_label || movement.movement_type}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-nexus-orange">{movement.serial_number || "-"}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-[var(--bim-orange-text)]">{movement.serial_number || "-"}</td>
                     <td className="px-4 py-3 text-zinc-400">
                       {movement.from_status || "-"} {movement.to_status ? "->" : ""} {movement.to_status || ""}
                     </td>
@@ -5312,7 +5305,7 @@ function ProductUnitRegister({ product, units, accessDenied, canAccessAdmin = fa
               <tbody>
                 {visibleUnits.map((unit) => (
                   <tr key={unit.id} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
-                    <td className="px-4 py-3 font-mono text-xs text-nexus-orange">{unit.serial_number}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-[var(--bim-orange-text)]">{unit.serial_number}</td>
                     <td className="px-4 py-3">
                       <Status status={unit.status_label || unit.status} statusClass={unit.status} />
                     </td>
@@ -5322,7 +5315,7 @@ function ProductUnitRegister({ product, units, accessDenied, canAccessAdmin = fa
                     <td className="px-4 py-3 text-zinc-400">{formatDate(unit.sold_date)}</td>
                     {canAccessAdmin ? (
                       <td className="px-4 py-3">
-                        <a href={`/admin/bim_stock/productunit/${unit.id}/change/`} className="text-xs font-semibold text-nexus-orange hover:text-white">
+                        <a href={`/admin/bim_stock/productunit/${unit.id}/change/`} className="text-xs font-semibold text-[var(--bim-orange-text)] hover:text-white">
                           Edit Unit
                         </a>
                       </td>
@@ -5348,9 +5341,9 @@ function ProductUnitRegister({ product, units, accessDenied, canAccessAdmin = fa
 }
 
 function ProductDetailMetric({ label, value, detail, warning = false, danger = false, info = false }) {
-  const color = danger ? "text-nexus-red" : warning ? "text-nexus-orange" : info ? "text-nexus-blue" : "text-white";
+  const color = danger ? "text-nexus-red" : warning ? "text-[var(--bim-orange-text)]" : info ? "text-nexus-blue" : "text-white";
   return (
-    <article className={`rounded-lg border bg-nexus-panel p-4 ${danger ? "border-nexus-red/70" : warning ? "border-nexus-orange/70" : "border-nexus-line"}`}>
+    <article className={`rounded-lg border bg-nexus-panel p-4 ${danger ? "border-[rgb(var(--bim-red-rgb)/70%)]" : warning ? "border-[rgb(var(--bim-orange-focus-rgb)/70%)]" : "border-nexus-line"}`}>
       <p className="text-sm text-zinc-400">{label}</p>
       <p className={`mt-4 text-2xl font-bold ${color}`}>{formatCount(value)}</p>
       <p className="mt-1 text-sm text-zinc-500">{detail}</p>
@@ -5366,7 +5359,6 @@ function AddProductPage({ data }) {
     modelName: "",
     barcode: "",
     reorderStockLevel: "0",
-    notes: "",
     imageFile: null,
     isactive: true
   };
@@ -5374,7 +5366,8 @@ function AddProductPage({ data }) {
   const [refs, setRefs] = useState({ categories: [], brands: [] });
   const [refsLoading, setRefsLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const { showSuccess, showError } = useToast();
   const imageInputRef = useRef(null);
   const cameraInputRef = useRef(null);
 
@@ -5395,9 +5388,9 @@ function AddProductPage({ data }) {
       setRefsLoading(false);
     }
 
-    loadRefs().catch((loadError) => {
-      if (loadError.name !== "AbortError") {
-        setError("Could not load product form data.");
+    loadRefs().catch((loadFailure) => {
+      if (loadFailure.name !== "AbortError") {
+        setLoadError("Could not load product form data.");
         setRefsLoading(false);
       }
     });
@@ -5432,16 +5425,15 @@ function AddProductPage({ data }) {
   function selectImageFile(file) {
     if (!file) return;
     if (!["image/png", "image/jpeg"].includes(file.type)) {
-      setError("Select a PNG or JPG product image.");
+      showError("Select a PNG or JPG product image.");
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
-      setError("Product image must be 5MB or smaller.");
+      showError("Product image must be 5MB or smaller.");
       return;
     }
 
     setForm((current) => ({ ...current, imageFile: file }));
-    setError("");
   }
 
   function handleImageInputChange(event) {
@@ -5500,7 +5492,6 @@ function AddProductPage({ data }) {
       throw new Error("Enter a name before creating a catalogue value.");
     }
 
-    setError("");
     const response = await fetch(config.endpoint, {
       method: "POST",
       headers: {
@@ -5523,7 +5514,6 @@ function AddProductPage({ data }) {
 
   async function saveProduct(addAnother = false) {
     setSaving(true);
-    setError("");
     try {
       const payload = new FormData();
       payload.append("descript", form.descript);
@@ -5552,11 +5542,13 @@ function AddProductPage({ data }) {
 
       if (addAnother) {
         resetForm();
+        showSuccess("Product saved. Form cleared for a new entry.");
       } else {
+        showSuccess("Product saved.");
         window.location.assign(data.routes.inventory);
       }
     } catch (saveError) {
-      setError(saveError.message);
+      showError(saveError.message);
     } finally {
       setSaving(false);
     }
@@ -5572,9 +5564,9 @@ function AddProductPage({ data }) {
             onSave={() => saveProduct(false)}
             onSaveAnother={() => saveProduct(true)}
           />
-          {error ? (
-            <div className="mb-4 rounded-lg border border-nexus-red/60 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-200">
-              {error}
+          {loadError ? (
+            <div className="mb-4 rounded-lg border border-[rgb(var(--bim-red-rgb)/60%)] bg-red-500/10 px-4 py-3 text-sm font-semibold text-[var(--tone-red-text)]">
+              {loadError}
             </div>
           ) : null}
 
@@ -5583,159 +5575,117 @@ function AddProductPage({ data }) {
           </p>
 
           <FormSection icon="box" title="Product Information" subtitle="Core catalogue fields that define this product.">
-            <div className="grid gap-5">
-              <Field label="Product Name" required>
-                <TextInput value={form.descript} onChange={(value) => updateField("descript", value)} placeholder="Enter product name" />
-              </Field>
-            </div>
-
-            <div className="mt-5 grid gap-5 md:grid-cols-2">
-              <SearchableCreatableSelect
-                label="Category"
-                required
-                value={form.category}
-                onChange={(value) => updateField("category", value)}
-                options={refs.categories}
-                getOptionLabel={(item) => item.name}
-                onCreate={(name) => createLookupOption("category", name)}
-                placeholder="Search or create category..."
-                loading={refsLoading}
-              />
-              <SearchableCreatableSelect
-                label="Brand"
-                required
-                value={form.brand}
-                onChange={(value) => updateField("brand", value)}
-                options={refs.brands}
-                getOptionLabel={(item) => item.brandname}
-                onCreate={(name) => createLookupOption("brand", name)}
-                placeholder="Search or create brand..."
-                loading={refsLoading}
-              />
-              <Field label="Model" required>
-                <TextInput value={form.modelName} onChange={(value) => updateField("modelName", value)} placeholder="Enter model" />
-                <p className="mt-2 text-xs text-zinc-500">Used to generate SKU.</p>
-              </Field>
-            </div>
-
-            <div className="mt-5 grid gap-5">
-              <Field label="SKU Preview">
-                <TextInput value={skuPreview === "auto-generate" ? "Full Category, Brand & Model to generate" : skuPreview} disabled />
-                <p className="mt-2 text-xs text-zinc-500">Generated from Category + Brand + Model. Read-only.</p>
-              </Field>
-              <Field label="Barcode">
-                <TextInput value={form.barcode} onChange={(value) => updateField("barcode", value)} placeholder="Enter barcode" />
-                <p className="mt-2 text-xs text-zinc-500">EAN-13 or UPC barcode (optional).</p>
-              </Field>
-              <Field label="Low Stock Alert">
-                <TextInput value={form.reorderStockLevel} onChange={(value) => updateField("reorderStockLevel", value)} placeholder="Enter alert threshold" />
-                <p className="mt-2 text-xs text-zinc-500">When available stock is at or below this number, BIM Nexus shows low stock alerts.</p>
-              </Field>
-              <Field label="Internal Notes">
-                <textarea
-                  value={form.notes}
-                  onChange={(event) => updateField("notes", event.target.value)}
-                  className="min-h-20 w-full rounded-md border border-nexus-line bg-black px-3 py-3 text-sm text-zinc-200 outline-none placeholder:text-zinc-600"
-                  placeholder="Add internal notes"
+            <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_260px]">
+              <div className="grid gap-5">
+                <Field label="Product Name" required>
+                  <TextInput value={form.descript} onChange={(value) => updateField("descript", value)} placeholder="Enter product name" />
+                </Field>
+                <SearchableCreatableSelect
+                  label="Category"
+                  required
+                  value={form.category}
+                  onChange={(value) => updateField("category", value)}
+                  options={refs.categories}
+                  getOptionLabel={(item) => item.name}
+                  onCreate={(name) => createLookupOption("category", name)}
+                  placeholder="Search or create category..."
+                  loading={refsLoading}
                 />
-                <p className="mt-2 text-xs text-zinc-500">Optional notes about usage, compatibility, or product details.</p>
-              </Field>
-            </div>
-          </FormSection>
+                <SearchableCreatableSelect
+                  label="Brand"
+                  required
+                  value={form.brand}
+                  onChange={(value) => updateField("brand", value)}
+                  options={refs.brands}
+                  getOptionLabel={(item) => item.brandname}
+                  onCreate={(name) => createLookupOption("brand", name)}
+                  placeholder="Search or create brand..."
+                  loading={refsLoading}
+                />
+                <Field label="Model" required>
+                  <TextInput value={form.modelName} onChange={(value) => updateField("modelName", value)} placeholder="Enter model" />
+                </Field>
+                <Field label="Barcode">
+                  <TextInput value={form.barcode} onChange={(value) => updateField("barcode", value)} placeholder="EAN-13 or UPC barcode (optional)" />
+                </Field>
+                <Field label="Low Stock Alert">
+                  <TextInput value={form.reorderStockLevel} onChange={(value) => updateField("reorderStockLevel", value)} placeholder="When available stock is at or below this number, BIM Nexus shows low stock alerts" />
+                </Field>
+              </div>
 
-          <FormSection icon="package" title="Product Image" subtitle="Optional photo or icon for this product.">
-            <div className="grid gap-5 md:grid-cols-[120px_minmax(0,1fr)]">
-              <input
-                ref={imageInputRef}
-                type="file"
-                accept="image/png,image/jpeg"
-                className="hidden"
-                onChange={handleImageInputChange}
-              />
-              <input
-                ref={cameraInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                onChange={handleImageInputChange}
-              />
-              <button
-                type="button"
-                onClick={() => imageInputRef.current?.click()}
-                onDrop={handleImageDrop}
-                onDragOver={handleImageDragOver}
-                className="grid aspect-square place-items-center rounded-lg border border-dashed border-nexus-line bg-black text-center text-xs text-zinc-500 hover:border-nexus-orange hover:text-zinc-300"
-              >
-                <span className="max-w-full break-words px-2">
-                  <Package className="mx-auto mb-2 h-6 w-6 text-zinc-500" />
-                  {form.imageFile ? (
-                    <>
-                      Selected
-                      <br />
-                      {form.imageFile.name}
-                    </>
-                  ) : (
-                    <>
-                      Drop image
-                      <br />
-                      or click to upload
-                    </>
-                  )}
-                </span>
-              </button>
               <div>
-                <p className="text-sm font-bold text-white">Product Image</p>
-                <p className="mt-2 text-sm text-zinc-400">
-                  Upload a photo or icon for this product. Used in listings, detail views, and reports.
-                </p>
-                <p className="mt-4 text-xs text-zinc-500">PNG, JPG - max 5MB</p>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => imageInputRef.current?.click()}
-                    className="inline-flex h-9 items-center gap-2 rounded-md border border-nexus-line px-3 text-xs font-semibold text-zinc-200 hover:bg-nexus-panel"
-                  >
-                    <Package className="h-4 w-4" />
-                    Upload Image
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => cameraInputRef.current?.click()}
-                    className="inline-flex h-9 items-center gap-2 rounded-md border border-nexus-line px-3 text-xs font-semibold text-zinc-200 hover:bg-nexus-panel"
-                  >
-                    <Camera className="h-4 w-4" />
-                    Take Photo
-                  </button>
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg"
+                  className="hidden"
+                  onChange={handleImageInputChange}
+                />
+                <input
+                  ref={cameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={handleImageInputChange}
+                />
+                <button
+                  type="button"
+                  onClick={() => imageInputRef.current?.click()}
+                  onDrop={handleImageDrop}
+                  onDragOver={handleImageDragOver}
+                  className="grid aspect-square w-full place-items-center rounded-lg border border-dashed border-nexus-line bg-black text-center text-xs text-zinc-500 hover:border-[var(--bim-orange-focus)] hover:text-zinc-300"
+                >
+                  <span className="max-w-full break-words px-2">
+                    <Package className="mx-auto mb-2 h-6 w-6 text-zinc-500" />
+                    {form.imageFile ? (
+                      <>
+                        Selected
+                        <br />
+                        {form.imageFile.name}
+                      </>
+                    ) : (
+                      <>
+                        Drop image
+                        <br />
+                        or click to upload
+                      </>
+                    )}
+                  </span>
+                </button>
+                <div className="mt-3">
+                  <p className="text-sm font-bold text-white">Product Image</p>
+                  <p className="mt-2 text-xs text-zinc-400">
+                    Upload a photo or icon for this product. Used in listings, detail views, and reports.
+                  </p>
+                  <p className="mt-2 text-xs text-zinc-500">PNG, JPG - max 5MB</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => imageInputRef.current?.click()}
+                      className="inline-flex h-9 items-center gap-2 rounded-md border border-nexus-line px-3 text-xs font-semibold text-zinc-200 hover:bg-nexus-panel"
+                    >
+                      <Package className="h-4 w-4" />
+                      Upload Image
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => cameraInputRef.current?.click()}
+                      className="inline-flex h-9 items-center gap-2 rounded-md border border-nexus-line px-3 text-xs font-semibold text-zinc-200 hover:bg-nexus-panel"
+                    >
+                      <Camera className="h-4 w-4" />
+                      Take Photo
+                    </button>
+                  </div>
+                  {form.imageFile ? (
+                    <button type="button" onClick={clearImageFile} className="mt-3 text-xs font-semibold text-[var(--bim-orange-text)] hover:text-white">
+                      Remove image
+                    </button>
+                  ) : null}
                 </div>
-                {form.imageFile ? (
-                  <button type="button" onClick={clearImageFile} className="mt-3 text-xs font-semibold text-nexus-orange hover:text-white">
-                    Remove image
-                  </button>
-                ) : null}
               </div>
             </div>
           </FormSection>
-
-          <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <button type="button" onClick={resetForm} className="text-left text-sm font-semibold text-zinc-300 hover:text-white">
-              Discard all changes
-            </button>
-            <div className="flex flex-wrap gap-3">
-              <button disabled type="button" className="inline-flex h-10 items-center gap-2 rounded-md bg-zinc-700 px-4 text-sm font-semibold text-zinc-500">
-                <Icon name={workflowMeta.receive_stock.icon} className="h-4 w-4" />
-                Save & Receive Stock
-              </button>
-              <button disabled={saving} onClick={() => saveProduct(true)} type="button" className="inline-flex h-10 items-center gap-2 rounded-md px-4 text-sm font-semibold text-white hover:bg-nexus-panel">
-                <Plus className="h-4 w-4" />
-                Save & Add Another
-              </button>
-              <button disabled={saving} onClick={() => saveProduct(false)} type="button" className="inline-flex h-10 items-center gap-2 rounded-md bg-nexus-orange px-4 text-sm font-semibold text-black">
-                <Save className="h-4 w-4" />
-                Save Product
-              </button>
-            </div>
-          </div>
         </div>
 
         <AddProductPreview
@@ -5768,7 +5718,8 @@ function StockEntryPage({ data, mode = "add-unit" }) {
   const [query, setQuery] = useState("");
   const [lines, setLines] = useState([]);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const { showSuccess, showError } = useToast();
   const serialBatch = useMemo(() => String(Date.now()).slice(-6), []);
 
   useEffect(() => {
@@ -5786,9 +5737,9 @@ function StockEntryPage({ data, mode = "add-unit" }) {
       setRefsLoading(false);
     }
 
-    loadData().catch((loadError) => {
-      if (loadError.name !== "AbortError") {
-        setError(`Could not load ${isReceiving ? "receiving" : "stock unit"} data.`);
+    loadData().catch((loadFailure) => {
+      if (loadFailure.name !== "AbortError") {
+        setLoadError(`Could not load ${isReceiving ? "receiving" : "stock unit"} data.`);
         setRefsLoading(false);
       }
     });
@@ -5829,7 +5780,6 @@ function StockEntryPage({ data, mode = "add-unit" }) {
       throw new Error("Enter a supplier name before creating it.");
     }
 
-    setError("");
     const response = await fetch(data.api.suppliers, {
       method: "POST",
       headers: {
@@ -5948,6 +5898,7 @@ function StockEntryPage({ data, mode = "add-unit" }) {
     }
 
     const created = await response.json();
+    showSuccess("Receiving record created.");
     window.location.assign(created.id ? `/operations/receiving/${created.id}/` : data.routes.receivingRecords);
   }
 
@@ -5983,12 +5934,12 @@ function StockEntryPage({ data, mode = "add-unit" }) {
       }
     }
 
+    showSuccess("Stock units added.");
     window.location.assign(data.routes.inventory);
   }
 
   async function saveStockUnits() {
     setSaving(true);
-    setError("");
     try {
       if (!form.entryDate || !lines.length) {
         throw new Error("Entry date and at least one product are required.");
@@ -6003,7 +5954,7 @@ function StockEntryPage({ data, mode = "add-unit" }) {
         await createProductUnits();
       }
     } catch (saveError) {
-      setError(saveError.message);
+      showError(saveError.message);
     } finally {
       setSaving(false);
     }
@@ -6038,9 +5989,9 @@ function StockEntryPage({ data, mode = "add-unit" }) {
             </div>
           </header>
 
-          {error ? (
-            <div className="mb-4 rounded-lg border border-nexus-red/60 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-200">
-              {error}
+          {loadError ? (
+            <div className="mb-4 rounded-lg border border-[rgb(var(--bim-red-rgb)/60%)] bg-red-500/10 px-4 py-3 text-sm font-semibold text-[var(--tone-red-text)]">
+              {loadError}
             </div>
           ) : null}
 
@@ -6122,7 +6073,7 @@ function StockEntryPage({ data, mode = "add-unit" }) {
                     >
                       <span>
                         <span className="block text-sm font-bold text-white">{product.display_name}</span>
-                        <span className="font-mono text-xs text-nexus-orange">{product.sku}</span>
+                        <span className="font-mono text-xs text-[var(--bim-orange-text)]">{product.sku}</span>
                       </span>
                       <Plus className="h-4 w-4 text-zinc-500" />
                     </button>
@@ -6137,7 +6088,7 @@ function StockEntryPage({ data, mode = "add-unit" }) {
                   <div key={line.key} className="grid gap-3 border-b border-nexus-line p-4 last:border-b-0 lg:grid-cols-[minmax(0,1fr)_110px_130px_minmax(0,1fr)_40px]">
                     <div>
                       <p className="font-bold text-white">{line.product.display_name}</p>
-                      <p className="mt-1 font-mono text-xs text-nexus-orange">{line.product.sku}</p>
+                      <p className="mt-1 font-mono text-xs text-[var(--bim-orange-text)]">{line.product.sku}</p>
                     </div>
                     <CompactField label="Quantity">
                       <TextInput value={line.quantity} onChange={(value) => updateLine(line.key, "quantity", value)} />
@@ -6231,7 +6182,8 @@ function CreateDeliveryPage({ data }) {
   const [query, setQuery] = useState("");
   const [selectedUnits, setSelectedUnits] = useState([]);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const { showSuccess, showError } = useToast();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -6245,9 +6197,9 @@ function CreateDeliveryPage({ data }) {
       setClients(clientsResponse.ok ? await clientsResponse.json() : []);
     }
 
-    loadUnits().catch((loadError) => {
-      if (loadError.name !== "AbortError") {
-        setError("Could not load available stock units.");
+    loadUnits().catch((loadFailure) => {
+      if (loadFailure.name !== "AbortError") {
+        setLoadError("Could not load available stock units.");
       }
     });
 
@@ -6309,7 +6261,6 @@ function CreateDeliveryPage({ data }) {
 
   async function completeDelivery() {
     setSaving(true);
-    setError("");
     try {
       const selectedClient = clients.find((client) => String(client.id) === String(form.client));
       if (!selectedClient || !selectedUnits.length) {
@@ -6338,9 +6289,10 @@ function CreateDeliveryPage({ data }) {
       }
 
       const created = await response.json();
+      showSuccess("Delivery completed.");
       window.location.assign(created.id ? `/operations/deliveries/${created.id}/` : data.routes.deliveryRecords);
     } catch (saveError) {
-      setError(saveError.message);
+      showError(saveError.message);
     } finally {
       setSaving(false);
     }
@@ -6371,9 +6323,9 @@ function CreateDeliveryPage({ data }) {
             </div>
           </header>
 
-          {error ? (
-            <div className="mb-4 rounded-lg border border-nexus-red/60 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-200">
-              {error}
+          {loadError ? (
+            <div className="mb-4 rounded-lg border border-[rgb(var(--bim-red-rgb)/60%)] bg-red-500/10 px-4 py-3 text-sm font-semibold text-[var(--tone-red-text)]">
+              {loadError}
             </div>
           ) : null}
 
@@ -6434,7 +6386,7 @@ function CreateDeliveryPage({ data }) {
                     >
                       <span>
                         <span className="block text-sm font-bold text-white">{unit.product_name}</span>
-                        <span className="font-mono text-xs text-nexus-orange">{unit.product_sku} / {unit.serial_number}</span>
+                        <span className="font-mono text-xs text-[var(--bim-orange-text)]">{unit.product_sku} / {unit.serial_number}</span>
                       </span>
                       <Plus className="h-4 w-4 text-zinc-500" />
                     </button>
@@ -6449,7 +6401,7 @@ function CreateDeliveryPage({ data }) {
                   <div key={unit.id} className="grid gap-3 border-b border-nexus-line p-4 last:border-b-0 md:grid-cols-[minmax(0,1fr)_180px_40px]">
                     <div>
                       <p className="font-bold text-white">{unit.product_name}</p>
-                      <p className="mt-1 font-mono text-xs text-nexus-orange">{unit.product_sku}</p>
+                      <p className="mt-1 font-mono text-xs text-[var(--bim-orange-text)]">{unit.product_sku}</p>
                     </div>
                     <p className="font-mono text-sm text-zinc-300">{unit.serial_number}</p>
                     <button onClick={() => removeUnit(unit.id)} type="button" className="text-zinc-500 hover:text-nexus-red">
@@ -6515,6 +6467,10 @@ function AddProductHeader({ saving, onReset, onSave, onSaveAnother }) {
           <RotateCcw className="h-4 w-4" />
           Reset
         </Button>
+        <Button disabled type="button" variant="secondary" title="Save & Receive Stock coming later">
+          <Icon name={workflowMeta.receive_stock.icon} className="h-4 w-4" />
+          Save & Receive Stock
+        </Button>
         <Button disabled={saving} onClick={onSaveAnother} type="button" variant="secondary">
           <Plus className="h-4 w-4" />
           Save & Add Another
@@ -6533,7 +6489,7 @@ function FormSection({ icon, title, subtitle, children }) {
   return (
     <Card className="mb-5 p-5">
       <CardHeader className="flex items-start gap-3 px-0 py-0 pb-5">
-        <span className="rounded-lg bg-nexus-orange/10 p-2 text-nexus-orange">
+        <span className="rounded-lg bg-[rgb(var(--bim-orange-rgb)/10%)] p-2 text-[var(--bim-orange-text)]">
           <Icon name={icon} className="h-5 w-5" />
         </span>
         <div>
@@ -6551,7 +6507,7 @@ function Field({ label, required = false, children }) {
     <label className="block">
       <span className="text-sm font-semibold text-white">
         {label}
-        {required ? <span className="text-nexus-orange">*</span> : null}
+        {required ? <span className="text-[var(--bim-orange-text)]">*</span> : null}
       </span>
       <span className="mt-2 block">{children}</span>
     </label>
@@ -6653,7 +6609,7 @@ function SearchableCreatableSelect({
       <label className="block">
         <span className="text-sm font-semibold text-white">
           {label}
-          {required ? <span className="text-nexus-orange">*</span> : null}
+          {required ? <span className="text-[var(--bim-orange-text)]">*</span> : null}
         </span>
         <span className="relative mt-2 block">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-600" />
@@ -6687,7 +6643,7 @@ function SearchableCreatableSelect({
         </span>
       </label>
       {helperText ? <p className="mt-2 text-xs text-zinc-500">{helperText}</p> : null}
-      {createError ? <p className="mt-2 text-xs font-semibold text-red-300">{createError}</p> : null}
+      {createError ? <p className="mt-2 text-xs font-semibold text-[var(--tone-red-text)]">{createError}</p> : null}
       {open && !disabled ? (
         <div className="absolute z-30 mt-2 max-h-72 w-full overflow-auto rounded-md border border-nexus-line bg-zinc-950 p-1 shadow-2xl shadow-black/50">
           {loading ? <div className="px-3 py-2 text-sm text-zinc-500">Loading...</div> : null}
@@ -6701,7 +6657,7 @@ function SearchableCreatableSelect({
                 className="flex w-full items-center justify-between rounded px-3 py-2 text-left text-sm text-zinc-200 hover:bg-nexus-panel"
               >
                 <span className="min-w-0 truncate">{getOptionLabel(option)}</span>
-                {String(getOptionValue(option)) === String(value) ? <span className="text-xs text-nexus-orange">Selected</span> : null}
+                {String(getOptionValue(option)) === String(value) ? <span className="text-xs text-[var(--bim-orange-text)]">Selected</span> : null}
               </button>
             ))
           ) : null}
@@ -6714,7 +6670,7 @@ function SearchableCreatableSelect({
               disabled={creating}
               onMouseDown={(event) => event.preventDefault()}
               onClick={createOption}
-              className="mt-1 flex w-full items-center gap-2 rounded border border-dashed border-nexus-line px-3 py-2 text-left text-sm font-semibold text-nexus-orange hover:border-nexus-orange hover:bg-nexus-panel disabled:text-zinc-600"
+              className="mt-1 flex w-full items-center gap-2 rounded border border-dashed border-nexus-line px-3 py-2 text-left text-sm font-semibold text-[var(--bim-orange-text)] hover:border-[var(--bim-orange-focus)] hover:bg-nexus-panel disabled:text-zinc-600"
             >
               <Plus className="h-4 w-4" />
               {creating ? "Creating..." : `Create "${trimmedQuery}"`}
@@ -6744,7 +6700,6 @@ function AddProductPreview({
   const optionalFields = [
     ["Barcode", form.barcode],
     ["Low Stock Alert", form.reorderStockLevel],
-    ["Internal Notes", form.notes],
     ["Product Image", form.imageFile]
   ];
 
@@ -6770,6 +6725,7 @@ function AddProductPreview({
           <p className="mt-2 text-sm italic text-zinc-500">
             {skuPreview === "auto-generate" ? "Full Category, Brand & Model" : skuPreview}
           </p>
+          <p className="mt-2 text-xs text-zinc-600">Auto-generated from Category + Brand + Model.</p>
         </div>
 
         <dl className="space-y-3 text-sm">
@@ -6777,18 +6733,16 @@ function AddProductPreview({
           <DetailRow label="Brand" value={selectedBrand?.brandname || "-"} />
           <DetailRow label="Model" value={form.modelName || "-"} />
           <DetailRow label="Tracking Method" value="Serial Number Tracking" strong />
-          <DetailRow label="Status" value={form.isactive ? "Active" : "Inactive"} highlight={form.isactive} />
         </dl>
 
         <div className="border-t border-nexus-line pt-4">
           <div className="flex items-center justify-between text-sm">
             <span className="text-zinc-400">Required fields</span>
-            <span className="font-bold text-nexus-orange">{requiredProgress}%</span>
+            <span className="font-bold text-[var(--bim-orange-text)]">{requiredProgress}%</span>
           </div>
           <div className="mt-2 h-1.5 rounded-full bg-zinc-800">
             <div className="h-1.5 rounded-full bg-nexus-orange" style={{ width: `${requiredProgress}%` }} />
           </div>
-          <p className="mt-2 text-xs text-zinc-500">{requiredTotal - requiredDone} required fields remaining</p>
         </div>
 
         <div className="space-y-2 border-t border-nexus-line pt-4">
@@ -6811,35 +6765,23 @@ function AddProductPreview({
         </div>
       </div>
       </section>
-
-      <section className="rounded-lg border border-nexus-line bg-nexus-panel p-4">
-        <h2 className="bim-section-title">Product Lifecycle</h2>
-        <div className="mt-4 space-y-4 text-sm">
-          <LifecycleStep number="1" title="Product Created" detail="You are here" active />
-          <LifecycleStep number="2" title="Stock Received or Added" detail="Via receiving record or adjustment" />
-          <LifecycleStep number="3" title="Stock Units Available" detail="Units become searchable inventory" />
-        </div>
-      </section>
     </aside>
   );
 }
 
-function LifecycleStep({ number, title, detail, active = false }) {
-  return (
-    <div className="flex gap-3">
-      <span
-        className={`grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-bold ${
-          active ? "bg-nexus-orange text-black" : "bg-zinc-800 text-zinc-400"
-        }`}
-      >
-        {number}
-      </span>
-      <span>
-        <span className={`block font-bold ${active ? "text-nexus-orange" : "text-white"}`}>{title}</span>
-        <span className="mt-1 block text-xs text-zinc-500">{detail}</span>
-      </span>
-    </div>
-  );
+const API_FIELD_LABELS = {
+  descript: "Product Name",
+  model_name_input: "Model",
+  reorder_stock_level: "Low Stock Alert"
+};
+
+function humanizeFieldName(field) {
+  if (API_FIELD_LABELS[field]) {
+    return API_FIELD_LABELS[field];
+  }
+  return field
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 function firstApiError(details) {
@@ -6852,14 +6794,22 @@ function firstApiError(details) {
   if (!details || typeof details !== "object") {
     return "";
   }
-  const firstValue = Object.values(details)[0];
-  if (Array.isArray(firstValue)) {
-    return firstValue[0];
+  const firstKey = Object.keys(details)[0];
+  if (!firstKey) {
+    return "";
   }
-  if (typeof firstValue === "string") {
-    return firstValue;
+  const firstValue = details[firstKey];
+  const message = Array.isArray(firstValue) ? firstValue[0] : typeof firstValue === "string" ? firstValue : "";
+  if (!message) {
+    return "";
   }
-  return "";
+  if (firstKey === "non_field_errors" || firstKey === "detail" || /^\d+$/.test(firstKey)) {
+    return message;
+  }
+  if (/^this field /i.test(message)) {
+    return `${humanizeFieldName(firstKey)} ${message.replace(/^this field /i, "")}`;
+  }
+  return message;
 }
 
 function DetailRow({ label, value, highlight = false, strong = false }) {
@@ -6942,11 +6892,11 @@ function KpiGrid({ items }) {
         const isDanger = item.tone === "danger";
         const className = `group block min-h-32 rounded-lg border bg-nexus-panel p-4 shadow-panel ${
             isDanger
-              ? "border-nexus-red/70"
+              ? "border-[rgb(var(--bim-red-rgb)/70%)]"
               : isWarning
-                ? "border-nexus-orange/70"
+                ? "border-[rgb(var(--bim-orange-focus-rgb)/70%)]"
                 : "border-nexus-line"
-          } ${item.href ? "cursor-pointer hover:border-nexus-orange/70 hover:bg-nexus-orange/5 focus:outline-none focus:ring-2 focus:ring-nexus-orange/40" : ""}`;
+          } ${item.href ? "cursor-pointer hover:border-[var(--bim-muted)] hover:bg-nexus-panel2 hover:shadow-[var(--bim-card-shadow-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--bim-orange-focus)]" : ""}`;
         const content = (
           <>
             <div className="flex items-start justify-between gap-3">
@@ -6960,15 +6910,15 @@ function KpiGrid({ items }) {
                 isDanger
                   ? "text-nexus-red"
                   : isWarning
-                    ? "text-nexus-orange"
-                    : "text-white group-hover:text-nexus-orange"
+                    ? "text-[var(--bim-orange-text)]"
+                    : "text-white"
               }`}
             >
               {item.value}
             </p>
             <div className="mt-1 flex items-center justify-between gap-3 text-sm text-zinc-400">
               <span>{item.detail}</span>
-              {item.href ? <ChevronRight className="h-4 w-4 shrink-0 text-zinc-600 group-hover:text-nexus-orange" /> : null}
+              {item.href ? <ChevronRight className="h-4 w-4 shrink-0 text-zinc-600" /> : null}
             </div>
             {item.trend ? (
               <p className={`mt-2 text-xs font-semibold ${item.tone === "stock" ? "text-nexus-red" : "text-nexus-green"}`}>
@@ -7000,7 +6950,7 @@ function Overview({ items }) {
         {items.map((item) => {
           const isEnabled = item.enabled !== false && item.href;
           const className = `group flex items-center gap-3 rounded-lg border border-nexus-line bg-nexus-panel p-4 ${
-            isEnabled ? "cursor-pointer hover:border-nexus-orange/70 hover:bg-nexus-orange/5 focus:outline-none focus:ring-2 focus:ring-nexus-orange/40" : "cursor-not-allowed opacity-45 grayscale"
+            isEnabled ? "cursor-pointer hover:border-[var(--bim-muted)] hover:bg-nexus-panel2 hover:shadow-[var(--bim-card-shadow-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--bim-orange-focus)]" : "cursor-not-allowed opacity-45 grayscale"
           }`;
           const content = (
             <>
@@ -7008,11 +6958,11 @@ function Overview({ items }) {
                 <Icon name={item.icon} />
               </span>
               <div className="min-w-0 flex-1">
-                <p className={`text-sm font-bold ${isEnabled ? "text-white group-hover:text-nexus-orange" : "text-zinc-500"}`}>{item.value}</p>
+                <p className={`text-sm font-bold ${isEnabled ? "text-white" : "text-zinc-500"}`}>{item.value}</p>
                 <p className={`text-xs ${isEnabled ? "text-zinc-400" : "text-zinc-500"}`}>{item.label}</p>
                 <p className="text-xs text-zinc-500">{item.detail}</p>
               </div>
-              {isEnabled ? <ChevronRight className="h-4 w-4 shrink-0 text-zinc-600 group-hover:text-nexus-orange" /> : null}
+              {isEnabled ? <ChevronRight className="h-4 w-4 shrink-0 text-zinc-600" /> : null}
             </>
           );
           return isEnabled ? (
@@ -7052,7 +7002,7 @@ function RecentActivity({ items }) {
                 const rowClass = `border-t border-nexus-line ${item.href ? "cursor-pointer hover:bg-nexus-panel2" : "hover:bg-nexus-panel2/60"}`;
                 const content = (
                   <>
-                    <td className="px-4 py-4 font-mono text-xs text-nexus-orange">{item.reference || "-"}</td>
+                    <td className="px-4 py-4 font-mono text-xs text-[var(--bim-orange-text)]">{item.reference || "-"}</td>
                     <td className="px-4 py-4 font-semibold text-white">{item.type || "-"}</td>
                     <td className="px-4 py-4 text-zinc-400">{item.related || "-"}</td>
                     <td className="px-4 py-4 text-zinc-400">{item.user || "-"}</td>
@@ -7140,7 +7090,7 @@ function RecordPanel({ items = [], emptyTitle, emptyDetail }) {
           <>
           <StatusIcon statusClass={item.status_class} />
           <span className="min-w-0 flex-1">
-            <span className="block font-mono text-xs text-nexus-orange">{item.reference}</span>
+            <span className="block font-mono text-xs text-[var(--bim-orange-text)]">{item.reference}</span>
             <span className="mt-1 block truncate text-sm font-semibold text-white">{item.title || "-"}</span>
             <span className="block truncate text-xs text-zinc-500">{item.detail || "-"}</span>
           </span>
@@ -7186,12 +7136,12 @@ function PanelHeader({ title, action, actionHref, badge }) {
       <h2 className="bim-section-title">{title}</h2>
       {badge ? <Badge className="rounded-full bg-nexus-orange px-2 py-1 font-bold text-white">{badge}</Badge> : null}
       {action && actionHref ? (
-        <a className="inline-flex items-center gap-1 text-xs font-semibold text-nexus-orange hover:text-orange-300" href={actionHref}>
+        <a className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]" href={actionHref}>
           {action}
           <ChevronRight className="h-4 w-4" />
         </a>
       ) : action ? (
-        <button className="text-xs font-semibold text-nexus-orange">{action}</button>
+        <button className="text-xs font-semibold text-[var(--bim-orange-text)]">{action}</button>
       ) : null}
     </div>
   );

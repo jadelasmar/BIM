@@ -7,8 +7,8 @@ const variantClasses = {
 // nexus-orange token, which drops to ~2:1 against light-mode surfaces and fails
 // the 3:1 non-text contrast minimum for a focus indicator.
 const focusClasses = {
-  standard: "focus:border-nexus-orange focus:ring-nexus-orange/20",
-  auth: "focus:border-[var(--bim-orange-focus)] focus:ring-[var(--bim-orange-focus)]/30"
+  standard: "focus:border-[var(--bim-orange-focus)] focus:ring-[rgb(var(--bim-orange-focus-rgb)/20%)]",
+  auth: "focus:border-[var(--bim-orange-focus)] focus:ring-[rgb(var(--bim-orange-focus-rgb)/30%)]"
 };
 
 export default function Input({
@@ -40,7 +40,7 @@ export default function Input({
       <span className={labelClassName}>{label}</span>
       <span className="mt-2 block">{input}</span>
       {helperText ? <p className="mt-2 bim-helper-text">{helperText}</p> : null}
-      {error ? <p className="mt-2 text-xs font-medium leading-5 text-red-300">{error}</p> : null}
+      {error ? <p className="mt-2 text-xs font-medium leading-5 text-[var(--tone-red-text)]">{error}</p> : null}
     </label>
   );
 }
