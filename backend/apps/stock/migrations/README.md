@@ -1,4 +1,4 @@
-# BIM Stock Migrations
+# Inventory Migrations
 
 This folder stores Django migration files for the `bim_stock` app.
 

@@ -5,7 +5,7 @@ This roadmap documents product direction, not implementation history.
 ## Completed / Active
 
 - Command Center
-- BIM Stock inventory list
+- Inventory list
 - Product Details
 - Add Product
 - Receive Stock using `ReceivingRecord`

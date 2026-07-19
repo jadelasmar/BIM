@@ -4,7 +4,8 @@ import { X } from "../../constants/icons";
 
 const ToastContext = createContext(null);
 
-const SUCCESS_DISMISS_MS = 4000;
+const TOAST_DISMISS_MS = 1500;
+const TOAST_FADE_MS = 300;
 
 const TONE_STYLES = {
   success: {
@@ -23,18 +24,29 @@ export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
   const nextId = useRef(0);
 
-  const dismissToast = useCallback((id) => {
+  const removeToast = useCallback((id) => {
     setToasts((current) => current.filter((toast) => toast.id !== id));
   }, []);
+
+  const dismissToast = useCallback(
+    (id) => {
+      setToasts((current) =>
+        current.map((toast) => (toast.id === id ? { ...toast, leaving: true } : toast))
+      );
+      setTimeout(() => removeToast(id), TOAST_FADE_MS);
+    },
+    [removeToast]
+  );
 
   const showToast = useCallback(
     (tone, message) => {
       if (!message) return null;
       const id = ++nextId.current;
-      setToasts((current) => [...current.filter((toast) => toast.tone !== tone), { id, tone, message }]);
-      if (tone === "success") {
-        setTimeout(() => dismissToast(id), SUCCESS_DISMISS_MS);
-      }
+      setToasts((current) => [
+        ...current.filter((toast) => toast.tone !== tone),
+        { id, tone, message, leaving: false }
+      ]);
+      setTimeout(() => dismissToast(id), TOAST_DISMISS_MS);
       return id;
     },
     [dismissToast]
@@ -59,7 +71,7 @@ export function ToastProvider({ children }) {
             <div
               key={toast.id}
               role={toast.tone === "error" ? "alert" : "status"}
-              className={`pointer-events-auto flex w-full max-w-md items-start gap-3 rounded-lg border ${tone.border} bg-nexus-panel px-4 py-3 text-sm font-semibold shadow-[var(--bim-card-shadow-hover)] ${tone.text}`}
+              className={`pointer-events-auto flex w-full max-w-md items-start gap-3 rounded-lg border ${tone.border} bg-nexus-panel px-4 py-3 text-sm font-semibold shadow-[var(--bim-card-shadow-hover)] ${tone.text} transition-opacity duration-300 ease-out ${toast.leaving ? "opacity-0" : "opacity-100"}`}
             >
               <Icon name={tone.icon} className="mt-0.5 h-4 w-4 shrink-0" />
               <span className="flex-1">{toast.message}</span>

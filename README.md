@@ -2,7 +2,7 @@
 
 BIM Nexus is an internal IT operations platform built for BIMPOS.
 
-The current implemented module is BIM Stock, covering product definitions, physical stock units, stock entry, deliveries, suppliers, and operational visibility.
+The current implemented module is Inventory, covering product definitions, physical stock units, stock entry, deliveries, suppliers, and operational visibility.
 
 ## Stack
 

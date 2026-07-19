@@ -1,6 +1,6 @@
 # BIM Nexus Documentation
 
-BIM Nexus is an internal IT operations platform built for BIMPOS. The current implemented business area is BIM Stock: product definitions, physical stock units, stock entry, deliveries, and operational visibility.
+BIM Nexus is an internal IT operations platform built for BIMPOS. The current implemented business area is Inventory: product definitions, physical stock units, stock entry, deliveries, and operational visibility.
 
 This documentation describes the current codebase. It is the source of truth for future development.
 

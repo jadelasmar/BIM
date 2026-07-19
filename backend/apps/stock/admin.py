@@ -366,7 +366,6 @@ class ReservationRecordAdmin(admin.ModelAdmin):
         "reservation_number",
         "reserved_for",
         "status",
-        "expected_release_date",
         "unit_count",
         "reserved_by",
         "released_by",
@@ -381,7 +380,7 @@ class ReservationRecordAdmin(admin.ModelAdmin):
         "items__product__descript",
         "items__product__sku",
     )
-    list_filter = ("status", "expected_release_date", "isactive")
+    list_filter = ("status", "isactive")
     readonly_fields = (
         "reservation_number",
         "reserved_at",
@@ -399,7 +398,6 @@ class ReservationRecordAdmin(admin.ModelAdmin):
                     "reservation_number",
                     "reserved_for",
                     "reason",
-                    "expected_release_date",
                     "status",
                     "reserved_by",
                     "reserved_at",
@@ -449,7 +447,6 @@ class IssueRecordAdmin(admin.ModelAdmin):
         "issued_to",
         "status",
         "issue_date",
-        "expected_return_date",
         "returned_date",
         "unit_count",
         "issued_by",
@@ -460,14 +457,12 @@ class IssueRecordAdmin(admin.ModelAdmin):
     search_fields = (
         "issue_number",
         "issued_to",
-        "department",
-        "branch_or_site",
         "reason",
         "items__product_unit__serial_number",
         "items__product__descript",
         "items__product__sku",
     )
-    list_filter = ("status", "issue_date", "expected_return_date", "isactive")
+    list_filter = ("status", "issue_date", "isactive")
     readonly_fields = (
         "issue_number",
         "returned_at",
@@ -483,11 +478,8 @@ class IssueRecordAdmin(admin.ModelAdmin):
                 "fields": (
                     "issue_number",
                     "issued_to",
-                    "department",
-                    "branch_or_site",
                     "reason",
                     "issue_date",
-                    "expected_return_date",
                     "status",
                     "issued_by",
                     "isactive",
@@ -542,8 +534,6 @@ class RepairRecordAdmin(admin.ModelAdmin):
     list_display = (
         "repair_number",
         "repair_reason",
-        "reported_by_name",
-        "repair_location",
         "technician",
         "repair_date",
         "status",
@@ -557,8 +547,6 @@ class RepairRecordAdmin(admin.ModelAdmin):
     search_fields = (
         "repair_number",
         "repair_reason",
-        "reported_by_name",
-        "repair_location",
         "technician",
         "items__product_unit__serial_number",
         "items__product__descript",
@@ -568,7 +556,6 @@ class RepairRecordAdmin(admin.ModelAdmin):
         "status",
         "resolution",
         "repair_date",
-        "expected_resolution_date",
         "isactive",
     )
     readonly_fields = (
@@ -586,11 +573,8 @@ class RepairRecordAdmin(admin.ModelAdmin):
                 "fields": (
                     "repair_number",
                     "repair_reason",
-                    "reported_by_name",
-                    "repair_location",
                     "technician",
                     "repair_date",
-                    "expected_resolution_date",
                     "status",
                     "sent_by",
                     "isactive",
@@ -701,7 +685,7 @@ class DeliveryItemInline(admin.TabularInline):
     extra = 0
     autocomplete_fields = ("product_unit",)
     readonly_fields = ("product", "crdate")
-    fields = ("product_unit", "product", "notes", "isactive", "crdate")
+    fields = ("product_unit", "product", "sale_price", "notes", "isactive", "crdate")
 
 
 @admin.register(DeliveryRecord)
@@ -796,7 +780,6 @@ class ReceivingRecordAdmin(admin.ModelAdmin):
         "receiving_number",
         "supplier",
         "received_date",
-        "reference_number",
         "status",
         "total_quantity",
         "created_by",
@@ -805,7 +788,6 @@ class ReceivingRecordAdmin(admin.ModelAdmin):
     )
     search_fields = (
         "receiving_number",
-        "reference_number",
         "supplier__name",
         "items__product__descript",
         "items__serial_number",
@@ -823,7 +805,6 @@ class ReceivingRecordAdmin(admin.ModelAdmin):
                 "fields": (
                     "receiving_number",
                     "supplier",
-                    "reference_number",
                     "received_date",
                     "status",
                     "created_by",

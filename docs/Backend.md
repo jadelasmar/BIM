@@ -43,7 +43,7 @@ There is no public signup.
 
 ### `apps.stock`
 
-Owns BIM Stock:
+Owns Inventory:
 
 - product hierarchy
 - product definitions
@@ -73,8 +73,8 @@ The package path is `apps.stock`, but the Django app label remains `bim_stock` f
 - Stock roles are prepared in `backend/apps/stock/roles.py`.
 - New users are assigned to the Viewer group by account signals.
 - Admin / IT lead users should remain superuser or staff-level accounts when they need Django Admin, user, group, permission, or system settings access.
-- IT Support is the daily stock operations role. It receives BIM Stock view/add/change permissions except delete permissions, so it can create and correct stock records, products, units, suppliers, and clients without managing Django users/groups/settings.
-- Viewer is read-only. It receives BIM Stock view permissions only and cannot create, edit, cancel, return, resolve, or insert records through the APIs.
+- IT Support is the daily stock operations role. It receives Inventory view/add/change permissions except delete permissions, so it can create and correct stock records, products, units, suppliers, and clients without managing Django users/groups/settings.
+- Viewer is read-only. It receives Inventory view permissions only and cannot create, edit, cancel, return, resolve, or insert records through the APIs.
 - Initial app data exposes stock action permission flags so the frontend can hide write actions for Viewer while backend API checks remain authoritative.
 
 ## Views

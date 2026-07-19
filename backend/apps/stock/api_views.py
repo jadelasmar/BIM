@@ -372,6 +372,7 @@ class DeliveryRecordListCreateAPIView(WritePermissionRequiredMixin, generics.Lis
                 | Q(client__name__icontains=query)
                 | Q(customer_name__icontains=query)
                 | Q(receiver_name__icontains=query)
+                | Q(invoice_number__icontains=query)
                 | Q(items__product_unit__serial_number__icontains=query)
                 | Q(items__product__descript__icontains=query)
                 | Q(items__product__sku__icontains=query)
@@ -561,8 +562,6 @@ class IssueRecordListCreateAPIView(WritePermissionRequiredMixin, generics.ListCr
             queryset = queryset.filter(
                 Q(issue_number__icontains=query)
                 | Q(issued_to__icontains=query)
-                | Q(department__icontains=query)
-                | Q(branch_or_site__icontains=query)
                 | Q(reason__icontains=query)
                 | Q(items__product_unit__serial_number__icontains=query)
                 | Q(items__product__descript__icontains=query)
@@ -648,8 +647,6 @@ class RepairRecordListCreateAPIView(WritePermissionRequiredMixin, generics.ListC
             queryset = queryset.filter(
                 Q(repair_number__icontains=query)
                 | Q(repair_reason__icontains=query)
-                | Q(reported_by_name__icontains=query)
-                | Q(repair_location__icontains=query)
                 | Q(technician__icontains=query)
                 | Q(items__product_unit__serial_number__icontains=query)
                 | Q(items__product__descript__icontains=query)
@@ -734,7 +731,8 @@ class ReceivingRecordListCreateAPIView(WritePermissionRequiredMixin, generics.Li
         if query:
             queryset = queryset.filter(
                 Q(receiving_number__icontains=query)
-                | Q(reference_number__icontains=query)
+                | Q(po_number__icontains=query)
+                | Q(supplier_invoice_number__icontains=query)
                 | Q(supplier__name__icontains=query)
                 | Q(items__product__descript__icontains=query)
                 | Q(items__product__sku__icontains=query)

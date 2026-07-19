@@ -25,7 +25,7 @@ export const statusMeta = {
   issued: { icon: "user-check", className: statusStyles.issued },
   low_stock: { icon: "triangle-alert", className: statusStyles.low_stock },
   out_of_stock: { icon: "package-x", className: statusStyles.out_of_stock },
-  received: { icon: "package-plus", className: statusStyles.received },
+  received: { icon: "inbox", className: statusStyles.received },
   released: { icon: "reset", className: statusStyles.released },
   repair: { icon: "wrench", className: statusStyles.repair },
   reserved: { icon: "clock-3", className: statusStyles.reserved },

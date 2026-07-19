@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
 
 from .models import (
     Brand,
@@ -138,10 +139,24 @@ class ClientSerializer(serializers.ModelSerializer):
 
 class ProductSerializer(serializers.ModelSerializer):
     display_name = serializers.SerializerMethodField()
+    category = serializers.PrimaryKeyRelatedField(
+        queryset=Category.objects.all(),
+        required=False,
+    )
+    category_name_input = serializers.CharField(
+        required=False,
+        write_only=True,
+        allow_blank=True,
+    )
     brand = serializers.PrimaryKeyRelatedField(
         queryset=Brand.objects.all(),
         required=False,
         write_only=True,
+    )
+    brand_name_input = serializers.CharField(
+        required=False,
+        write_only=True,
+        allow_blank=True,
     )
     model = serializers.PrimaryKeyRelatedField(
         queryset=ProductModel.objects.all(),
@@ -173,11 +188,13 @@ class ProductSerializer(serializers.ModelSerializer):
             "display_name",
             "category",
             "category_name",
+            "category_name_input",
             "model",
             "model_name",
             "brand_id",
             "brand_name",
             "brand",
+            "brand_name_input",
             "model_name_input",
             "sku",
             "barcode",
@@ -213,29 +230,44 @@ class ProductSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
+        category = attrs.get("category") or getattr(self.instance, "category", None)
+        category_name = attrs.get("category_name_input", "").strip()
         model = attrs.get("model") or getattr(self.instance, "model", None)
         brand = attrs.get("brand")
+        brand_name = attrs.get("brand_name_input", "").strip()
         model_name = attrs.get("model_name_input", "").strip()
 
-        if not model and not (brand and model_name):
-            errors = {}
-            if not brand:
+        errors = {}
+        if not category and not category_name:
+            errors["category"] = "Select or enter a Category."
+        if not model and not ((brand or brand_name) and model_name):
+            if not brand and not brand_name:
                 errors["brand"] = "Brand is required to save a Model name."
             if not model_name:
                 errors["model_name_input"] = "Enter a Model name."
+        if errors:
             raise serializers.ValidationError(errors)
 
         return attrs
 
     def _save_with_model_name(self, attrs, save_func):
-        brand = attrs.pop("brand", None)
-        model_name = attrs.pop("model_name_input", "").strip()
-        if not attrs.get("model") and brand and model_name:
-            attrs["model"], _created = ProductModel.objects.get_or_create(
-                brand=brand,
-                modelname=model_name,
-            )
-        return save_func(attrs)
+        with transaction.atomic():
+            category_name = attrs.pop("category_name_input", "").strip()
+            if not attrs.get("category") and category_name:
+                attrs["category"], _created = Category.objects.get_or_create(name=category_name)
+
+            brand = attrs.pop("brand", None)
+            brand_name = attrs.pop("brand_name_input", "").strip()
+            if not brand and brand_name:
+                brand, _created = Brand.objects.get_or_create(brandname=brand_name)
+
+            model_name = attrs.pop("model_name_input", "").strip()
+            if not attrs.get("model") and brand and model_name:
+                attrs["model"], _created = ProductModel.objects.get_or_create(
+                    brand=brand,
+                    modelname=model_name,
+                )
+            return save_func(attrs)
 
     def create(self, validated_data):
         return self._save_with_model_name(
@@ -452,6 +484,7 @@ class DeliveryItemSerializer(serializers.ModelSerializer):
             "serial_number",
             "product_unit_status",
             "product_unit_status_label",
+            "sale_price",
             "notes",
             "crdate",
             "isactive",
@@ -525,7 +558,6 @@ class ReservationRecordSerializer(serializers.ModelSerializer):
             "reservation_number",
             "reserved_for",
             "reason",
-            "expected_release_date",
             "notes",
             "status",
             "reserved_by",
@@ -651,11 +683,8 @@ class IssueRecordSerializer(serializers.ModelSerializer):
             "id",
             "issue_number",
             "issued_to",
-            "department",
-            "branch_or_site",
             "reason",
             "issue_date",
-            "expected_return_date",
             "returned_date",
             "notes",
             "status",
@@ -783,11 +812,8 @@ class RepairRecordSerializer(serializers.ModelSerializer):
             "id",
             "repair_number",
             "repair_reason",
-            "reported_by_name",
-            "repair_location",
             "technician",
             "repair_date",
-            "expected_resolution_date",
             "resolved_date",
             "resolution",
             "resolution_notes",
@@ -926,6 +952,11 @@ class ClientReturnRecordSerializer(serializers.ModelSerializer):
         allow_null=True,
     )
     client_name = serializers.CharField(source="client.name", read_only=True, default="")
+    client_name_input = serializers.CharField(
+        required=False,
+        write_only=True,
+        allow_blank=True,
+    )
     received_by_name = serializers.CharField(
         source="received_by.get_username",
         read_only=True,
@@ -941,6 +972,7 @@ class ClientReturnRecordSerializer(serializers.ModelSerializer):
             "delivery_number",
             "client",
             "client_name",
+            "client_name_input",
             "customer_name",
             "received_from",
             "return_date",
@@ -1004,6 +1036,16 @@ class DeliveryRecordSerializer(serializers.ModelSerializer):
         allow_null=True,
     )
     client_name = serializers.CharField(source="client.name", read_only=True, default="")
+    client_name_input = serializers.CharField(
+        required=False,
+        write_only=True,
+        allow_blank=True,
+    )
+    unit_sale_prices = serializers.DictField(
+        required=False,
+        write_only=True,
+        default=dict,
+    )
 
     class Meta:
         model = DeliveryRecord
@@ -1012,8 +1054,10 @@ class DeliveryRecordSerializer(serializers.ModelSerializer):
             "delivery_number",
             "client",
             "client_name",
+            "client_name_input",
             "customer_name",
             "receiver_name",
+            "invoice_number",
             "delivery_date",
             "notes",
             "status",
@@ -1024,6 +1068,7 @@ class DeliveryRecordSerializer(serializers.ModelSerializer):
             "created_by_name",
             "total_units",
             "unit_ids",
+            "unit_sale_prices",
             "items",
             "crdate",
             "isactive",
@@ -1219,6 +1264,11 @@ class ReceivingRecordSerializer(serializers.ModelSerializer):
     )
     total_quantity = serializers.SerializerMethodField()
     supplier_name = serializers.CharField(source="supplier.name", read_only=True)
+    supplier_name_input = serializers.CharField(
+        required=False,
+        write_only=True,
+        allow_blank=True,
+    )
     created_by_name = serializers.CharField(
         source="created_by.get_username",
         read_only=True,
@@ -1231,7 +1281,9 @@ class ReceivingRecordSerializer(serializers.ModelSerializer):
             "receiving_number",
             "supplier",
             "supplier_name",
-            "reference_number",
+            "supplier_name_input",
+            "po_number",
+            "supplier_invoice_number",
             "received_date",
             "notes",
             "status",
@@ -1291,14 +1343,16 @@ class ReceivingRecordCorrectionSerializer(serializers.ModelSerializer):
         model = ReceivingRecord
         fields = (
             "supplier",
-            "reference_number",
+            "po_number",
+            "supplier_invoice_number",
             "received_date",
             "notes",
             "items",
         )
         extra_kwargs = {
             "supplier": {"required": False, "allow_null": True},
-            "reference_number": {"required": False, "allow_blank": True},
+            "po_number": {"required": False, "allow_blank": True},
+            "supplier_invoice_number": {"required": False, "allow_blank": True},
             "received_date": {"required": False},
             "notes": {"required": False, "allow_blank": True},
         }
@@ -1311,9 +1365,12 @@ class ReceivingRecordCorrectionSerializer(serializers.ModelSerializer):
                 supplier=validated_data.get("supplier")
                 if "supplier" in validated_data
                 else instance.supplier,
-                reference_number=validated_data.get("reference_number")
-                if "reference_number" in validated_data
-                else instance.reference_number,
+                po_number=validated_data.get("po_number")
+                if "po_number" in validated_data
+                else instance.po_number,
+                supplier_invoice_number=validated_data.get("supplier_invoice_number")
+                if "supplier_invoice_number" in validated_data
+                else instance.supplier_invoice_number,
                 received_date=validated_data.get("received_date")
                 if "received_date" in validated_data
                 else instance.received_date,

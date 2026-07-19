@@ -250,7 +250,8 @@ class ReceivingRecord(models.Model):
         blank=True,
         null=True,
     )
-    reference_number = models.CharField(max_length=100, blank=True)
+    po_number = models.CharField(max_length=100, blank=True)
+    supplier_invoice_number = models.CharField(max_length=100, blank=True)
     received_date = models.DateField(default=timezone.localdate)
     notes = models.TextField(blank=True)
     status = models.CharField(
@@ -368,6 +369,7 @@ class DeliveryRecord(models.Model):
     )
     customer_name = models.CharField(max_length=150)
     receiver_name = models.CharField(max_length=150, blank=True)
+    invoice_number = models.CharField(max_length=100, blank=True)
     delivery_date = models.DateField(default=timezone.localdate)
     notes = models.TextField(blank=True)
     status = models.CharField(
@@ -435,6 +437,7 @@ class DeliveryItem(models.Model):
         related_name="delivery_item",
     )
     product = models.ForeignKey(Product, on_delete=models.PROTECT)
+    sale_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     notes = models.TextField(blank=True)
     crdate = models.DateTimeField(auto_now_add=True)
     isactive = models.BooleanField(default=True)
@@ -470,7 +473,6 @@ class ReservationRecord(models.Model):
     )
     reserved_for = models.CharField(max_length=150)
     reason = models.CharField(max_length=150, blank=True)
-    expected_release_date = models.DateField(blank=True, null=True)
     notes = models.TextField(blank=True)
     status = models.CharField(
         max_length=20,
@@ -572,11 +574,8 @@ class IssueRecord(models.Model):
         editable=False,
     )
     issued_to = models.CharField(max_length=150)
-    department = models.CharField(max_length=150, blank=True)
-    branch_or_site = models.CharField(max_length=150, blank=True)
     reason = models.CharField(max_length=150, blank=True)
     issue_date = models.DateField(default=timezone.localdate)
-    expected_return_date = models.DateField(blank=True, null=True)
     returned_date = models.DateField(blank=True, null=True)
     notes = models.TextField(blank=True)
     status = models.CharField(
@@ -686,11 +685,8 @@ class RepairRecord(models.Model):
         editable=False,
     )
     repair_reason = models.CharField(max_length=150)
-    reported_by_name = models.CharField(max_length=150, blank=True)
-    repair_location = models.CharField(max_length=150, blank=True)
     technician = models.CharField(max_length=150, blank=True)
     repair_date = models.DateField(default=timezone.localdate)
-    expected_resolution_date = models.DateField(blank=True, null=True)
     resolved_date = models.DateField(blank=True, null=True)
     resolution = models.CharField(
         max_length=20,

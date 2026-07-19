@@ -20,7 +20,7 @@ export const toneClasses = {
 export const workflowMeta = {
   add_product: { icon: "plus", tone: "blue" },
   add_stock_unit: { icon: "package-plus", tone: "green" },
-  receive_stock: { icon: "download", tone: "green" },
+  receive_stock: { icon: "inbox", tone: "green" },
   create_delivery: { icon: "delivery", tone: "indigo" },
   create_reservation: { icon: "clock-3", tone: "warning" },
   create_issue: { icon: "user-check", tone: "indigo" },

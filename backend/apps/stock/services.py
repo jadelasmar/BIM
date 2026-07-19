@@ -3,6 +3,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from .models import (
+    Client,
     ClientReturnItem,
     ClientReturnRecord,
     DeliveryItem,
@@ -17,6 +18,7 @@ from .models import (
     ReservationItem,
     ReservationRecord,
     StockMovement,
+    Supplier,
 )
 
 
@@ -165,7 +167,9 @@ def create_receiving_record(
     *,
     items,
     supplier=None,
-    reference_number="",
+    supplier_name_input="",
+    po_number="",
+    supplier_invoice_number="",
     received_date=None,
     notes="",
     created_by=None,
@@ -173,9 +177,13 @@ def create_receiving_record(
     if not items:
         raise ValidationError("At least one receiving item is required.")
 
+    if not supplier and supplier_name_input.strip():
+        supplier, _created = Supplier.objects.get_or_create(name=supplier_name_input.strip())
+
     receiving = ReceivingRecord.objects.create(
         supplier=supplier,
-        reference_number=(reference_number or "").strip(),
+        po_number=(po_number or "").strip(),
+        supplier_invoice_number=(supplier_invoice_number or "").strip(),
         received_date=received_date or timezone.localdate(),
         notes=notes,
         created_by=created_by,
@@ -199,15 +207,21 @@ def create_delivery_record(
     unit_ids,
     customer_name="",
     client=None,
+    client_name_input="",
     receiver_name="",
+    invoice_number="",
     delivery_date=None,
     notes="",
     created_by=None,
     status=DeliveryRecord.STATUS_COMPLETED,
+    unit_sale_prices=None,
 ):
     unique_ids = list(dict.fromkeys(unit_ids or []))
     if not unique_ids:
         raise ValidationError("At least one available stock unit is required.")
+
+    if not client and client_name_input.strip():
+        client, _created = Client.objects.get_or_create(name=client_name_input.strip())
 
     units = list(
         ProductUnit.objects.select_for_update()
@@ -231,11 +245,14 @@ def create_delivery_record(
             + ", ".join(sorted(unavailable_units))
         )
 
+    sale_prices = unit_sale_prices or {}
+
     client_name = client.name if client else ""
     delivery = DeliveryRecord.objects.create(
         client=client,
         customer_name=(customer_name or client_name or "").strip(),
         receiver_name=(receiver_name or "").strip(),
+        invoice_number=(invoice_number or "").strip(),
         delivery_date=delivery_date or timezone.localdate(),
         notes=notes,
         status=status,
@@ -247,6 +264,7 @@ def create_delivery_record(
             delivery=delivery,
             product_unit=unit,
             product=unit.product,
+            sale_price=sale_prices.get(str(unit.pk), sale_prices.get(unit.pk, 0)),
         )
         unit.status = ProductUnit.STATUS_SOLD
         unit.sold_date = delivery.delivery_date
@@ -278,6 +296,7 @@ def create_client_return_record(
     resolution,
     delivery=None,
     client=None,
+    client_name_input="",
     customer_name="",
     received_from="",
     return_date=None,
@@ -293,6 +312,9 @@ def create_client_return_record(
         ClientReturnRecord.RESOLUTION_REPAIR,
     ):
         raise ValidationError("Client returns can only move units to available or repair.")
+
+    if not client and client_name_input.strip():
+        client, _created = Client.objects.get_or_create(name=client_name_input.strip())
 
     units = list(
         ProductUnit.objects.select_for_update()
@@ -407,7 +429,6 @@ def create_reservation_record(
     unit_ids,
     reserved_for,
     reason="",
-    expected_release_date=None,
     notes="",
     reserved_by=None,
 ):
@@ -440,7 +461,6 @@ def create_reservation_record(
     reservation = ReservationRecord.objects.create(
         reserved_for=(reserved_for or "").strip(),
         reason=(reason or "").strip(),
-        expected_release_date=expected_release_date,
         notes=notes,
         reserved_by=reserved_by,
     )
@@ -562,11 +582,8 @@ def create_issue_record(
     *,
     unit_ids,
     issued_to,
-    department="",
-    branch_or_site="",
     reason="",
     issue_date=None,
-    expected_return_date=None,
     notes="",
     issued_by=None,
 ):
@@ -598,11 +615,8 @@ def create_issue_record(
 
     issue = IssueRecord.objects.create(
         issued_to=(issued_to or "").strip(),
-        department=(department or "").strip(),
-        branch_or_site=(branch_or_site or "").strip(),
         reason=(reason or "").strip(),
         issue_date=issue_date or timezone.localdate(),
-        expected_return_date=expected_return_date,
         notes=notes,
         issued_by=issued_by,
     )
@@ -724,11 +738,8 @@ def create_repair_record(
     *,
     unit_ids,
     repair_reason,
-    reported_by_name="",
-    repair_location="",
     technician="",
     repair_date=None,
-    expected_resolution_date=None,
     notes="",
     sent_by=None,
 ):
@@ -760,11 +771,8 @@ def create_repair_record(
 
     repair = RepairRecord.objects.create(
         repair_reason=(repair_reason or "").strip(),
-        reported_by_name=(reported_by_name or "").strip(),
-        repair_location=(repair_location or "").strip(),
         technician=(technician or "").strip(),
         repair_date=repair_date or timezone.localdate(),
-        expected_resolution_date=expected_resolution_date,
         notes=notes,
         sent_by=sent_by,
     )
@@ -929,7 +937,8 @@ def update_receiving_record_header(
     receiving,
     *,
     supplier=None,
-    reference_number=None,
+    po_number=None,
+    supplier_invoice_number=None,
     received_date=None,
     notes=None,
     items=None,
@@ -939,8 +948,10 @@ def update_receiving_record_header(
 
     if supplier is not None:
         receiving.supplier = supplier
-    if reference_number is not None:
-        receiving.reference_number = reference_number.strip()
+    if po_number is not None:
+        receiving.po_number = po_number.strip()
+    if supplier_invoice_number is not None:
+        receiving.supplier_invoice_number = supplier_invoice_number.strip()
     if received_date is not None:
         receiving.received_date = received_date
     if notes is not None:
@@ -948,7 +959,8 @@ def update_receiving_record_header(
     receiving.save(
         update_fields=(
             "supplier",
-            "reference_number",
+            "po_number",
+            "supplier_invoice_number",
             "received_date",
             "notes",
         )

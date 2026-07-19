@@ -93,7 +93,7 @@ Important routes:
 
 ### `backend/apps/stock/`
 
-BIM Stock business app:
+Inventory business app:
 
 - `models.py`: stock models
 - `admin.py`: staff-friendly admin

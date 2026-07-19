@@ -3,6 +3,7 @@ import {
   BarChart3,
   BookOpen,
   Box,
+  Boxes,
   Camera,
   Check,
   CheckCircle2,
@@ -18,6 +19,7 @@ import {
   EyeOff,
   Filter,
   Handshake,
+  Inbox,
   LayoutDashboard,
   Layers,
   Menu,
@@ -34,6 +36,7 @@ import {
   Search,
   Settings,
   ShieldAlert,
+  ShieldCheck,
   ShoppingBag,
   Sun,
   Truck,
@@ -42,6 +45,7 @@ import {
   Upload,
   UserCheck,
   Users,
+  Workflow,
   Wrench,
   X
 } from "lucide-react";
@@ -74,6 +78,7 @@ export const iconComponents = {
   "bar-chart-3": BarChart3,
   "book-open": BookOpen,
   box: Box,
+  boxes: Boxes,
   "check-circle-2": CheckCircle2,
   clipboard: ClipboardList,
   "clock-3": Clock3,
@@ -81,6 +86,7 @@ export const iconComponents = {
   database: Database,
   download: Download,
   delivery: Truck,
+  inbox: Inbox,
   "layout-dashboard": LayoutDashboard,
   layers: Layers,
   more: MoreHorizontal,
@@ -94,6 +100,7 @@ export const iconComponents = {
   save: Save,
   settings: Settings,
   "shield-alert": ShieldAlert,
+  "shield-check": ShieldCheck,
   "shopping-bag": ShoppingBag,
   suppliers: Handshake,
   clients: Users,
@@ -101,5 +108,6 @@ export const iconComponents = {
   "triangle-alert": TriangleAlert,
   upload: Upload,
   "user-check": UserCheck,
+  workflow: Workflow,
   wrench: Wrench
 };

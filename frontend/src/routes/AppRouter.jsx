@@ -43,23 +43,6 @@ import { formatCount, formatCurrency, formatDate } from "../utils/formatters";
 import logoPrimary from "../assets/brand/logo-primary.svg";
 import logoWhite from "../assets/brand/logo-white.svg";
 
-function greetingPeriodForHour(hour) {
-  if (hour >= 5 && hour < 12) {
-    return "Good morning";
-  }
-  if (hour >= 12 && hour < 17) {
-    return "Good afternoon";
-  }
-  if (hour >= 17 && hour < 22) {
-    return "Good evening";
-  }
-  return "Good night";
-}
-
-function browserGreeting(name) {
-  return `${greetingPeriodForHour(new Date().getHours())}, ${name || "User"}`;
-}
-
 function Shell({ data, children, onRefresh }) {
   const secondaryNavigation = data.navigation.secondary || [];
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -113,6 +96,17 @@ function Sidebar({ data, secondaryNavigation, isOpen, onClose }) {
             <img src={logoPrimary} alt="BIM Nexus" className="bim-sidebar-logo bim-sidebar-logo-light h-8 w-auto max-w-[196px]" />
           </a>
           <p className="mt-2 text-xs text-zinc-500">Internal IT Operations</p>
+          <p className="mt-1 text-xs text-zinc-600">
+            Built for{" "}
+            <a
+              href="https://www.bimpos.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="font-medium text-zinc-500 hover:text-zinc-300 hover:underline"
+            >
+              BIMPOS
+            </a>
+          </p>
         </div>
         <button
           type="button"
@@ -294,7 +288,10 @@ function CommandCenter({ data }) {
 
   return (
     <Shell data={dashboardData} onRefresh={refreshDashboardData}>
-      <Header data={dashboardData} />
+      <header className="mb-5 border-b border-nexus-line pb-4">
+        <h1 className="bim-page-title">Command Center</h1>
+        <p className="bim-page-description">Live snapshot of inventory levels, pending operations, and recent activity.</p>
+      </header>
       <KpiGrid items={dashboardData.kpis} />
       <Overview items={dashboardData.overview} />
 
@@ -328,7 +325,7 @@ function SettingsPage({ data }) {
 
   return (
     <Shell data={data}>
-      <header className="mb-5">
+      <header className="mb-5 border-b border-nexus-line pb-4">
         <h1 className="bim-page-title">Settings</h1>
         <p className="bim-page-description">Manage BIM Nexus display preferences.</p>
       </header>
@@ -381,7 +378,7 @@ function SettingsPage({ data }) {
 function PlaceholderPage({ data, title }) {
   return (
     <Shell data={data}>
-      <header className="mb-5">
+      <header className="mb-5 border-b border-nexus-line pb-4">
         <h1 className="bim-page-title">{title}</h1>
       </header>
 
@@ -461,7 +458,7 @@ function MasterDataListPage({ data, type }) {
 
   return (
     <Shell data={data}>
-      <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+      <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <h1 className="bim-page-title">{config.title}</h1>
           <p className="bim-page-description">{config.description}</p>
@@ -623,7 +620,7 @@ function MasterDataDetailPage({ data, type, isNew = false }) {
       }
       const saved = await response.json();
       showSuccess(`${config.singular} saved.`);
-      window.location.assign(`${config.path}${saved.id}/`);
+      navigateAfterDelay(`${config.path}${saved.id}/`);
     } catch (saveError) {
       showError(saveError.message);
     } finally {
@@ -633,7 +630,7 @@ function MasterDataDetailPage({ data, type, isNew = false }) {
 
   return (
     <Shell data={data}>
-      <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+      <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <a href={data.routes[config.routeKey]} className="mb-2 inline-flex text-sm font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
             Back to {config.title}
@@ -738,10 +735,10 @@ function OperationsPage({ data }) {
       tone: workflowMeta.create_reservation.tone
     },
     {
-      title: "Create Issue",
-      detail: "Temporarily issue available units that are expected to come back.",
+      title: "Create Temporary Assignment",
+      detail: "Temporarily assign available units that are expected to come back.",
       href: data.routes.createIssue,
-      enabled: data.quickActions.some((action) => action.label === "Create Issue" && action.enabled),
+      enabled: data.quickActions.some((action) => action.label === "Create Temporary Assignment" && action.enabled),
       icon: workflowMeta.create_issue.icon,
       tone: workflowMeta.create_issue.tone
     },
@@ -774,7 +771,7 @@ function OperationsPage({ data }) {
 
   return (
     <Shell data={data}>
-      <header className="mb-5">
+      <header className="mb-5 border-b border-nexus-line pb-4">
         <h1 className="bim-page-title">Operations</h1>
         <p className="bim-page-description">Run stock entry and stock exit workflows.</p>
       </header>
@@ -890,7 +887,7 @@ function ReceivingRecordsPage({ data }) {
 
   return (
     <Shell data={data}>
-      <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+      <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <h1 className="bim-page-title">Receiving Records</h1>
           <p className="bim-page-description">Review operational stock-entry records.</p>
@@ -912,7 +909,7 @@ function ReceivingRecordsPage({ data }) {
             inputClassName="placeholder:text-zinc-500"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search receiving number, supplier, reference, product, or serial..."
+            placeholder="Search receiving number, supplier, PO, invoice, product, or serial..."
           />
           <span className="text-xs text-zinc-500">{records.length} records</span>
         </div>
@@ -933,7 +930,7 @@ function ReceivingRecordsTable({ records, loading, error }) {
               <th className="px-4 py-3 font-medium">Receiving</th>
               <th className="px-4 py-3 font-medium">Source</th>
               <th className="px-4 py-3 font-medium">Received Date</th>
-              <th className="px-4 py-3 font-medium">Reference</th>
+              <th className="px-4 py-3 font-medium">PO / Invoice</th>
               <th className="px-4 py-3 font-medium">Items</th>
               <th className="px-4 py-3 font-medium">Status</th>
             </tr>
@@ -957,7 +954,11 @@ function ReceivingRecordsTable({ records, loading, error }) {
                     </p>
                   </td>
                   <td className="px-4 py-4 text-zinc-300">{formatDate(record.received_date)}</td>
-                  <td className="px-4 py-4 font-mono text-xs text-zinc-400">{record.reference_number || "-"}</td>
+                  <td className="px-4 py-4 font-mono text-xs text-zinc-400">
+                    {record.po_number ? <p>PO: {record.po_number}</p> : null}
+                    {record.supplier_invoice_number ? <p className="mt-1 text-zinc-500">Inv: {record.supplier_invoice_number}</p> : null}
+                    {!record.po_number && !record.supplier_invoice_number ? <p>-</p> : null}
+                  </td>
                   <td className="px-4 py-4">
                     <p className="font-bold text-white">{formatCount(record.total_quantity || 0)}</p>
                     <p className="mt-1 text-xs text-zinc-500">{formatCount(record.items?.length || 0)} lines</p>
@@ -1000,7 +1001,8 @@ function ReceivingRecordDetailPage({ data }) {
   const [correctionForm, setCorrectionForm] = useState({
     supplier: "",
     receivedDate: "",
-    referenceNumber: "",
+    poNumber: "",
+    supplierInvoiceNumber: "",
     notes: "",
     items: []
   });
@@ -1056,7 +1058,8 @@ function ReceivingRecordDetailPage({ data }) {
     setCorrectionForm({
       supplier: record.supplier ? String(record.supplier) : "",
       receivedDate: record.received_date || "",
-      referenceNumber: record.reference_number || "",
+      poNumber: record.po_number || "",
+      supplierInvoiceNumber: record.supplier_invoice_number || "",
       notes: record.notes || "",
       items: (record.items || []).map((item) => ({
         id: item.id,
@@ -1095,7 +1098,8 @@ function ReceivingRecordDetailPage({ data }) {
         body: JSON.stringify({
           supplier: correctionForm.supplier || null,
           received_date: correctionForm.receivedDate,
-          reference_number: correctionForm.referenceNumber,
+          po_number: correctionForm.poNumber,
+          supplier_invoice_number: correctionForm.supplierInvoiceNumber,
           notes: correctionForm.notes,
           items: correctionForm.items.map((item) => ({
             id: item.id,
@@ -1152,7 +1156,7 @@ function ReceivingRecordDetailPage({ data }) {
 
   return (
     <Shell data={data}>
-      <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+      <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <a href={data.routes.receivingRecords} className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
             <ChevronRight className="h-4 w-4 rotate-180" />
@@ -1268,8 +1272,8 @@ function ReceivingRecordDetailPage({ data }) {
                     <p className="mt-1 text-zinc-300">{formatDate(record.received_date)}</p>
                   </div>
                   <div>
-                    <p className="bim-helper-text">Reference Number</p>
-                    <p className="mt-1 font-mono text-xs text-zinc-300">{record.reference_number || "No reference"}</p>
+                    <p className="bim-helper-text">PO Number</p>
+                    <p className="mt-1 font-mono text-xs text-zinc-300">{record.po_number || "No PO number"}</p>
                   </div>
                 </div>
               </div>
@@ -1277,7 +1281,8 @@ function ReceivingRecordDetailPage({ data }) {
               <dl className="mt-5 grid gap-4 md:grid-cols-2">
                 <DetailRow label="Source" value={record.supplier_name || "Manual source"} strong />
                 <DetailRow label="Received Date" value={formatDate(record.received_date)} />
-                <DetailRow label="Reference Number" value={record.reference_number || "-"} />
+                <DetailRow label="PO Number" value={record.po_number || "-"} />
+                <DetailRow label="Supplier Invoice Number" value={record.supplier_invoice_number || "-"} />
                 <DetailRow label="Created By" value={record.created_by_name || "-"} />
                 <DetailRow label="Total Quantity" value={formatCount(record.total_quantity || 0)} highlight />
                 <DetailRow label="Status" value={isCancelled ? "Cancelled" : "Recorded"} />
@@ -1300,7 +1305,15 @@ function ReceivingRecordDetailPage({ data }) {
               <DetailRow label="Record Status" value={isCancelled ? "Cancelled" : "Recorded"} highlight />
               <DetailRow label="Created" value={formatDate(record.crdate)} />
               <DetailRow label="Item Lines" value={formatCount(record.items?.length || 0)} />
-              <DetailRow label="Reference Cost" value="Reference cost only" />
+              <DetailRow
+                label="Reference Cost"
+                value={formatCurrency(
+                  (record.items || []).reduce(
+                    (total, item) => total + (Number(item.quantity) || 0) * (Number(item.cost) || 0),
+                    0
+                  )
+                )}
+              />
               {isCancelled ? (
                 <>
                   <DetailRow label="Cancelled" value={formatDate(record.cancelled_at)} />
@@ -1333,7 +1346,7 @@ function ReceivingCorrectionPanel({
         <div>
           <h2 className="text-sm font-bold text-white">Edit receiving details</h2>
           <p className="bim-page-description">
-            Safe edits are limited to supplier, reference, date, notes, line cost, and line notes. For wrong product, quantity, or serial, cancel and recreate the record when the linked units are still unused.
+            Safe edits are limited to supplier, PO number, supplier invoice number, date, notes, line cost, and line notes. For wrong product, quantity, or serial, cancel and recreate the record when the linked units are still unused.
           </p>
         </div>
         <Button type="button" variant="ghost" onClick={onCancel}>
@@ -1354,8 +1367,11 @@ function ReceivingCorrectionPanel({
         <Field label="Received Date">
           <TextInput type="date" value={form.receivedDate} onChange={(value) => onFieldChange("receivedDate", value)} />
         </Field>
-        <Field label="Reference Number">
-          <TextInput value={form.referenceNumber} onChange={(value) => onFieldChange("referenceNumber", value)} placeholder="Supplier reference" />
+        <Field label="PO Number">
+          <TextInput value={form.poNumber} onChange={(value) => onFieldChange("poNumber", value)} placeholder="Purchase order number" />
+        </Field>
+        <Field label="Supplier Invoice Number">
+          <TextInput value={form.supplierInvoiceNumber} onChange={(value) => onFieldChange("supplierInvoiceNumber", value)} placeholder="Supplier invoice number" />
         </Field>
         <Field label="Notes">
           <TextInput value={form.notes} onChange={(value) => onFieldChange("notes", value)} placeholder="Receiving notes" />
@@ -1525,7 +1541,7 @@ function ReservationRecordsPage({ data }) {
 
   return (
     <Shell data={data}>
-      <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+      <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <h1 className="bim-page-title">Reservation Records</h1>
           <p className="bim-page-description">Hold available stock for upcoming work without delivering it.</p>
@@ -1568,7 +1584,6 @@ function ReservationRecordsTable({ records, loading, error }) {
               <th className="px-4 py-3 font-medium">Reservation</th>
               <th className="px-4 py-3 font-medium">Reserved For</th>
               <th className="px-4 py-3 font-medium">Reason</th>
-              <th className="px-4 py-3 font-medium">Expected Release</th>
               <th className="px-4 py-3 font-medium">Units</th>
               <th className="px-4 py-3 font-medium">Status</th>
             </tr>
@@ -1589,7 +1604,6 @@ function ReservationRecordsTable({ records, loading, error }) {
                   </td>
                   <td className="px-4 py-4 font-semibold text-white">{record.reserved_for || "-"}</td>
                   <td className="px-4 py-4 text-zinc-300">{record.reason || "-"}</td>
-                  <td className="px-4 py-4 text-zinc-300">{formatDate(record.expected_release_date)}</td>
                   <td className="px-4 py-4">
                     <p className="font-bold text-white">{formatCount(record.total_units || 0)}</p>
                     <p className="mt-1 text-xs text-zinc-500">{formatCount(record.items?.length || 0)} lines</p>
@@ -1601,7 +1615,7 @@ function ReservationRecordsTable({ records, loading, error }) {
               ))
             ) : (
               <tr>
-                <td colSpan="6">
+                <td colSpan="5">
                   <EmptyState
                     className="border-t border-nexus-line"
                     title="No reservation records yet."
@@ -1710,7 +1724,7 @@ function ReservationRecordDetailPage({ data }) {
 
   return (
     <Shell data={data}>
-      <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+      <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <a href="/operations/reservations/" className="mb-2 inline-flex text-sm font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
             Back to reservations
@@ -1736,7 +1750,6 @@ function ReservationRecordDetailPage({ data }) {
             <dl className="mt-4 divide-y divide-nexus-line">
               <DetailRow label="Reserved For" value={record.reserved_for || "-"} />
               <DetailRow label="Reason" value={record.reason || "-"} />
-              <DetailRow label="Expected Release" value={formatDate(record.expected_release_date)} />
               <DetailRow label="Reserved By" value={record.reserved_by_name || "-"} />
               <DetailRow label="Reserved At" value={formatDate(record.reserved_at)} />
               <DetailRow label="Notes" value={record.notes || "-"} />
@@ -1829,11 +1842,9 @@ function ReservationItemsTable({ items }) {
 }
 
 function CreateReservationPage({ data }) {
-  const today = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState({
     reservedFor: "",
     reason: "",
-    expectedReleaseDate: today,
     notes: ""
   });
   const [units, setUnits] = useState([]);
@@ -1900,7 +1911,6 @@ function CreateReservationPage({ data }) {
         body: JSON.stringify({
           reserved_for: form.reservedFor,
           reason: form.reason,
-          expected_release_date: form.expectedReleaseDate || null,
           notes: form.notes,
           unit_ids: selectedUnits.map((unit) => unit.id)
         })
@@ -1913,7 +1923,7 @@ function CreateReservationPage({ data }) {
 
       const created = await response.json();
       showSuccess("Reservation created.");
-      window.location.assign(created.id ? `/operations/reservations/${created.id}/` : data.routes.reservationRecords);
+      navigateAfterDelay(created.id ? `/operations/reservations/${created.id}/` : data.routes.reservationRecords);
     } catch (saveError) {
       showError(saveError.message);
     } finally {
@@ -1925,7 +1935,7 @@ function CreateReservationPage({ data }) {
     <Shell data={data}>
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
         <div className="min-w-0">
-          <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
               <h1 className="bim-page-title">Create Reservation</h1>
               <p className="bim-page-description">Hold available stock without delivering it.</p>
@@ -1948,50 +1958,49 @@ function CreateReservationPage({ data }) {
             </div>
           ) : null}
 
-          <FormSection icon="clock-3" title="Reservation Information" subtitle="Operational hold details for selected stock units.">
-            <div className="grid gap-5 md:grid-cols-2">
-              <Field label="Reserved For" required>
-                <TextInput value={form.reservedFor} onChange={(value) => updateField("reservedFor", value)} placeholder="Client, person, department, or job" />
-              </Field>
-              <Field label="Expected Release Date">
-                <TextInput type="date" value={form.expectedReleaseDate} onChange={(value) => updateField("expectedReleaseDate", value)} />
-              </Field>
-              <Field label="Reason">
-                <TextInput value={form.reason} onChange={(value) => updateField("reason", value)} placeholder="Why this stock is being held" />
-              </Field>
-              <Field label="Notes">
-                <TextInput value={form.notes} onChange={(value) => updateField("notes", value)} placeholder="Operational notes" />
-              </Field>
-            </div>
-          </FormSection>
-
-          <FormSection icon="box" title="Available Units" subtitle="Only active available units can be reserved.">
-            <SearchBar
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search product, SKU, barcode, or serial..."
-            />
-            {filteredUnits.length ? (
-              <div className="mt-2 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
-                {filteredUnits.map((unit) => (
-                  <button
-                    key={unit.id}
-                    onClick={() => addUnit(unit)}
-                    type="button"
-                    className="flex w-full items-center justify-between border-b border-nexus-line px-4 py-3 text-left last:border-b-0 hover:bg-nexus-panel2"
-                  >
-                    <span>
-                      <span className="block text-sm font-bold text-white">{unit.product_name}</span>
-                      <span className="font-mono text-xs text-[var(--bim-orange-text)]">{unit.serial_number}</span>
-                    </span>
-                    <Plus className="h-4 w-4 text-zinc-500" />
-                  </button>
-                ))}
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] xl:items-start">
+            <FormSection icon="clock-3" title="Reservation Information" subtitle="Operational hold details for selected stock units.">
+              <div className="grid gap-5">
+                <Field label="Reserved For" required>
+                  <TextInput value={form.reservedFor} onChange={(value) => updateField("reservedFor", value)} placeholder="Client, person, department, or job" />
+                </Field>
+                <Field label="Reason">
+                  <TextInput value={form.reason} onChange={(value) => updateField("reason", value)} placeholder="Why this stock is being held" />
+                </Field>
+                <Field label="Notes">
+                  <TextInput value={form.notes} onChange={(value) => updateField("notes", value)} placeholder="Operational notes" />
+                </Field>
               </div>
-            ) : null}
+            </FormSection>
 
-            <SelectedUnitsTable units={selectedUnits} onRemove={removeUnit} emptyText="No units selected for reservation yet." />
-          </FormSection>
+            <FormSection icon="box" title="Available Units" subtitle="Only active available units can be reserved.">
+              <SearchBar
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search product, SKU, barcode, or serial..."
+              />
+              {filteredUnits.length ? (
+                <div className="mt-2 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
+                  {filteredUnits.map((unit) => (
+                    <button
+                      key={unit.id}
+                      onClick={() => addUnit(unit)}
+                      type="button"
+                      className="flex w-full items-center justify-between border-b border-nexus-line px-4 py-3 text-left last:border-b-0 hover:bg-nexus-panel2"
+                    >
+                      <span>
+                        <span className="block text-sm font-bold text-white">{unit.product_name}</span>
+                        <span className="font-mono text-xs text-[var(--bim-orange-text)]">{unit.serial_number}</span>
+                      </span>
+                      <Plus className="h-4 w-4 text-zinc-500" />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+
+              <SelectedUnitsTable units={selectedUnits} onRemove={removeUnit} emptyText="No units selected for reservation yet." />
+            </FormSection>
+          </div>
         </div>
 
         <aside className="space-y-4">
@@ -1999,10 +2008,7 @@ function CreateReservationPage({ data }) {
             <PanelHeader title="Reservation Summary" />
             <dl className="divide-y divide-nexus-line p-4">
               <DetailRow label="Reserved For" value={form.reservedFor || "-"} />
-              <DetailRow label="Expected Release" value={formatDate(form.expectedReleaseDate)} />
-              <DetailRow label="Selected Units" value={selectedUnits.length} strong />
-              <DetailRow label="Status" value="Draft" />
-            </dl>
+              <DetailRow label="Selected Units" value={selectedUnits.length} strong />            </dl>
           </section>
         </aside>
       </div>
@@ -2072,7 +2078,7 @@ function IssueRecordsPage({ data }) {
           : data.api.issues;
         const response = await fetch(endpoint, { signal: controller.signal });
         if (!response.ok) {
-          throw new Error("Could not load issue records.");
+          throw new Error("Could not load temporary assignment records.");
         }
         setRecords(await response.json());
       } catch (loadError) {
@@ -2093,30 +2099,30 @@ function IssueRecordsPage({ data }) {
   const latestRecord = records[0];
   const issueKpis = [
     {
-      label: "Issue Records",
+      label: "Temporary Assignments",
       value: formatCount(records.length),
       detail: "temporary handoffs",
       icon: "user-check",
       tone: "indigo"
     },
     {
-      label: "Active Issues",
+      label: "Active Assignments",
       value: formatCount(activeCount),
       detail: "not yet returned",
       icon: "box",
       tone: "warning"
     },
     {
-      label: "Issued Units",
+      label: "Assigned Units",
       value: formatCount(totalUnits),
       detail: "units in these records",
       icon: "layers",
       tone: "blue"
     },
     {
-      label: "Latest Issue",
+      label: "Latest Assignment",
       value: latestRecord ? formatDate(latestRecord.issue_date) : "-",
-      detail: latestRecord?.issue_number || "no issues yet",
+      detail: latestRecord?.issue_number || "no assignments yet",
       icon: "clock-3",
       tone: "neutral"
     }
@@ -2124,15 +2130,15 @@ function IssueRecordsPage({ data }) {
 
   return (
     <Shell data={data}>
-      <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+      <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
-          <h1 className="bim-page-title">Issue Records</h1>
+          <h1 className="bim-page-title">Temporary Assignments</h1>
           <p className="bim-page-description">Track temporary stock handoffs expected to come back.</p>
         </div>
         {canCreateIssue ? (
           <Button as="a" href={data.routes.createIssue} variant="primary">
             <Plus className="h-4 w-4" />
-            Create Issue
+            Create Temporary Assignment
           </Button>
         ) : null}
       </header>
@@ -2146,7 +2152,7 @@ function IssueRecordsPage({ data }) {
             inputClassName="placeholder:text-zinc-500"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search issue number, issued to, department, site, product, or serial..."
+            placeholder="Search assignment number, assigned to, product, or serial..."
           />
           <span className="text-xs text-zinc-500">{records.length} records</span>
         </div>
@@ -2164,17 +2170,15 @@ function IssueRecordsTable({ records, loading, error }) {
         <table className="min-w-full text-left text-sm">
           <thead className="bg-zinc-800/80 text-zinc-400">
             <tr>
-              <th className="px-4 py-3 font-medium">Issue</th>
-              <th className="px-4 py-3 font-medium">Issued To</th>
-              <th className="px-4 py-3 font-medium">Department / Site</th>
-              <th className="px-4 py-3 font-medium">Expected Return</th>
+              <th className="px-4 py-3 font-medium">Assignment</th>
+              <th className="px-4 py-3 font-medium">Assigned To</th>
               <th className="px-4 py-3 font-medium">Units</th>
               <th className="px-4 py-3 font-medium">Status</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <TableMessage message="Loading issue records..." />
+              <TableMessage message="Loading temporary assignment records..." />
             ) : error ? (
               <TableMessage message={error} />
             ) : records.length ? (
@@ -2184,11 +2188,9 @@ function IssueRecordsTable({ records, loading, error }) {
                     <a href={`/operations/issues/${record.id}/`} className="font-mono text-xs font-bold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
                       {record.issue_number}
                     </a>
-                    <p className="mt-1 text-xs text-zinc-500">Issued by {record.issued_by_name || "-"}</p>
+                    <p className="mt-1 text-xs text-zinc-500">Assigned by {record.issued_by_name || "-"}</p>
                   </td>
                   <td className="px-4 py-4 font-semibold text-white">{record.issued_to || "-"}</td>
-                  <td className="px-4 py-4 text-zinc-300">{[record.department, record.branch_or_site].filter(Boolean).join(" / ") || "-"}</td>
-                  <td className="px-4 py-4 text-zinc-300">{formatDate(record.expected_return_date)}</td>
                   <td className="px-4 py-4">
                     <p className="font-bold text-white">{formatCount(record.total_units || 0)}</p>
                     <p className="mt-1 text-xs text-zinc-500">{formatCount(record.items?.length || 0)} lines</p>
@@ -2200,11 +2202,11 @@ function IssueRecordsTable({ records, loading, error }) {
               ))
             ) : (
               <tr>
-                <td colSpan="6">
+                <td colSpan="4">
                   <EmptyState
                     className="border-t border-nexus-line"
-                    title="No issue records yet."
-                    description="Create Issue will temporarily hand off available stock without delivering it."
+                    title="No temporary assignment records yet."
+                    description="Create Temporary Assignment will temporarily hand off available stock without delivering it."
                   />
                 </td>
               </tr>
@@ -2238,7 +2240,7 @@ function IssueRecordDetailPage({ data }) {
         const endpoint = data.api.issueDetail.replace("{id}", issueId);
         const response = await fetch(endpoint, { signal: controller.signal });
         if (!response.ok) {
-          throw new Error(response.status === 404 ? "Issue record was not found." : "Could not load issue record.");
+          throw new Error(response.status === 404 ? "Temporary assignment record was not found." : "Could not load temporary assignment record.");
         }
         setRecord(await response.json());
       } catch (loadError) {
@@ -2273,10 +2275,10 @@ function IssueRecordDetailPage({ data }) {
       });
       if (!response.ok) {
         const details = await response.json().catch(() => ({}));
-        throw new Error(firstApiError(details) || "Could not return issue.");
+        throw new Error(firstApiError(details) || "Could not return temporary assignment.");
       }
       setReturnReason("");
-      setMessage("Issue returned. Linked issued units were moved back to available stock.");
+      setMessage("Temporary assignment returned. Linked units were moved back to available stock.");
       setReloadKey((current) => current + 1);
     } catch (returnSaveError) {
       showError(returnSaveError.message);
@@ -2289,7 +2291,7 @@ function IssueRecordDetailPage({ data }) {
     return (
       <Shell data={data}>
         <div className="rounded-lg border border-nexus-line bg-nexus-panel p-6 text-zinc-400">
-          Loading issue record...
+          Loading temporary assignment record...
         </div>
       </Shell>
     );
@@ -2299,7 +2301,7 @@ function IssueRecordDetailPage({ data }) {
     return (
       <Shell data={data}>
         <div className="rounded-lg border border-[rgb(var(--bim-red-rgb)/60%)] bg-red-500/10 p-6 text-[var(--tone-red-text)]">
-          {error || "Issue record was not found."}
+          {error || "Temporary assignment record was not found."}
         </div>
       </Shell>
     );
@@ -2309,16 +2311,16 @@ function IssueRecordDetailPage({ data }) {
 
   return (
     <Shell data={data}>
-      <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+      <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <a href="/operations/issues/" className="mb-2 inline-flex text-sm font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
-            Back to issues
+            Back to temporary assignments
           </a>
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="bim-page-title">{record.issue_number}</h1>
             <Status status={issueStatusLabel(record)} statusClass={record.status} />
           </div>
-          <p className="bim-page-description">Issued units must be returned before delivery.</p>
+          <p className="bim-page-description">Assigned units must be returned before delivery.</p>
         </div>
       </header>
 
@@ -2331,15 +2333,12 @@ function IssueRecordDetailPage({ data }) {
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-5">
           <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
-            <SectionTitle title="Issue Details" />
+            <SectionTitle title="Assignment Details" />
             <dl className="mt-4 divide-y divide-nexus-line">
-              <DetailRow label="Issued To" value={record.issued_to || "-"} />
-              <DetailRow label="Department" value={record.department || "-"} />
-              <DetailRow label="Branch / Site" value={record.branch_or_site || "-"} />
+              <DetailRow label="Assigned To" value={record.issued_to || "-"} />
               <DetailRow label="Reason" value={record.reason || "-"} />
-              <DetailRow label="Issue Date" value={formatDate(record.issue_date)} />
-              <DetailRow label="Expected Return" value={formatDate(record.expected_return_date)} />
-              <DetailRow label="Issued By" value={record.issued_by_name || "-"} />
+              <DetailRow label="Assignment Date" value={formatDate(record.issue_date)} />
+              <DetailRow label="Assigned By" value={record.issued_by_name || "-"} />
               <DetailRow label="Notes" value={record.notes || "-"} />
               {record.returned_date ? <DetailRow label="Returned Date" value={formatDate(record.returned_date)} /> : null}
               {record.return_reason ? <DetailRow label="Return Reason" value={record.return_reason} /> : null}
@@ -2351,7 +2350,7 @@ function IssueRecordDetailPage({ data }) {
 
         <aside className="space-y-4">
           <section className="rounded-lg border border-nexus-line bg-nexus-panel">
-            <PanelHeader title="Issue Summary" />
+            <PanelHeader title="Assignment Summary" />
             <dl className="divide-y divide-nexus-line p-4">
               <DetailRow label="Reference" value={record.issue_number} />
               <DetailRow label="Status" value={issueStatusLabel(record)} />
@@ -2361,23 +2360,23 @@ function IssueRecordDetailPage({ data }) {
 
           {canReturnIssue ? (
           <section className="rounded-lg border border-nexus-line bg-nexus-panel p-4">
-            <h2 className="bim-section-title">Return Issue</h2>
+            <h2 className="bim-section-title">Return Temporary Assignment</h2>
             <p className="mt-3 text-sm text-zinc-500">
-              Return only when all linked units are back and still untouched issued units.
+              Return only when all linked units are back and still untouched assigned units.
             </p>
             <div className="mt-4">
               <Field label="Return Reason" required>
                 <TextInput
                   value={returnReason}
                   onChange={setReturnReason}
-                  placeholder="Why is this issue being returned?"
+                  placeholder="Why is this assignment being returned?"
                   disabled={!isActive}
                 />
               </Field>
             </div>
             <Button type="button" onClick={returnIssue} disabled={!isActive || returning} className="mt-4 w-full" variant="primary">
               <RotateCcw className="h-4 w-4" />
-              {returning ? "Returning..." : "Return Issue"}
+              {returning ? "Returning..." : "Return Temporary Assignment"}
             </Button>
           </section>
           ) : null}
@@ -2390,7 +2389,7 @@ function IssueRecordDetailPage({ data }) {
 function IssueItemsTable({ items }) {
   return (
     <section className="overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
-      <PanelHeader title="Issued Units" badge={`${formatCount(items.length)} units`} />
+      <PanelHeader title="Assigned Units" badge={`${formatCount(items.length)} units`} />
       {items.length ? (
         <div className="overflow-x-auto border-t border-nexus-line">
           <table className="min-w-full text-left text-sm">
@@ -2422,7 +2421,7 @@ function IssueItemsTable({ items }) {
         </div>
       ) : (
         <p className="border-t border-nexus-line px-4 py-5 text-sm text-zinc-500">
-          No issued units are linked to this record.
+          No assigned units are linked to this record.
         </p>
       )}
     </section>
@@ -2433,11 +2432,8 @@ function CreateIssuePage({ data }) {
   const today = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState({
     issuedTo: "",
-    department: "",
-    branchOrSite: "",
     reason: "",
     issueDate: today,
-    expectedReturnDate: "",
     notes: ""
   });
   const [units, setUnits] = useState([]);
@@ -2492,7 +2488,7 @@ function CreateIssuePage({ data }) {
     setSaving(true);
     try {
       if (!form.issuedTo.trim() || !selectedUnits.length) {
-        throw new Error("Issued to and at least one available stock unit are required.");
+        throw new Error("Assigned to and at least one available stock unit are required.");
       }
 
       const response = await fetch(data.api.issues, {
@@ -2503,11 +2499,8 @@ function CreateIssuePage({ data }) {
         },
         body: JSON.stringify({
           issued_to: form.issuedTo,
-          department: form.department,
-          branch_or_site: form.branchOrSite,
           reason: form.reason,
           issue_date: form.issueDate || null,
-          expected_return_date: form.expectedReturnDate || null,
           notes: form.notes,
           unit_ids: selectedUnits.map((unit) => unit.id)
         })
@@ -2515,12 +2508,12 @@ function CreateIssuePage({ data }) {
 
       if (!response.ok) {
         const details = await response.json().catch(() => ({}));
-        throw new Error(firstApiError(details) || "Could not create issue.");
+        throw new Error(firstApiError(details) || "Could not create temporary assignment.");
       }
 
       const created = await response.json();
-      showSuccess("Issue created.");
-      window.location.assign(created.id ? `/operations/issues/${created.id}/` : data.routes.issueRecords);
+      showSuccess("Temporary assignment created.");
+      navigateAfterDelay(created.id ? `/operations/issues/${created.id}/` : data.routes.issueRecords);
     } catch (saveError) {
       showError(saveError.message);
     } finally {
@@ -2532,10 +2525,10 @@ function CreateIssuePage({ data }) {
     <Shell data={data}>
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
         <div className="min-w-0">
-          <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
-              <h1 className="bim-page-title">Create Issue</h1>
-              <p className="bim-page-description">Temporarily issue available stock that is expected to come back.</p>
+              <h1 className="bim-page-title">Create Temporary Assignment</h1>
+              <p className="bim-page-description">Temporarily assign available stock that is expected to come back.</p>
             </div>
             <div className="flex flex-wrap gap-3 text-sm">
               <a href="/operations/issues/" className="inline-flex h-9 items-center gap-2 rounded-md px-3 font-semibold text-zinc-200 hover:bg-nexus-panel">
@@ -2544,7 +2537,7 @@ function CreateIssuePage({ data }) {
               </a>
               <button disabled={saving} onClick={saveIssue} type="button" className="inline-flex h-9 items-center gap-2 rounded-md bg-nexus-orange px-4 font-semibold text-black">
                 <Icon name="user-check" className="h-4 w-4" />
-                Save Issue
+                Save Temporary Assignment
               </button>
             </div>
           </header>
@@ -2555,71 +2548,61 @@ function CreateIssuePage({ data }) {
             </div>
           ) : null}
 
-          <FormSection icon="user-check" title="Issue Information" subtitle="Operational handoff details for selected stock units.">
-            <div className="grid gap-5 md:grid-cols-2">
-              <Field label="Issued To" required>
-                <TextInput value={form.issuedTo} onChange={(value) => updateField("issuedTo", value)} placeholder="Person, team, branch, or site" />
-              </Field>
-              <Field label="Department">
-                <TextInput value={form.department} onChange={(value) => updateField("department", value)} placeholder="Department or team" />
-              </Field>
-              <Field label="Branch / Site">
-                <TextInput value={form.branchOrSite} onChange={(value) => updateField("branchOrSite", value)} placeholder="Branch, room, or site" />
-              </Field>
-              <Field label="Reason">
-                <TextInput value={form.reason} onChange={(value) => updateField("reason", value)} placeholder="Why this stock is being issued" />
-              </Field>
-              <Field label="Issue Date">
-                <TextInput type="date" value={form.issueDate} onChange={(value) => updateField("issueDate", value)} />
-              </Field>
-              <Field label="Expected Return">
-                <TextInput type="date" value={form.expectedReturnDate} onChange={(value) => updateField("expectedReturnDate", value)} />
-              </Field>
-              <Field label="Notes">
-                <TextInput value={form.notes} onChange={(value) => updateField("notes", value)} placeholder="Operational notes" />
-              </Field>
-            </div>
-          </FormSection>
-
-          <FormSection icon="box" title="Available Units" subtitle="Only active available units can be issued.">
-            <SearchBar
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search product, SKU, barcode, or serial..."
-            />
-            {filteredUnits.length ? (
-              <div className="mt-2 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
-                {filteredUnits.map((unit) => (
-                  <button
-                    key={unit.id}
-                    onClick={() => addUnit(unit)}
-                    type="button"
-                    className="flex w-full items-center justify-between border-b border-nexus-line px-4 py-3 text-left last:border-b-0 hover:bg-nexus-panel2"
-                  >
-                    <span>
-                      <span className="block text-sm font-bold text-white">{unit.product_name}</span>
-                      <span className="font-mono text-xs text-[var(--bim-orange-text)]">{unit.serial_number}</span>
-                    </span>
-                    <Plus className="h-4 w-4 text-zinc-500" />
-                  </button>
-                ))}
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] xl:items-start">
+            <FormSection icon="user-check" title="Assignment Information" subtitle="Operational handoff details for selected stock units.">
+              <div className="grid gap-5">
+                <Field label="Assignment Date">
+                  <TextInput type="date" value={form.issueDate} onChange={(value) => updateField("issueDate", value)} />
+                </Field>
+                <Field label="Assigned To" required>
+                  <TextInput value={form.issuedTo} onChange={(value) => updateField("issuedTo", value)} placeholder="Person, team, branch, or site" />
+                </Field>
+                <Field label="Reason">
+                  <TextInput value={form.reason} onChange={(value) => updateField("reason", value)} placeholder="Why this stock is being assigned" />
+                </Field>
+                <Field label="Notes">
+                  <TextInput value={form.notes} onChange={(value) => updateField("notes", value)} placeholder="Operational notes" />
+                </Field>
               </div>
-            ) : null}
+            </FormSection>
 
-            <SelectedUnitsTable units={selectedUnits} onRemove={removeUnit} emptyText="No units selected for issue yet." />
-          </FormSection>
+            <FormSection icon="box" title="Available Units" subtitle="Only active available units can be assigned.">
+              <SearchBar
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search product, SKU, barcode, or serial..."
+              />
+              {filteredUnits.length ? (
+                <div className="mt-2 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
+                  {filteredUnits.map((unit) => (
+                    <button
+                      key={unit.id}
+                      onClick={() => addUnit(unit)}
+                      type="button"
+                      className="flex w-full items-center justify-between border-b border-nexus-line px-4 py-3 text-left last:border-b-0 hover:bg-nexus-panel2"
+                    >
+                      <span>
+                        <span className="block text-sm font-bold text-white">{unit.product_name}</span>
+                        <span className="font-mono text-xs text-[var(--bim-orange-text)]">{unit.serial_number}</span>
+                      </span>
+                      <Plus className="h-4 w-4 text-zinc-500" />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+
+              <SelectedUnitsTable units={selectedUnits} onRemove={removeUnit} emptyText="No units selected for assignment yet." />
+            </FormSection>
+          </div>
         </div>
 
         <aside className="space-y-4">
           <section className="rounded-lg border border-nexus-line bg-nexus-panel">
-            <PanelHeader title="Issue Summary" />
+            <PanelHeader title="Assignment Summary" />
             <dl className="divide-y divide-nexus-line p-4">
-              <DetailRow label="Issued To" value={form.issuedTo || "-"} />
-              <DetailRow label="Issue Date" value={formatDate(form.issueDate)} />
-              <DetailRow label="Expected Return" value={formatDate(form.expectedReturnDate)} />
-              <DetailRow label="Selected Units" value={selectedUnits.length} strong />
-              <DetailRow label="Status" value="Draft" />
-            </dl>
+              <DetailRow label="Assignment Date" value={formatDate(form.issueDate)} />
+              <DetailRow label="Assigned To" value={form.issuedTo || "-"} />
+              <DetailRow label="Selected Units" value={selectedUnits.length} strong />            </dl>
           </section>
         </aside>
       </div>
@@ -2700,7 +2683,7 @@ function RepairRecordsPage({ data }) {
 
   return (
     <Shell data={data}>
-      <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+      <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <h1 className="bim-page-title">Repair Records</h1>
           <p className="bim-page-description">Track available stock moved into repair, testing, or diagnosis.</p>
@@ -2742,8 +2725,7 @@ function RepairRecordsTable({ records, loading, error }) {
             <tr>
               <th className="px-4 py-3 font-medium">Repair</th>
               <th className="px-4 py-3 font-medium">Reason</th>
-              <th className="px-4 py-3 font-medium">Location / Technician</th>
-              <th className="px-4 py-3 font-medium">Expected Resolution</th>
+              <th className="px-4 py-3 font-medium">Technician</th>
               <th className="px-4 py-3 font-medium">Units</th>
               <th className="px-4 py-3 font-medium">Status</th>
             </tr>
@@ -2763,8 +2745,7 @@ function RepairRecordsTable({ records, loading, error }) {
                     <p className="mt-1 text-xs text-zinc-500">Sent by {record.sent_by_name || "-"}</p>
                   </td>
                   <td className="px-4 py-4 font-semibold text-white">{record.repair_reason || "-"}</td>
-                  <td className="px-4 py-4 text-zinc-300">{[record.repair_location, record.technician].filter(Boolean).join(" / ") || "-"}</td>
-                  <td className="px-4 py-4 text-zinc-300">{formatDate(record.expected_resolution_date)}</td>
+                  <td className="px-4 py-4 text-zinc-300">{record.technician || "-"}</td>
                   <td className="px-4 py-4">
                     <p className="font-bold text-white">{formatCount(record.total_units || 0)}</p>
                     <p className="mt-1 text-xs text-zinc-500">{formatCount(record.items?.length || 0)} lines</p>
@@ -2776,11 +2757,11 @@ function RepairRecordsTable({ records, loading, error }) {
               ))
             ) : (
               <tr>
-                <td colSpan="6">
+                <td colSpan="5">
                   <EmptyState
                     className="border-t border-nexus-line"
                     title="No repair records yet."
-                    description="Create Repair moves active available units into repair without changing delivery, issue, or reservation records."
+                    description="Create Repair moves active available units into repair without changing delivery, temporary assignment, or reservation records."
                   />
                 </td>
               </tr>
@@ -2893,7 +2874,7 @@ function RepairRecordDetailPage({ data }) {
 
   return (
     <Shell data={data}>
-      <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+      <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <a href="/operations/repairs/" className="mb-2 inline-flex text-sm font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
             Back to repairs
@@ -2918,11 +2899,8 @@ function RepairRecordDetailPage({ data }) {
             <SectionTitle title="Repair Details" />
             <dl className="mt-4 divide-y divide-nexus-line">
               <DetailRow label="Reason" value={record.repair_reason || "-"} />
-              <DetailRow label="Reported By" value={record.reported_by_name || "-"} />
-              <DetailRow label="Location" value={record.repair_location || "-"} />
               <DetailRow label="Technician" value={record.technician || "-"} />
               <DetailRow label="Repair Date" value={formatDate(record.repair_date)} />
-              <DetailRow label="Expected Resolution" value={formatDate(record.expected_resolution_date)} />
               <DetailRow label="Sent By" value={record.sent_by_name || "-"} />
               <DetailRow label="Notes" value={record.notes || "-"} />
               {record.resolved_date ? <DetailRow label="Resolved Date" value={formatDate(record.resolved_date)} /> : null}
@@ -3029,11 +3007,8 @@ function CreateRepairPage({ data }) {
   const today = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState({
     repairReason: "",
-    reportedByName: "",
-    repairLocation: "",
     technician: "",
     repairDate: today,
-    expectedResolutionDate: "",
     notes: ""
   });
   const [units, setUnits] = useState([]);
@@ -3099,11 +3074,8 @@ function CreateRepairPage({ data }) {
         },
         body: JSON.stringify({
           repair_reason: form.repairReason,
-          reported_by_name: form.reportedByName,
-          repair_location: form.repairLocation,
           technician: form.technician,
           repair_date: form.repairDate || null,
-          expected_resolution_date: form.expectedResolutionDate || null,
           notes: form.notes,
           unit_ids: selectedUnits.map((unit) => unit.id)
         })
@@ -3116,7 +3088,7 @@ function CreateRepairPage({ data }) {
 
       const created = await response.json();
       showSuccess("Repair created.");
-      window.location.assign(created.id ? `/operations/repairs/${created.id}/` : data.routes.repairRecords);
+      navigateAfterDelay(created.id ? `/operations/repairs/${created.id}/` : data.routes.repairRecords);
     } catch (saveError) {
       showError(saveError.message);
     } finally {
@@ -3128,7 +3100,7 @@ function CreateRepairPage({ data }) {
     <Shell data={data}>
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
         <div className="min-w-0">
-          <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
               <h1 className="bim-page-title">Create Repair</h1>
               <p className="bim-page-description">Move active available stock into repair, testing, or diagnosis.</p>
@@ -3151,71 +3123,61 @@ function CreateRepairPage({ data }) {
             </div>
           ) : null}
 
-          <FormSection icon="wrench" title="Repair Information" subtitle="Operational repair or testing details for selected stock units.">
-            <div className="grid gap-5 md:grid-cols-2">
-              <Field label="Repair Reason" required>
-                <TextInput value={form.repairReason} onChange={(value) => updateField("repairReason", value)} placeholder="Why this stock is going to repair" />
-              </Field>
-              <Field label="Reported By">
-                <TextInput value={form.reportedByName} onChange={(value) => updateField("reportedByName", value)} placeholder="Person, team, or branch" />
-              </Field>
-              <Field label="Repair Location">
-                <TextInput value={form.repairLocation} onChange={(value) => updateField("repairLocation", value)} placeholder="Workshop, vendor, or shelf" />
-              </Field>
-              <Field label="Technician">
-                <TextInput value={form.technician} onChange={(value) => updateField("technician", value)} placeholder="Responsible person or vendor" />
-              </Field>
-              <Field label="Repair Date">
-                <TextInput type="date" value={form.repairDate} onChange={(value) => updateField("repairDate", value)} />
-              </Field>
-              <Field label="Expected Resolution">
-                <TextInput type="date" value={form.expectedResolutionDate} onChange={(value) => updateField("expectedResolutionDate", value)} />
-              </Field>
-              <Field label="Notes">
-                <TextInput value={form.notes} onChange={(value) => updateField("notes", value)} placeholder="Operational notes" />
-              </Field>
-            </div>
-          </FormSection>
-
-          <FormSection icon="box" title="Available Units" subtitle="Only active available units can be sent to repair. Reserved, issued, and sold units must use their own workflows before repair.">
-            <SearchBar
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search product, SKU, barcode, or serial..."
-            />
-            {filteredUnits.length ? (
-              <div className="mt-2 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
-                {filteredUnits.map((unit) => (
-                  <button
-                    key={unit.id}
-                    onClick={() => addUnit(unit)}
-                    type="button"
-                    className="flex w-full items-center justify-between border-b border-nexus-line px-4 py-3 text-left last:border-b-0 hover:bg-nexus-panel2"
-                  >
-                    <span>
-                      <span className="block text-sm font-bold text-white">{unit.product_name}</span>
-                      <span className="font-mono text-xs text-[var(--bim-orange-text)]">{unit.serial_number}</span>
-                    </span>
-                    <Plus className="h-4 w-4 text-zinc-500" />
-                  </button>
-                ))}
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] xl:items-start">
+            <FormSection icon="wrench" title="Repair Information" subtitle="Operational repair or testing details for selected stock units.">
+              <div className="grid gap-5">
+                <Field label="Repair Date">
+                  <TextInput type="date" value={form.repairDate} onChange={(value) => updateField("repairDate", value)} />
+                </Field>
+                <Field label="Repair Reason" required>
+                  <TextInput value={form.repairReason} onChange={(value) => updateField("repairReason", value)} placeholder="Why this stock is going to repair" />
+                </Field>
+                <Field label="Technician">
+                  <TextInput value={form.technician} onChange={(value) => updateField("technician", value)} placeholder="Responsible person or vendor" />
+                </Field>
+                <Field label="Notes">
+                  <TextInput value={form.notes} onChange={(value) => updateField("notes", value)} placeholder="Operational notes" />
+                </Field>
               </div>
-            ) : null}
+            </FormSection>
 
-            <SelectedUnitsTable units={selectedUnits} onRemove={removeUnit} emptyText="No units selected for repair yet." />
-          </FormSection>
+            <FormSection icon="box" title="Available Units" subtitle="Only active available units can be sent to repair. Reserved, issued, and sold units must use their own workflows before repair.">
+              <SearchBar
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search product, SKU, barcode, or serial..."
+              />
+              {filteredUnits.length ? (
+                <div className="mt-2 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
+                  {filteredUnits.map((unit) => (
+                    <button
+                      key={unit.id}
+                      onClick={() => addUnit(unit)}
+                      type="button"
+                      className="flex w-full items-center justify-between border-b border-nexus-line px-4 py-3 text-left last:border-b-0 hover:bg-nexus-panel2"
+                    >
+                      <span>
+                        <span className="block text-sm font-bold text-white">{unit.product_name}</span>
+                        <span className="font-mono text-xs text-[var(--bim-orange-text)]">{unit.serial_number}</span>
+                      </span>
+                      <Plus className="h-4 w-4 text-zinc-500" />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+
+              <SelectedUnitsTable units={selectedUnits} onRemove={removeUnit} emptyText="No units selected for repair yet." />
+            </FormSection>
+          </div>
         </div>
 
         <aside className="space-y-4">
           <section className="rounded-lg border border-nexus-line bg-nexus-panel">
             <PanelHeader title="Repair Summary" />
             <dl className="divide-y divide-nexus-line p-4">
-              <DetailRow label="Reason" value={form.repairReason || "-"} />
               <DetailRow label="Repair Date" value={formatDate(form.repairDate)} />
-              <DetailRow label="Expected Resolution" value={formatDate(form.expectedResolutionDate)} />
-              <DetailRow label="Selected Units" value={selectedUnits.length} strong />
-              <DetailRow label="Status" value="Draft" />
-            </dl>
+              <DetailRow label="Reason" value={form.repairReason || "-"} />
+              <DetailRow label="Selected Units" value={selectedUnits.length} strong />            </dl>
           </section>
         </aside>
       </div>
@@ -3314,7 +3276,7 @@ function ClientReturnRecordsPage({ data }) {
 
   return (
     <Shell data={data}>
-      <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+      <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <h1 className="bim-page-title">Client Returns</h1>
           <p className="bim-page-description">Record sold units that came back from a client.</p>
@@ -3460,7 +3422,7 @@ function ClientReturnRecordDetailPage({ data }) {
 
   return (
     <Shell data={data}>
-      <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+      <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <a href={data.routes.clientReturnRecords} className="mb-2 inline-flex text-sm font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
             Back to client returns
@@ -3613,27 +3575,20 @@ function CreateClientReturnPage({ data }) {
     );
   }
 
-  async function createClientOption(name) {
-    if (!name.trim()) {
+  function createClientOption(name) {
+    // New Client values are held locally (not saved to the server) until the
+    // client return itself saves successfully -- see createLookupOption in
+    // AddProductPage for the identical pattern used for Category/Brand.
+    const trimmedName = name.trim();
+    if (!trimmedName) {
       throw new Error("Enter a client name before creating it.");
     }
-    const response = await fetch(data.api.clients, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-CSRFToken": data.csrfToken
-      },
-      body: JSON.stringify({ name: name.trim() })
-    });
-    if (!response.ok) {
-      const details = await response.json().catch(() => ({}));
-      throw new Error(firstApiError(details) || "Could not create client.");
-    }
-    const created = await response.json();
-    addClientItem(created);
-    updateField("client", String(created.id));
-    updateField("customerName", created.name);
-    return created;
+    const pendingId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const pending = { id: pendingId, name: trimmedName, __pending: true };
+    addClientItem(pending);
+    updateField("client", pendingId);
+    updateField("customerName", pending.name);
+    return pending;
   }
 
   function addUnit(unit) {
@@ -3654,7 +3609,9 @@ function CreateClientReturnPage({ data }) {
       }
 
       const payload = {
-        client: selectedClient.id,
+        ...(selectedClient.__pending
+          ? { client_name_input: selectedClient.name }
+          : { client: selectedClient.id }),
         customer_name: selectedClient.name,
         received_from: form.receivedFrom,
         return_date: form.returnDate || null,
@@ -3683,7 +3640,7 @@ function CreateClientReturnPage({ data }) {
 
       const created = await response.json();
       showSuccess("Client return created.");
-      window.location.assign(created.id ? `/operations/client-returns/${created.id}/` : data.routes.clientReturnRecords);
+      navigateAfterDelay(created.id ? `/operations/client-returns/${created.id}/` : data.routes.clientReturnRecords);
     } catch (saveError) {
       showError(saveError.message);
     } finally {
@@ -3695,7 +3652,7 @@ function CreateClientReturnPage({ data }) {
     <Shell data={data}>
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
         <div className="min-w-0">
-          <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
               <h1 className="bim-page-title">Create Client Return</h1>
               <p className="bim-page-description">
@@ -3720,82 +3677,83 @@ function CreateClientReturnPage({ data }) {
             </div>
           ) : null}
 
-          <FormSection icon="reset" title="Client Return Information" subtitle="Original delivery remains completed; this creates a separate operational return record.">
-            <div className="grid gap-5 md:grid-cols-2">
-              <SearchableCreatableSelect
-                label="Client"
-                required
-                value={form.client}
-                onChange={(value) => {
-                  const selected = clients.find((client) => String(client.id) === String(value));
-                  updateField("client", value);
-                  updateField("customerName", selected?.name || "");
-                }}
-                options={clients}
-                onCreate={createClientOption}
-                placeholder="Search or create client..."
-                helperText="Client Return is operational stock tracking only, not a refund or credit."
-              />
-              <Field label="Received From">
-                <TextInput value={form.receivedFrom} onChange={(value) => updateField("receivedFrom", value)} placeholder="Person who returned the unit" />
-              </Field>
-              <Field label="Return Date">
-                <TextInput type="date" value={form.returnDate} onChange={(value) => updateField("returnDate", value)} />
-              </Field>
-              <Field label="Resolution" required>
-                <SelectInput
-                  value={form.resolution}
-                  onChange={(value) => updateField("resolution", value)}
-                  options={[
-                    ["available", "Return to available"],
-                    ["repair", "Send to repair"]
-                  ]}
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] xl:items-start">
+            <FormSection icon="reset" title="Client Return Information" subtitle="Original delivery remains completed; this creates a separate operational return record.">
+              <div className="grid gap-5">
+                <Field label="Return Date">
+                  <TextInput type="date" value={form.returnDate} onChange={(value) => updateField("returnDate", value)} />
+                </Field>
+                <SearchableCreatableSelect
+                  label="Client"
+                  required
+                  value={form.client}
+                  onChange={(value) => {
+                    const selected = clients.find((client) => String(client.id) === String(value));
+                    updateField("client", value);
+                    updateField("customerName", selected?.name || "");
+                  }}
+                  options={clients}
+                  onCreate={createClientOption}
+                  placeholder="Search or create client..."
                 />
-              </Field>
-              <Field label="Reason">
-                <TextInput value={form.reason} onChange={(value) => updateField("reason", value)} placeholder="Reason for the return" />
-              </Field>
-              <Field label="Notes">
-                <TextInput value={form.notes} onChange={(value) => updateField("notes", value)} placeholder="Operational notes" />
-              </Field>
-            </div>
-          </FormSection>
-
-          <FormSection icon="box" title="Sold Units" subtitle="Only active sold units linked to completed delivery items can be returned. Reserved, issued, repair, inactive, or available units are blocked.">
-            <SearchBar
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search product, SKU, barcode, or serial..."
-            />
-            {filteredUnits.length ? (
-              <div className="mt-2 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
-                {filteredUnits.map((unit) => (
-                  <button
-                    key={unit.id}
-                    onClick={() => addUnit(unit)}
-                    type="button"
-                    className="flex w-full items-center justify-between border-b border-nexus-line px-4 py-3 text-left last:border-b-0 hover:bg-nexus-panel2"
-                  >
-                    <span>
-                      <span className="block text-sm font-bold text-white">{unit.product_name}</span>
-                      <span className="font-mono text-xs text-[var(--bim-orange-text)]">{unit.serial_number}</span>
-                    </span>
-                    <Plus className="h-4 w-4 text-zinc-500" />
-                  </button>
-                ))}
+                <Field label="Received From">
+                  <TextInput value={form.receivedFrom} onChange={(value) => updateField("receivedFrom", value)} placeholder="Person who returned the unit" />
+                </Field>
+                <Field label="Resolution" required>
+                  <SelectInput
+                    value={form.resolution}
+                    onChange={(value) => updateField("resolution", value)}
+                    options={[
+                      ["available", "Return to available"],
+                      ["repair", "Send to repair"]
+                    ]}
+                  />
+                </Field>
+                <Field label="Reason">
+                  <TextInput value={form.reason} onChange={(value) => updateField("reason", value)} placeholder="Reason for the return" />
+                </Field>
+                <Field label="Notes">
+                  <TextInput value={form.notes} onChange={(value) => updateField("notes", value)} placeholder="Operational notes" />
+                </Field>
               </div>
-            ) : null}
+            </FormSection>
 
-            <SelectedUnitsTable units={selectedUnits} onRemove={removeUnit} emptyText="No sold units selected for client return yet." />
-          </FormSection>
+            <FormSection icon="box" title="Sold Units" subtitle="Only active sold units linked to completed delivery items can be returned. Reserved, issued, repair, inactive, or available units are blocked.">
+              <SearchBar
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search product, SKU, barcode, or serial..."
+              />
+              {filteredUnits.length ? (
+                <div className="mt-2 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
+                  {filteredUnits.map((unit) => (
+                    <button
+                      key={unit.id}
+                      onClick={() => addUnit(unit)}
+                      type="button"
+                      className="flex w-full items-center justify-between border-b border-nexus-line px-4 py-3 text-left last:border-b-0 hover:bg-nexus-panel2"
+                    >
+                      <span>
+                        <span className="block text-sm font-bold text-white">{unit.product_name}</span>
+                        <span className="font-mono text-xs text-[var(--bim-orange-text)]">{unit.serial_number}</span>
+                      </span>
+                      <Plus className="h-4 w-4 text-zinc-500" />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+
+              <SelectedUnitsTable units={selectedUnits} onRemove={removeUnit} emptyText="No sold units selected for client return yet." />
+            </FormSection>
+          </div>
         </div>
 
         <aside className="space-y-4">
           <section className="rounded-lg border border-nexus-line bg-nexus-panel">
             <PanelHeader title="Return Summary" />
             <dl className="divide-y divide-nexus-line p-4">
-              <DetailRow label="Client" value={clients.find((client) => String(client.id) === String(form.client))?.name || "-"} />
               <DetailRow label="Return Date" value={formatDate(form.returnDate)} />
+              <DetailRow label="Client" value={clients.find((client) => String(client.id) === String(form.client))?.name || "-"} />
               <DetailRow label="Resolution" value={clientReturnResolutionLabel(form.resolution)} />
               <DetailRow label="Selected Units" value={selectedUnits.length} strong />
             </dl>
@@ -3887,7 +3845,7 @@ function DeliveryRecordsPage({ data }) {
 
   return (
     <Shell data={data}>
-      <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+      <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <h1 className="bim-page-title">Delivery Records</h1>
           <p className="bim-page-description">Review operational stock-out records.</p>
@@ -3909,7 +3867,7 @@ function DeliveryRecordsPage({ data }) {
             inputClassName="placeholder:text-zinc-500"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search delivery number, client, receiver, product, or serial..."
+            placeholder="Search delivery number, client, receiver, invoice, product, or serial..."
           />
           <span className="text-xs text-zinc-500">{records.length} records</span>
         </div>
@@ -3931,6 +3889,7 @@ function DeliveryRecordsTable({ records, loading, error }) {
               <th className="px-4 py-3 font-medium">Client</th>
               <th className="px-4 py-3 font-medium">Receiver</th>
               <th className="px-4 py-3 font-medium">Delivery Date</th>
+              <th className="px-4 py-3 font-medium">Invoice</th>
               <th className="px-4 py-3 font-medium">Units</th>
               <th className="px-4 py-3 font-medium">Status</th>
             </tr>
@@ -3955,6 +3914,7 @@ function DeliveryRecordsTable({ records, loading, error }) {
                   </td>
                   <td className="px-4 py-4 text-zinc-300">{record.receiver_name || "-"}</td>
                   <td className="px-4 py-4 text-zinc-300">{formatDate(record.delivery_date)}</td>
+                  <td className="px-4 py-4 font-mono text-xs text-zinc-400">{record.invoice_number || "-"}</td>
                   <td className="px-4 py-4">
                     <p className="font-bold text-white">{formatCount(record.total_units || 0)}</p>
                     <p className="mt-1 text-xs text-zinc-500">{formatCount(record.items?.length || 0)} lines</p>
@@ -3966,7 +3926,7 @@ function DeliveryRecordsTable({ records, loading, error }) {
               ))
             ) : (
               <tr>
-                <td colSpan="6">
+                <td colSpan="7">
                   <EmptyState
                     className="border-t border-nexus-line"
                     title="No delivery records yet."
@@ -4143,7 +4103,7 @@ function DeliveryRecordDetailPage({ data }) {
 
   return (
     <Shell data={data}>
-      <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+      <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <a href={data.routes.deliveryRecords} className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
             <ChevronRight className="h-4 w-4 rotate-180" />
@@ -4274,6 +4234,7 @@ function DeliveryRecordDetailPage({ data }) {
                 <DetailRow label="Client" value={record.client_name || record.customer_name || "-"} strong />
                 <DetailRow label="Receiver" value={record.receiver_name || "-"} />
                 <DetailRow label="Delivery Date" value={formatDate(record.delivery_date)} />
+                <DetailRow label="Invoice Number" value={record.invoice_number || "-"} />
                 <DetailRow label="Created By" value={record.created_by_name || "-"} />
                 <DetailRow label="Total Units" value={formatCount(record.total_units || 0)} highlight />
                 <DetailRow label="Status" value={deliveryStatusLabel(record)} />
@@ -4296,6 +4257,15 @@ function DeliveryRecordDetailPage({ data }) {
               <DetailRow label="Record Status" value={deliveryStatusLabel(record)} highlight />
               <DetailRow label="Created" value={formatDate(record.crdate)} />
               <DetailRow label="Item Lines" value={formatCount(record.items?.length || 0)} />
+              <DetailRow
+                label="Reference Sale Price"
+                value={formatCurrency(
+                  (record.items || []).reduce(
+                    (total, item) => total + (Number(item.sale_price) || 0),
+                    0
+                  )
+                )}
+              />
               <DetailRow label="Delivery Type" value="Operational stock exit" />
               {isCancelled ? (
                 <>
@@ -4406,6 +4376,7 @@ function DeliveryItemsTable({ items }) {
               <th className="px-4 py-3 font-medium">Unit</th>
               <th className="px-4 py-3 font-medium">Serial Number</th>
               <th className="px-4 py-3 font-medium">Unit Status</th>
+              <th className="px-4 py-3 font-medium">Reference Sale Price</th>
               <th className="px-4 py-3 font-medium">Notes</th>
             </tr>
           </thead>
@@ -4425,12 +4396,16 @@ function DeliveryItemsTable({ items }) {
                   <td className="px-4 py-4">
                     <Status status={item.product_unit_status_label || item.product_unit_status || "-"} statusClass={item.product_unit_status || "inactive"} />
                   </td>
+                  <td className="px-4 py-4">
+                    <p className="text-xs text-zinc-300">{formatCurrency(item.sale_price)}</p>
+                    <p className="mt-1 text-xs text-zinc-500">Reference price only</p>
+                  </td>
                   <td className="px-4 py-4 text-zinc-400">{item.notes || "-"}</td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan="5">
+                <td colSpan="6">
                   <EmptyState
                     className="border-t border-nexus-line"
                     title="No item lines on this record."
@@ -4456,44 +4431,6 @@ function deliveryStatusClass(record) {
   if (record.status === "cancelled" || record.isactive === false) return "inactive";
   if (record.status === "draft") return "reserved";
   return "delivered";
-}
-
-function Header({ data }) {
-  const [greeting, setGreeting] = useState(() => browserGreeting(data.hero.greetingName));
-
-  useEffect(() => {
-    function updateGreeting() {
-      setGreeting(browserGreeting(data.hero.greetingName));
-    }
-
-    updateGreeting();
-    const intervalId = window.setInterval(updateGreeting, 60000);
-    return () => window.clearInterval(intervalId);
-  }, [data.hero.greetingName]);
-
-  return (
-    <header className="pb-5">
-      <div className="min-w-0">
-        <p className="text-sm font-semibold text-zinc-300">{greeting}</p>
-        <h1 className="mt-2 text-2xl font-bold tracking-tight text-white">{data.hero.title}</h1>
-        <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-zinc-400">
-          <span>{data.hero.subtitle}</span>
-          <span className="text-zinc-600">-</span>
-          <span>
-            Built for <strong className="font-bold text-zinc-300">BIMPOS</strong>
-          </span>
-        </p>
-        <SearchBar
-          className="mt-4 max-w-xl cursor-not-allowed rounded-lg bg-nexus-panel opacity-60"
-          inputClassName="cursor-not-allowed placeholder:text-zinc-500"
-          type="search"
-          disabled
-          title="Global search coming later"
-          placeholder="Global search coming later..."
-        />
-      </div>
-    </header>
-  );
 }
 
 function InventoryPage({ data }) {
@@ -4531,7 +4468,7 @@ function InventoryPage({ data }) {
           ]);
 
         if (!productsResponse.ok || !summaryResponse.ok) {
-          throw new Error("BIM Stock API request failed.");
+          throw new Error("Inventory API request failed.");
         }
 
         const productData = await productsResponse.json();
@@ -4578,7 +4515,7 @@ function InventoryPage({ data }) {
       label: "Total Products",
       value: formatCount(summary?.total_products ?? 0),
       detail: "catalogue items",
-      icon: "database",
+      icon: "package",
       tone: "blue",
       href: data.routes.inventory
     },
@@ -4586,7 +4523,7 @@ function InventoryPage({ data }) {
       label: "Available Stock",
       value: formatCount(summary?.available_units ?? 0),
       detail: "units ready to use",
-      icon: "layers",
+      icon: "check-circle-2",
       tone: "green",
       href: data.routes.availableStock
     },
@@ -4594,7 +4531,7 @@ function InventoryPage({ data }) {
       label: "Reserved Stock",
       value: formatCount(summary?.reserved_units ?? 0),
       detail: "pending allocation",
-      icon: "box",
+      icon: "clock-3",
       tone: "neutral",
       href: `${data.routes.inventory}?status=reserved`
     },
@@ -4694,9 +4631,9 @@ function InventoryPage({ data }) {
 function InventoryHeader({ actions }) {
   const addProduct = actions.find((action) => action.label === "Add Product");
   return (
-    <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+    <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
       <div>
-        <h1 className="bim-page-title">BIM Stock</h1>
+        <h1 className="bim-page-title">Inventory</h1>
         <p className="bim-page-description">Manage products and stock availability.</p>
       </div>
       <div className="flex items-center gap-3 text-sm">
@@ -4755,7 +4692,7 @@ function InventoryTable({ products, selectedId, onSelect, loading, error }) {
           </thead>
           <tbody>
             {loading ? (
-              <TableMessage message="Loading BIM Stock..." />
+              <TableMessage message="Loading Inventory..." />
             ) : error ? (
               <TableMessage message={error} />
             ) : products.length ? (
@@ -5055,7 +4992,7 @@ function ProductDetailsPage({ data }) {
 
   return (
     <Shell data={data}>
-      <header className="mb-5">
+      <header className="mb-5 border-b border-nexus-line pb-4">
         <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
           <div className="flex items-start gap-4">
             <Avatar product={product} />
@@ -5358,7 +5295,7 @@ function AddProductPage({ data }) {
     brand: "",
     modelName: "",
     barcode: "",
-    reorderStockLevel: "0",
+    reorderStockLevel: "",
     imageFile: null,
     isactive: true
   };
@@ -5370,6 +5307,17 @@ function AddProductPage({ data }) {
   const { showSuccess, showError } = useToast();
   const imageInputRef = useRef(null);
   const cameraInputRef = useRef(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState("");
+
+  useEffect(() => {
+    if (!form.imageFile) {
+      setImagePreviewUrl("");
+      return undefined;
+    }
+    const url = URL.createObjectURL(form.imageFile);
+    setImagePreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [form.imageFile]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -5468,21 +5416,24 @@ function AddProductPage({ data }) {
     }));
   }
 
-  async function createLookupOption(kind, name) {
+  function createLookupOption(kind, name) {
+    // New Category/Brand values are held locally (not saved to the server) until the
+    // product itself saves successfully -- so an abandoned or failed product save never
+    // leaves a stray Category/Brand row behind. saveProduct() sends these as
+    // category_name_input/brand_name_input and the backend creates (or reuses) the real
+    // row atomically alongside the product.
     const lookupConfig = {
       category: {
-        endpoint: data.api.categories,
         listName: "categories",
         labelField: "name",
         formField: "category",
-        body: (name) => ({ name })
+        buildPending: (id, trimmedName) => ({ id, name: trimmedName, __pending: true })
       },
       brand: {
-        endpoint: data.api.brands,
         listName: "brands",
         labelField: "brandname",
         formField: "brand",
-        body: (name) => ({ brandname: name })
+        buildPending: (id, trimmedName) => ({ id, brandname: trimmedName, __pending: true })
       }
     };
     const config = lookupConfig[kind];
@@ -5492,24 +5443,11 @@ function AddProductPage({ data }) {
       throw new Error("Enter a name before creating a catalogue value.");
     }
 
-    const response = await fetch(config.endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-CSRFToken": data.csrfToken
-      },
-      body: JSON.stringify(config.body(trimmedName))
-    });
-
-    if (!response.ok) {
-      const details = await response.json().catch(() => ({}));
-      throw new Error(firstApiError(details) || "Could not create catalogue value.");
-    }
-
-    const created = await response.json();
-    addLookupItem(config.listName, created, config.labelField);
-    updateField(config.formField, String(created.id));
-    return created;
+    const pendingId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const pending = config.buildPending(pendingId, trimmedName);
+    addLookupItem(config.listName, pending, config.labelField);
+    updateField(config.formField, pendingId);
+    return pending;
   }
 
   async function saveProduct(addAnother = false) {
@@ -5517,11 +5455,21 @@ function AddProductPage({ data }) {
     try {
       const payload = new FormData();
       payload.append("descript", form.descript);
-      payload.append("category", form.category);
-      payload.append("brand", form.brand);
+      if (selectedCategory?.__pending) {
+        payload.append("category_name_input", selectedCategory.name);
+      } else {
+        payload.append("category", form.category);
+      }
+      if (selectedBrand?.__pending) {
+        payload.append("brand_name_input", selectedBrand.brandname);
+      } else {
+        payload.append("brand", form.brand);
+      }
       payload.append("model_name_input", form.modelName);
       payload.append("barcode", form.barcode);
-      payload.append("reorder_stock_level", form.reorderStockLevel);
+      if (form.reorderStockLevel.trim()) {
+        payload.append("reorder_stock_level", form.reorderStockLevel);
+      }
       payload.append("isactive", form.isactive ? "true" : "false");
       if (form.imageFile) {
         payload.append("image", form.imageFile);
@@ -5545,7 +5493,7 @@ function AddProductPage({ data }) {
         showSuccess("Product saved. Form cleared for a new entry.");
       } else {
         showSuccess("Product saved.");
-        window.location.assign(data.routes.inventory);
+        navigateAfterDelay(data.routes.inventory);
       }
     } catch (saveError) {
       showError(saveError.message);
@@ -5569,10 +5517,6 @@ function AddProductPage({ data }) {
               {loadError}
             </div>
           ) : null}
-
-          <p className="mb-5 text-sm text-zinc-300">
-            Create a new product definition. Stock is added separately after creation.
-          </p>
 
           <FormSection icon="box" title="Product Information" subtitle="Core catalogue fields that define this product.">
             <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_260px]">
@@ -5629,30 +5573,45 @@ function AddProductPage({ data }) {
                   className="hidden"
                   onChange={handleImageInputChange}
                 />
-                <button
-                  type="button"
-                  onClick={() => imageInputRef.current?.click()}
+                <div
+                  className="relative aspect-square w-full overflow-hidden rounded-lg border border-dashed border-nexus-line bg-black"
                   onDrop={handleImageDrop}
                   onDragOver={handleImageDragOver}
-                  className="grid aspect-square w-full place-items-center rounded-lg border border-dashed border-nexus-line bg-black text-center text-xs text-zinc-500 hover:border-[var(--bim-orange-focus)] hover:text-zinc-300"
                 >
-                  <span className="max-w-full break-words px-2">
-                    <Package className="mx-auto mb-2 h-6 w-6 text-zinc-500" />
-                    {form.imageFile ? (
-                      <>
-                        Selected
-                        <br />
-                        {form.imageFile.name}
-                      </>
-                    ) : (
-                      <>
+                  {form.imageFile ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => imageInputRef.current?.click()}
+                        className="block h-full w-full"
+                        aria-label="Replace image"
+                      >
+                        <img src={imagePreviewUrl} alt="Product preview" className="h-full w-full object-cover" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={clearImageFile}
+                        className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-black/70 text-white hover:bg-black/90"
+                        aria-label="Remove image"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => imageInputRef.current?.click()}
+                      className="grid h-full w-full place-items-center text-center text-xs text-zinc-500 hover:border-[var(--bim-orange-focus)] hover:text-zinc-300"
+                    >
+                      <span className="max-w-full break-words px-2">
+                        <Package className="mx-auto mb-2 h-6 w-6 text-zinc-500" />
                         Drop image
                         <br />
                         or click to upload
-                      </>
-                    )}
-                  </span>
-                </button>
+                      </span>
+                    </button>
+                  )}
+                </div>
                 <div className="mt-3">
                   <p className="text-sm font-bold text-white">Product Image</p>
                   <p className="mt-2 text-xs text-zinc-400">
@@ -5696,6 +5655,7 @@ function AddProductPage({ data }) {
           requiredDone={requiredDone}
           requiredTotal={requiredTotal}
           requiredProgress={requiredProgress}
+          imagePreviewUrl={imagePreviewUrl}
         />
       </div>
     </Shell>
@@ -5708,8 +5668,8 @@ function StockEntryPage({ data, mode = "add-unit" }) {
   const [form, setForm] = useState({
     supplier: "",
     entryDate: today,
-    deliveryNote: "",
-    referenceNumber: "",
+    poNumber: "",
+    supplierInvoiceNumber: "",
     notes: ""
   });
   const [products, setProducts] = useState([]);
@@ -5773,31 +5733,21 @@ function StockEntryPage({ data, mode = "add-unit" }) {
     );
   }
 
-  async function createSupplierOption(name) {
+  function createSupplierOption(name) {
+    // New Supplier values are held locally (not saved to the server) until the
+    // receiving record itself saves successfully -- see createLookupOption in
+    // AddProductPage for the identical pattern used for Category/Brand.
     const trimmedName = name.trim();
 
     if (!trimmedName) {
       throw new Error("Enter a supplier name before creating it.");
     }
 
-    const response = await fetch(data.api.suppliers, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-CSRFToken": data.csrfToken
-      },
-      body: JSON.stringify({ name: trimmedName })
-    });
-
-    if (!response.ok) {
-      const details = await response.json().catch(() => ({}));
-      throw new Error(firstApiError(details) || "Could not create supplier.");
-    }
-
-    const created = await response.json();
-    addSupplierItem(created);
-    updateField("supplier", String(created.id));
-    return created;
+    const pendingId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const pending = { id: pendingId, name: trimmedName, __pending: true };
+    addSupplierItem(pending);
+    updateField("supplier", pendingId);
+    return pending;
   }
 
   function addProductLine(product) {
@@ -5852,15 +5802,6 @@ function StockEntryPage({ data, mode = "add-unit" }) {
     return serialNumbers;
   }
 
-  function buildReceivingNotes() {
-    return [
-      form.deliveryNote ? `Delivery note: ${form.deliveryNote}` : "",
-      form.notes
-    ]
-      .filter(Boolean)
-      .join(" | ");
-  }
-
   async function createReceivingRecord() {
     const itemInputs = lines.map((line, lineIndex) => {
       const quantity = Number(line.quantity) || 0;
@@ -5884,10 +5825,13 @@ function StockEntryPage({ data, mode = "add-unit" }) {
         "X-CSRFToken": data.csrfToken
       },
       body: JSON.stringify({
-        supplier: form.supplier,
+        ...(selectedSupplier?.__pending
+          ? { supplier_name_input: selectedSupplier.name }
+          : { supplier: form.supplier }),
         received_date: form.entryDate,
-        reference_number: form.referenceNumber || form.deliveryNote,
-        notes: buildReceivingNotes(),
+        po_number: form.poNumber,
+        supplier_invoice_number: form.supplierInvoiceNumber,
+        notes: form.notes,
         item_inputs: itemInputs
       })
     });
@@ -5899,7 +5843,7 @@ function StockEntryPage({ data, mode = "add-unit" }) {
 
     const created = await response.json();
     showSuccess("Receiving record created.");
-    window.location.assign(created.id ? `/operations/receiving/${created.id}/` : data.routes.receivingRecords);
+    navigateAfterDelay(created.id ? `/operations/receiving/${created.id}/` : data.routes.receivingRecords);
   }
 
   async function createProductUnits() {
@@ -5935,14 +5879,17 @@ function StockEntryPage({ data, mode = "add-unit" }) {
     }
 
     showSuccess("Stock units added.");
-    window.location.assign(data.routes.inventory);
+    navigateAfterDelay(data.routes.inventory);
   }
 
   async function saveStockUnits() {
     setSaving(true);
     try {
-      if (!form.entryDate || !lines.length) {
-        throw new Error("Entry date and at least one product are required.");
+      if (!form.entryDate) {
+        throw new Error(`${isReceiving ? "Receiving Date" : "Entry Date"} is required.`);
+      }
+      if (!lines.length) {
+        throw new Error("At least one product is required.");
       }
       if (isReceiving && !form.supplier) {
         throw new Error("Supplier is required when receiving stock.");
@@ -5964,7 +5911,7 @@ function StockEntryPage({ data, mode = "add-unit" }) {
     <Shell data={data}>
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
         <div className="min-w-0">
-          <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
               <h1 className="bim-page-title">{isReceiving ? "Receive Stock" : "Add Unit"}</h1>
               <p className="bim-page-description">
@@ -5978,10 +5925,6 @@ function StockEntryPage({ data, mode = "add-unit" }) {
                 <X className="h-4 w-4" />
                 Cancel
               </a>
-              <button disabled type="button" className="inline-flex h-9 items-center gap-2 rounded-md px-3 font-semibold text-zinc-500">
-                <Save className="h-4 w-4" />
-                Save Draft
-              </button>
               <button disabled={saving} onClick={saveStockUnits} type="button" className="inline-flex h-9 items-center gap-2 rounded-md bg-nexus-orange px-4 font-semibold text-black">
                 <Save className="h-4 w-4" />
                 {isReceiving ? "Receive Stock" : "Add Units"}
@@ -5995,172 +5938,141 @@ function StockEntryPage({ data, mode = "add-unit" }) {
             </div>
           ) : null}
 
-          <FormSection
-            icon="clipboard"
-            title={isReceiving ? "Receiving Information" : "Unit Entry"}
-            subtitle={isReceiving ? "Supplier and reference details for this stock receipt." : "Minimal details for manual stock-unit entry."}
-          >
-            <div className="mb-5 flex items-center justify-between rounded-lg border border-nexus-line bg-nexus-panel2 p-4">
-              <div>
-                <p className="text-xs text-zinc-500">{isReceiving ? "Receiving Reference" : "Entry Reference"} (auto-generated)</p>
-                <p className="mt-1 text-sm font-semibold text-zinc-500">Not created yet</p>
-              </div>
-              <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-black">Draft</span>
-            </div>
-
-            <div className="grid gap-5 md:grid-cols-2">
-              {isReceiving ? (
-                <SearchableCreatableSelect
-                  label="Supplier"
-                  required
-                  value={form.supplier}
-                  onChange={(value) => updateField("supplier", value)}
-                  options={suppliers}
-                  getOptionLabel={(item) => item.name}
-                  onCreate={createSupplierOption}
-                  placeholder="Search or create supplier..."
-                  loading={refsLoading}
-                />
-              ) : null}
-              <Field label={isReceiving ? "Receiving Date" : "Entry Date"} required>
-                <TextInput type="date" value={form.entryDate} onChange={(value) => updateField("entryDate", value)} />
-              </Field>
-              {isReceiving ? (
-                <>
-                  <Field label="Delivery Note Number">
-                    <TextInput value={form.deliveryNote} onChange={(value) => updateField("deliveryNote", value)} placeholder="Enter delivery note number" />
-                  </Field>
-                  <Field label="Reference Number">
-                    <TextInput value={form.referenceNumber} onChange={(value) => updateField("referenceNumber", value)} placeholder="Enter supplier reference" />
-                  </Field>
-                </>
-              ) : null}
-            </div>
-            <div className="mt-5">
-              <Field label="Notes">
-                <TextInput value={form.notes} onChange={(value) => updateField("notes", value)} placeholder="Condition notes, discrepancies, special instructions..." />
-              </Field>
-            </div>
-          </FormSection>
-
-          <FormSection icon="box" title="Products" subtitle="Search or scan a product, then add physical units.">
-            <div className="relative">
-              <div className="flex gap-3">
-                <SearchBar
-                  className="flex-1"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Search product by name, SKU, or barcode..."
-                />
-                <button
-                  type="button"
-                  disabled
-                  title="Barcode scanning coming later"
-                  className="inline-flex h-10 cursor-not-allowed items-center gap-2 rounded-md px-3 text-sm font-semibold text-zinc-500"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                  Scan
-                </button>
-              </div>
-              {filteredProducts.length ? (
-                <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel shadow-2xl">
-                  {filteredProducts.map((product) => (
-                    <button
-                      key={product.id}
-                      onClick={() => addProductLine(product)}
-                      type="button"
-                      className="flex w-full items-center justify-between border-b border-nexus-line px-4 py-3 text-left last:border-b-0 hover:bg-nexus-panel2"
-                    >
-                      <span>
-                        <span className="block text-sm font-bold text-white">{product.display_name}</span>
-                        <span className="font-mono text-xs text-[var(--bim-orange-text)]">{product.sku}</span>
-                      </span>
-                      <Plus className="h-4 w-4 text-zinc-500" />
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-
-            <div className="mt-4 rounded-lg border border-dashed border-nexus-line bg-black/30">
-              {lines.length ? (
-                lines.map((line) => (
-                  <div key={line.key} className="grid gap-3 border-b border-nexus-line p-4 last:border-b-0 lg:grid-cols-[minmax(0,1fr)_110px_130px_minmax(0,1fr)_40px]">
-                    <div>
-                      <p className="font-bold text-white">{line.product.display_name}</p>
-                      <p className="mt-1 font-mono text-xs text-[var(--bim-orange-text)]">{line.product.sku}</p>
-                    </div>
-                    <CompactField label="Quantity">
-                      <TextInput value={line.quantity} onChange={(value) => updateLine(line.key, "quantity", value)} />
-                    </CompactField>
-                    <CompactField label="Unit Cost">
-                      <TextInput value={line.cost} onChange={(value) => updateLine(line.key, "cost", value)} />
-                    </CompactField>
-                    <CompactField label="Serial Numbers">
-                      <textarea
-                        value={line.serials}
-                        onChange={(event) => updateLine(line.key, "serials", event.target.value)}
-                        className="min-h-10 rounded-md border border-nexus-line bg-black px-3 py-2 text-sm text-zinc-200 outline-none placeholder:text-zinc-600"
-                        placeholder="One per line. Blank = auto-generated"
-                      />
-                    </CompactField>
-                    <button onClick={() => removeLine(line.key)} type="button" className="mt-5 text-zinc-500 hover:text-nexus-red" aria-label={`Remove ${line.product.display_name}`}>
-                      <X className="h-4 w-4" aria-hidden="true" />
-                    </button>
-                  </div>
-                ))
-              ) : (
-                <div className="grid min-h-36 place-items-center text-center text-sm text-zinc-600">
-                  <span>
-                    <Package className="mx-auto mb-3 h-8 w-8" />
-                    No products added yet
-                    <br />
-                    Search above or scan a barcode to add items
-                  </span>
-                </div>
-              )}
-            </div>
-          </FormSection>
-
-          {isReceiving ? (
-            <FormSection icon="clipboard" title="Attachments" subtitle="Upload delivery notes or supporting documents.">
-              <div className="grid min-h-28 place-items-center rounded-lg border border-dashed border-nexus-line bg-black/30 text-center text-sm text-zinc-600">
-                Drop files here or click to upload
-                <br />
-                PDF, PNG, JPG, XLSX - max 20MB
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] xl:items-start">
+            <FormSection
+              icon={isReceiving ? "inbox" : "package-plus"}
+              title={isReceiving ? "Receiving Information" : "Unit Entry"}
+              subtitle={isReceiving ? "Supplier and reference details for this stock receipt." : "Minimal details for manual stock-unit entry."}
+            >
+              <div className="grid gap-5">
+                <Field label={isReceiving ? "Receiving Date" : "Entry Date"} required>
+                  <TextInput type="date" value={form.entryDate} onChange={(value) => updateField("entryDate", value)} />
+                </Field>
+                {isReceiving ? (
+                  <SearchableCreatableSelect
+                    label="Supplier"
+                    required
+                    value={form.supplier}
+                    onChange={(value) => updateField("supplier", value)}
+                    options={suppliers}
+                    getOptionLabel={(item) => item.name}
+                    onCreate={createSupplierOption}
+                    placeholder="Search or create supplier..."
+                    loading={refsLoading}
+                  />
+                ) : null}
+                {isReceiving ? (
+                  <>
+                    <Field label="Supplier Invoice Number">
+                      <TextInput value={form.supplierInvoiceNumber} onChange={(value) => updateField("supplierInvoiceNumber", value)} placeholder="Enter supplier invoice number" />
+                    </Field>
+                    <Field label="PO Number">
+                      <TextInput value={form.poNumber} onChange={(value) => updateField("poNumber", value)} placeholder="Enter purchase order number" />
+                    </Field>
+                  </>
+                ) : null}
+                <Field label="Notes">
+                  <TextInput value={form.notes} onChange={(value) => updateField("notes", value)} placeholder="Condition notes, discrepancies, special instructions..." />
+                </Field>
               </div>
             </FormSection>
-          ) : null}
+
+            <FormSection icon="box" title="Products" subtitle="Search or scan a product, then add physical units.">
+              <div className="relative">
+                <div className="flex gap-3">
+                  <SearchBar
+                    className="flex-1"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="Search product by name, SKU, or barcode..."
+                  />
+                  <button
+                    type="button"
+                    disabled
+                    title="Barcode scanning coming later"
+                    className="inline-flex h-10 cursor-not-allowed items-center gap-2 rounded-md px-3 text-sm font-semibold text-zinc-500"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Scan
+                  </button>
+                </div>
+                {filteredProducts.length ? (
+                  <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel shadow-2xl">
+                    {filteredProducts.map((product) => (
+                      <button
+                        key={product.id}
+                        onClick={() => addProductLine(product)}
+                        type="button"
+                        className="flex w-full items-center justify-between border-b border-nexus-line px-4 py-3 text-left last:border-b-0 hover:bg-nexus-panel2"
+                      >
+                        <span>
+                          <span className="block text-sm font-bold text-white">{product.display_name}</span>
+                          <span className="font-mono text-xs text-[var(--bim-orange-text)]">{product.sku}</span>
+                        </span>
+                        <Plus className="h-4 w-4 text-zinc-500" />
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="mt-4 rounded-lg border border-dashed border-nexus-line bg-black/30">
+                {lines.length ? (
+                  lines.map((line) => (
+                    <div key={line.key} className="grid gap-3 border-b border-nexus-line p-4 last:border-b-0 lg:grid-cols-[minmax(0,1fr)_110px_130px_minmax(0,1fr)_40px]">
+                      <div>
+                        <p className="font-bold text-white">{line.product.display_name}</p>
+                        <p className="mt-1 font-mono text-xs text-[var(--bim-orange-text)]">{line.product.sku}</p>
+                      </div>
+                      <CompactField label="Quantity">
+                        <TextInput value={line.quantity} onChange={(value) => updateLine(line.key, "quantity", value)} />
+                      </CompactField>
+                      <CompactField label="Unit Cost">
+                        <TextInput value={line.cost} onChange={(value) => updateLine(line.key, "cost", value)} />
+                      </CompactField>
+                      <CompactField label="Serial Numbers">
+                        <textarea
+                          value={line.serials}
+                          onChange={(event) => updateLine(line.key, "serials", event.target.value)}
+                          className="min-h-10 rounded-md border border-nexus-line bg-black px-3 py-2 text-sm text-zinc-200 outline-none placeholder:text-zinc-600"
+                          placeholder="One per line. Blank = auto-generated"
+                        />
+                      </CompactField>
+                      <button onClick={() => removeLine(line.key)} type="button" className="mt-5 text-zinc-500 hover:text-nexus-red" aria-label={`Remove ${line.product.display_name}`}>
+                        <X className="h-4 w-4" aria-hidden="true" />
+                      </button>
+                    </div>
+                  ))
+                ) : (
+                  <div className="grid min-h-36 place-items-center text-center text-sm text-zinc-600">
+                    <span>
+                      <Package className="mx-auto mb-3 h-8 w-8" />
+                      No products added yet
+                      <br />
+                      Search above or scan a barcode to add items
+                    </span>
+                  </div>
+                )}
+              </div>
+            </FormSection>
+          </div>
         </div>
 
         <aside className="space-y-4">
           <section className="rounded-lg border border-nexus-line bg-nexus-panel">
-            <div className="flex items-center justify-between border-b border-nexus-line px-4 py-4">
+            <div className="border-b border-nexus-line px-4 py-4">
               <h2 className="bim-section-title">{isReceiving ? "Receiving Summary" : "Unit Summary"}</h2>
-              <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-black">Draft</span>
             </div>
             <dl className="divide-y divide-nexus-line p-4">
-              <DetailRow label="Reference" value="Not created yet" />
-              {isReceiving ? <DetailRow label="Supplier" value={selectedSupplier?.name || "-"} /> : null}
               <DetailRow label="Date" value={form.entryDate || "-"} />
+              {isReceiving ? <DetailRow label="Supplier" value={selectedSupplier?.name || "-"} /> : null}
+              {isReceiving ? <DetailRow label="Supplier Invoice Number" value={form.supplierInvoiceNumber || "-"} /> : null}
+              {isReceiving ? <DetailRow label="PO Number" value={form.poNumber || "-"} /> : null}
               <DetailRow label={isReceiving ? "Received By" : "Added By"} value={handledByName} />
               <DetailRow label="Products" value={lines.length} strong />
               <DetailRow label="Total Units" value={totalUnits} strong />
-              {isReceiving ? <DetailRow label="Attachments" value="0" /> : null}
               <DetailRow label="Total Cost" value={totalCost ? `$${totalCost.toFixed(2)}` : "-"} />
             </dl>
-          </section>
-
-          <section className="rounded-lg border border-nexus-line bg-nexus-panel">
-            <PanelHeader title="Quick Actions" />
-            <div className="space-y-2 p-3">
-              {["Save Draft", "Upload Attachment", "Scan Barcode"].map((label) => (
-                <button key={label} disabled className="flex w-full items-center gap-3 rounded-md px-3 py-3 text-left text-sm font-semibold text-zinc-500">
-                  <Save className="h-4 w-4" />
-                  {label}
-                </button>
-              ))}
-            </div>
           </section>
         </aside>
       </div>
@@ -6174,6 +6086,7 @@ function CreateDeliveryPage({ data }) {
     client: "",
     customerName: "",
     receiverName: "",
+    invoiceNumber: "",
     deliveryDate: today,
     notes: ""
   });
@@ -6227,36 +6140,40 @@ function CreateDeliveryPage({ data }) {
     );
   }
 
-  async function createClientOption(name) {
-    if (!name.trim()) {
+  function createClientOption(name) {
+    // New Client values are held locally (not saved to the server) until the
+    // delivery itself saves successfully -- see createLookupOption in
+    // AddProductPage for the identical pattern used for Category/Brand.
+    const trimmedName = name.trim();
+    if (!trimmedName) {
       throw new Error("Enter a client name before creating it.");
     }
-    const response = await fetch(data.api.clients, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-CSRFToken": data.csrfToken
-      },
-      body: JSON.stringify({ name: name.trim() })
-    });
-    if (!response.ok) {
-      const details = await response.json().catch(() => ({}));
-      throw new Error(firstApiError(details) || "Could not create client.");
-    }
-    const created = await response.json();
-    addClientItem(created);
-    updateField("client", String(created.id));
-    updateField("customerName", created.name);
-    return created;
+    const pendingId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const pending = { id: pendingId, name: trimmedName, __pending: true };
+    addClientItem(pending);
+    updateField("client", pendingId);
+    updateField("customerName", pending.name);
+    return pending;
   }
 
   function addUnit(unit) {
-    setSelectedUnits((current) => [...current, unit]);
+    setSelectedUnits((current) => [...current, { ...unit, salePrice: "0.00" }]);
     setQuery("");
   }
 
   function removeUnit(unitId) {
     setSelectedUnits((current) => current.filter((unit) => unit.id !== unitId));
+  }
+
+  const totalSalePrice = selectedUnits.reduce(
+    (total, unit) => total + (Number(unit.salePrice) || 0),
+    0
+  );
+
+  function updateUnitSalePrice(unitId, value) {
+    setSelectedUnits((current) =>
+      current.map((unit) => (unit.id === unitId ? { ...unit, salePrice: value } : unit))
+    );
   }
 
   async function completeDelivery() {
@@ -6274,12 +6191,18 @@ function CreateDeliveryPage({ data }) {
           "X-CSRFToken": data.csrfToken
         },
         body: JSON.stringify({
-          client: selectedClient.id,
+          ...(selectedClient.__pending
+            ? { client_name_input: selectedClient.name }
+            : { client: selectedClient.id }),
           customer_name: selectedClient.name,
           receiver_name: form.receiverName,
+          invoice_number: form.invoiceNumber,
           delivery_date: form.deliveryDate,
           notes: form.notes,
-          unit_ids: selectedUnits.map((unit) => unit.id)
+          unit_ids: selectedUnits.map((unit) => unit.id),
+          unit_sale_prices: Object.fromEntries(
+            selectedUnits.map((unit) => [unit.id, unit.salePrice || "0.00"])
+          )
         })
       });
 
@@ -6290,7 +6213,7 @@ function CreateDeliveryPage({ data }) {
 
       const created = await response.json();
       showSuccess("Delivery completed.");
-      window.location.assign(created.id ? `/operations/deliveries/${created.id}/` : data.routes.deliveryRecords);
+      navigateAfterDelay(created.id ? `/operations/deliveries/${created.id}/` : data.routes.deliveryRecords);
     } catch (saveError) {
       showError(saveError.message);
     } finally {
@@ -6302,7 +6225,7 @@ function CreateDeliveryPage({ data }) {
     <Shell data={data}>
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
         <div className="min-w-0">
-          <header className="mb-5 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
               <h1 className="bim-page-title">Create Delivery</h1>
               <p className="bim-page-description">Record outgoing stock and update unit status.</p>
@@ -6312,10 +6235,6 @@ function CreateDeliveryPage({ data }) {
                 <X className="h-4 w-4" />
                 Cancel
               </a>
-              <button disabled type="button" className="inline-flex h-9 items-center gap-2 rounded-md px-3 font-semibold text-zinc-500">
-                <Save className="h-4 w-4" />
-                Save Draft
-              </button>
               <button disabled={saving} onClick={completeDelivery} type="button" className="inline-flex h-9 items-center gap-2 rounded-md bg-nexus-orange px-4 font-semibold text-black">
                 <Icon name={workflowMeta.create_delivery.icon} className="h-4 w-4" />
                 Complete Delivery
@@ -6329,125 +6248,112 @@ function CreateDeliveryPage({ data }) {
             </div>
           ) : null}
 
-          <FormSection icon="delivery" title="Delivery Information" subtitle="Internal stock exit details for this dispatch.">
-            <div className="mb-5 flex items-center justify-between rounded-lg border border-nexus-line bg-nexus-panel2 p-4">
-              <div>
-                <p className="text-xs text-zinc-500">Delivery Reference (auto-generated)</p>
-                <p className="mt-1 text-sm font-semibold text-zinc-500">Not created yet</p>
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] xl:items-start">
+            <FormSection icon="delivery" title="Delivery Information" subtitle="Internal stock exit details for this dispatch.">
+              <div className="grid gap-5">
+                <Field label="Delivery Date" required>
+                  <TextInput value={form.deliveryDate} onChange={(value) => updateField("deliveryDate", value)} />
+                </Field>
+                <SearchableCreatableSelect
+                  label="Client"
+                  required
+                  value={form.client}
+                  onChange={(value) => {
+                    const selected = clients.find((client) => String(client.id) === String(value));
+                    updateField("client", value);
+                    updateField("customerName", selected?.name || "");
+                  }}
+                  options={clients}
+                  onCreate={createClientOption}
+                  placeholder="Search or create client..."
+                />
+                <Field label="Receiver Name">
+                  <TextInput value={form.receiverName} onChange={(value) => updateField("receiverName", value)} placeholder="Enter receiver name" />
+                </Field>
+                <Field label="Invoice Number">
+                  <TextInput value={form.invoiceNumber} onChange={(value) => updateField("invoiceNumber", value)} placeholder="Enter invoice number" />
+                </Field>
               </div>
-              <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-black">Draft</span>
-            </div>
+              <div className="mt-5">
+                <Field label="Notes">
+                  <TextInput value={form.notes} onChange={(value) => updateField("notes", value)} placeholder="Delivery notes or handover instructions..." />
+                </Field>
+              </div>
+            </FormSection>
 
-            <div className="grid gap-5 md:grid-cols-2">
-              <SearchableCreatableSelect
-                label="Client"
-                required
-                value={form.client}
-                onChange={(value) => {
-                  const selected = clients.find((client) => String(client.id) === String(value));
-                  updateField("client", value);
-                  updateField("customerName", selected?.name || "");
-                }}
-                options={clients}
-                onCreate={createClientOption}
-                placeholder="Search or create client..."
-                helperText="Delivery links to Client master data; no invoice or accounting record is created."
-              />
-              <Field label="Delivery Date" required>
-                <TextInput value={form.deliveryDate} onChange={(value) => updateField("deliveryDate", value)} />
-              </Field>
-              <Field label="Receiver Name">
-                <TextInput value={form.receiverName} onChange={(value) => updateField("receiverName", value)} placeholder="Enter receiver name" />
-              </Field>
-            </div>
-            <div className="mt-5">
-              <Field label="Notes">
-                <TextInput value={form.notes} onChange={(value) => updateField("notes", value)} placeholder="Delivery notes or handover instructions..." />
-              </Field>
-            </div>
-          </FormSection>
-
-          <FormSection icon="box" title="Stock Units" subtitle="Search available stock units and add them to this delivery.">
-            <div className="relative">
-              <SearchBar
-                className="flex-1"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search available unit by product, SKU, barcode, or serial..."
-              />
-              {filteredUnits.length ? (
-                <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel shadow-2xl">
-                  {filteredUnits.map((unit) => (
-                    <button
-                      key={unit.id}
-                      onClick={() => addUnit(unit)}
-                      type="button"
-                      className="flex w-full items-center justify-between border-b border-nexus-line px-4 py-3 text-left last:border-b-0 hover:bg-nexus-panel2"
-                    >
-                      <span>
-                        <span className="block text-sm font-bold text-white">{unit.product_name}</span>
-                        <span className="font-mono text-xs text-[var(--bim-orange-text)]">{unit.product_sku} / {unit.serial_number}</span>
-                      </span>
-                      <Plus className="h-4 w-4 text-zinc-500" />
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-
-            <div className="mt-4 rounded-lg border border-dashed border-nexus-line bg-black/30">
-              {selectedUnits.length ? (
-                selectedUnits.map((unit) => (
-                  <div key={unit.id} className="grid gap-3 border-b border-nexus-line p-4 last:border-b-0 md:grid-cols-[minmax(0,1fr)_180px_40px]">
-                    <div>
-                      <p className="font-bold text-white">{unit.product_name}</p>
-                      <p className="mt-1 font-mono text-xs text-[var(--bim-orange-text)]">{unit.product_sku}</p>
-                    </div>
-                    <p className="font-mono text-sm text-zinc-300">{unit.serial_number}</p>
-                    <button onClick={() => removeUnit(unit.id)} type="button" className="text-zinc-500 hover:text-nexus-red">
-                      <X className="h-4 w-4" />
-                    </button>
+            <FormSection icon="box" title="Stock Units" subtitle="Search available stock units and add them to this delivery.">
+              <div className="relative">
+                <SearchBar
+                  className="flex-1"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search available unit by product, SKU, barcode, or serial..."
+                />
+                {filteredUnits.length ? (
+                  <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel shadow-2xl">
+                    {filteredUnits.map((unit) => (
+                      <button
+                        key={unit.id}
+                        onClick={() => addUnit(unit)}
+                        type="button"
+                        className="flex w-full items-center justify-between border-b border-nexus-line px-4 py-3 text-left last:border-b-0 hover:bg-nexus-panel2"
+                      >
+                        <span>
+                          <span className="block text-sm font-bold text-white">{unit.product_name}</span>
+                          <span className="font-mono text-xs text-[var(--bim-orange-text)]">{unit.product_sku} / {unit.serial_number}</span>
+                        </span>
+                        <Plus className="h-4 w-4 text-zinc-500" />
+                      </button>
+                    ))}
                   </div>
-                ))
-              ) : (
-                <div className="grid min-h-36 place-items-center text-center text-sm text-zinc-600">
-                  <span>
-                    <Package className="mx-auto mb-3 h-8 w-8" />
-                    No stock units selected yet
-                    <br />
-                    Search above to add available units
-                  </span>
-                </div>
-              )}
-            </div>
-          </FormSection>
+                ) : null}
+              </div>
+
+              <div className="mt-4 rounded-lg border border-dashed border-nexus-line bg-black/30">
+                {selectedUnits.length ? (
+                  selectedUnits.map((unit) => (
+                    <div key={unit.id} className="grid gap-3 border-b border-nexus-line p-4 last:border-b-0 md:grid-cols-[minmax(0,1fr)_140px_140px_40px]">
+                      <div>
+                        <p className="font-bold text-white">{unit.product_name}</p>
+                        <p className="mt-1 font-mono text-xs text-[var(--bim-orange-text)]">{unit.product_sku}</p>
+                      </div>
+                      <p className="font-mono text-sm text-zinc-300">{unit.serial_number}</p>
+                      <CompactField label="Reference Sale Price">
+                        <TextInput value={unit.salePrice} onChange={(value) => updateUnitSalePrice(unit.id, value)} />
+                      </CompactField>
+                      <button onClick={() => removeUnit(unit.id)} type="button" className="text-zinc-500 hover:text-nexus-red">
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))
+                ) : (
+                  <div className="grid min-h-36 place-items-center text-center text-sm text-zinc-600">
+                    <span>
+                      <Package className="mx-auto mb-3 h-8 w-8" />
+                      No stock units selected yet
+                      <br />
+                      Search above to add available units
+                    </span>
+                  </div>
+                )}
+              </div>
+            </FormSection>
+          </div>
         </div>
 
         <aside className="space-y-4">
           <section className="rounded-lg border border-nexus-line bg-nexus-panel">
-            <div className="flex items-center justify-between border-b border-nexus-line px-4 py-4">
+            <div className="border-b border-nexus-line px-4 py-4">
               <h2 className="bim-section-title">Delivery Summary</h2>
-              <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-black">Draft</span>
             </div>
             <dl className="divide-y divide-nexus-line p-4">
-              <DetailRow label="Reference" value="Not created yet" />
+              <DetailRow label="Date" value={form.deliveryDate || "-"} />
               <DetailRow label="Client" value={clients.find((client) => String(client.id) === String(form.client))?.name || "-"} />
               <DetailRow label="Receiver" value={form.receiverName || "-"} />
-              <DetailRow label="Date" value={form.deliveryDate || "-"} />
+              <DetailRow label="Invoice Number" value={form.invoiceNumber || "-"} />
               <DetailRow label="Units" value={selectedUnits.length} strong />
+              <DetailRow label="Reference Sale Price" value={totalSalePrice ? `$${totalSalePrice.toFixed(2)}` : "-"} />
             </dl>
-          </section>
-
-          <section className="rounded-lg border border-nexus-line bg-nexus-panel">
-            <PanelHeader title="Quick Actions" />
-            <div className="space-y-2 p-3">
-              {["Save Draft", "Scan Barcode"].map((label) => (
-                <button key={label} disabled className="flex w-full items-center gap-3 rounded-md px-3 py-3 text-left text-sm font-semibold text-zinc-500">
-                  <Save className="h-4 w-4" />
-                  {label}
-                </button>
-              ))}
-            </div>
           </section>
         </aside>
       </div>
@@ -6461,6 +6367,7 @@ function AddProductHeader({ saving, onReset, onSave, onSaveAnother }) {
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
       <div>
         <h1 className="bim-page-title">Add Product</h1>
+        <p className="bim-page-description">Create a new product definition for the catalogue.</p>
       </div>
       <div className="flex flex-wrap items-center gap-3 text-sm">
         <Button onClick={onReset} type="button" variant="secondary">
@@ -6689,7 +6596,8 @@ function AddProductPreview({
   skuPreview,
   requiredDone,
   requiredTotal,
-  requiredProgress
+  requiredProgress,
+  imagePreviewUrl
 }) {
   const missing = [
     ["Product Name", form.descript],
@@ -6711,8 +6619,12 @@ function AddProductPreview({
       </div>
       <div className="space-y-5 p-4">
         <div className="flex gap-3">
-          <span className="grid h-11 w-11 shrink-0 place-items-center rounded-lg bg-zinc-800 text-zinc-500">
-            <Package className="h-5 w-5" />
+          <span className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-lg bg-zinc-800 text-zinc-500">
+            {imagePreviewUrl ? (
+              <img src={imagePreviewUrl} alt="Product preview" className="h-full w-full object-cover" />
+            ) : (
+              <Package className="h-5 w-5" />
+            )}
           </span>
           <div>
             <h3 className="font-bold italic text-zinc-400">{form.descript || "Product Name"}</h3>
@@ -6812,6 +6724,14 @@ function firstApiError(details) {
   return message;
 }
 
+// Give the success toast its full 1.5s display window before a full-page
+// navigation unmounts it -- otherwise it's shown and torn down early.
+const SUCCESS_NAVIGATE_DELAY_MS = 1500;
+
+function navigateAfterDelay(path) {
+  setTimeout(() => window.location.assign(path), SUCCESS_NAVIGATE_DELAY_MS);
+}
+
 function DetailRow({ label, value, highlight = false, strong = false }) {
   return (
     <div className="mt-3 flex items-center justify-between gap-3 text-sm">
@@ -6864,12 +6784,13 @@ function parseCardCount(value) {
 }
 
 // Command Center icon tint: neutral by default for every card, full stop. Only
-// the three cards below carry real severity/state, and each is computed here
+// the four cards below carry real severity/state, and each is computed here
 // from the live count rather than trusted from item.tone -- the backend's
-// low_stock_tone/out_of_stock_tone (apps/core/views.py) happen to compute the
-// same thing, but this doesn't rely on that staying true. Any card not listed
-// here -- including one added later -- renders neutral automatically; nothing
-// silently inherits a static backend tone the way the Clients card once did.
+// low_stock_tone/out_of_stock_tone/pending_actions_tone (apps/core/views.py)
+// happen to compute the same thing, but this doesn't rely on that staying
+// true. Any card not listed here -- including one added later -- renders
+// neutral automatically; nothing silently inherits a static backend tone the
+// way the Clients card once did.
 function dynamicIconTone(item) {
   const count = parseCardCount(item.value);
   if (item.label === "Available Stock") {
@@ -6880,6 +6801,9 @@ function dynamicIconTone(item) {
   }
   if (item.label === "Out of Stock Products") {
     return count > 0 ? "danger" : "neutral";
+  }
+  if (item.label === "Pending Actions") {
+    return count > 0 ? "warning" : "neutral";
   }
   return "neutral";
 }

@@ -5,13 +5,13 @@ UI_TOKENS = {
         "tone": "blue",
     },
     "inventory": {
-        "name": "BIM Stock",
-        "icon": "database",
+        "name": "Inventory",
+        "icon": "boxes",
         "tone": "blue",
     },
     "operations": {
         "name": "Operations",
-        "icon": "trending-up",
+        "icon": "workflow",
         "tone": "green",
     },
     "settings": {
@@ -21,22 +21,22 @@ UI_TOKENS = {
     },
     "administration": {
         "name": "Administration",
-        "icon": "settings",
+        "icon": "shield-check",
         "tone": "neutral",
     },
     "total_products": {
         "label": "Total Products",
-        "icon": "database",
+        "icon": "package",
         "tone": "blue",
     },
     "available_stock": {
         "label": "Available Stock",
-        "icon": "layers",
+        "icon": "check-circle-2",
         "tone": "green",
     },
     "reserved_stock": {
         "label": "Reserved Stock",
-        "icon": "box",
+        "icon": "clock-3",
         "tone": "neutral",
     },
     "out_of_stock": {
@@ -48,6 +48,11 @@ UI_TOKENS = {
         "label": "Low Stock Alerts",
         "icon": "triangle-alert",
         "tone": "warning",
+    },
+    "pending_actions": {
+        "label": "Pending Actions",
+        "icon": "clipboard",
+        "tone": "neutral",
     },
     "suppliers": {
         "label": "Suppliers",
@@ -61,7 +66,7 @@ UI_TOKENS = {
     },
     "receiving_records": {
         "label": "Receiving Records",
-        "icon": "receiving",
+        "icon": "inbox",
         "tone": "green",
     },
     "delivery_records": {
@@ -128,7 +133,7 @@ UI_TOKENS = {
     },
     "receive_stock": {
         "label": "Receive Stock",
-        "icon": "download",
+        "icon": "inbox",
         "tone": "green",
     },
     "create_delivery": {
@@ -142,7 +147,7 @@ UI_TOKENS = {
         "tone": "warning",
     },
     "create_issue": {
-        "label": "Create Issue",
+        "label": "Create Temporary Assignment",
         "icon": "user-check",
         "tone": "indigo",
     },

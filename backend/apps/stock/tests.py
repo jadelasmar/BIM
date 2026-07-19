@@ -4,7 +4,7 @@ from django.contrib.auth.tokens import default_token_generator
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.core import mail
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.db import models
+from django.db import IntegrityError, models
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
@@ -45,6 +45,7 @@ from .admin import ProductAdmin, ProductUnitAdmin, ProductUnitPurchaseForm
 from .models import (
     Brand,
     Category,
+    Client,
     ClientReturnItem,
     ClientReturnRecord,
     DeliveryItem,
@@ -133,8 +134,8 @@ class UIRegistryTests(SimpleTestCase):
     def test_ui_item_allows_local_overrides(self):
         item = ui_item("inventory", enabled=True)
 
-        self.assertEqual(item["name"], "BIM Stock")
-        self.assertEqual(item["icon"], "database")
+        self.assertEqual(item["name"], "Inventory")
+        self.assertEqual(item["icon"], "boxes")
         self.assertEqual(item["tone"], "blue")
         self.assertTrue(item["enabled"])
 
@@ -171,13 +172,6 @@ class UIRegistryTests(SimpleTestCase):
         self.assertNotIn("<Download", app_source)
         self.assertNotIn("<Truck", app_source)
         self.assertIn("workflowMeta", REACT_REGISTRY_SOURCE.read_text(encoding="utf-8"))
-
-    def test_frontend_greeting_uses_browser_hour(self):
-        app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
-
-        self.assertIn("function greetingPeriodForHour(hour)", app_source)
-        self.assertIn("new Date().getHours()", app_source)
-        self.assertIn("data.hero.greetingName", app_source)
 
     def test_command_center_layout_removes_duplicate_panels_and_keeps_refresh(self):
         app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
@@ -264,10 +258,6 @@ class UIRegistryTests(SimpleTestCase):
     def test_visible_future_actions_are_disabled_or_marked_coming_later(self):
         app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
 
-        header_source = app_source[
-            app_source.index("function Header"):
-            app_source.index("function InventoryPage")
-        ]
         inventory_header_source = app_source[
             app_source.index("function InventoryHeader"):
             app_source.index("function ProductDetail")
@@ -277,8 +267,6 @@ class UIRegistryTests(SimpleTestCase):
             app_source.index("function CreateDeliveryPage")
         ]
 
-        self.assertIn("Global search coming later", header_source)
-        self.assertIn("disabled", header_source)
         self.assertIn("Export coming later", inventory_header_source)
         self.assertIn("disabled", inventory_header_source)
         self.assertIn("Barcode scanning coming later", stock_entry_source)
@@ -399,9 +387,10 @@ class UIRegistryTests(SimpleTestCase):
         self.assertIn("fetch(data.api.productUnits", stock_entry_source)
         self.assertIn("item_inputs: itemInputs", stock_entry_source)
         self.assertIn("serial_numbers: buildReceivingSerialNumbers(line, lineIndex)", stock_entry_source)
-        self.assertIn("reference_number: form.referenceNumber || form.deliveryNote", stock_entry_source)
-        self.assertIn('label="Reference Number"', stock_entry_source)
-        self.assertNotIn("`Reference number: ${form.referenceNumber}`", stock_entry_source)
+        self.assertIn('label="PO Number"', stock_entry_source)
+        self.assertIn('label="Supplier Invoice Number"', stock_entry_source)
+        self.assertNotIn('label="Reference Number"', stock_entry_source)
+        self.assertNotIn('label="Delivery Note Number"', stock_entry_source)
         self.assertIn("if (isReceiving) {", stock_entry_source)
         self.assertIn("await createReceivingRecord();", stock_entry_source)
         self.assertIn("await createProductUnits();", stock_entry_source)
@@ -424,7 +413,8 @@ class UIRegistryTests(SimpleTestCase):
         self.assertIn("Receiving Records", receiving_source)
         self.assertIn("record.total_quantity", receiving_source)
         self.assertIn("supplier_name", receiving_source)
-        self.assertIn("reference_number", receiving_source)
+        self.assertIn("po_number", receiving_source)
+        self.assertIn("supplier_invoice_number", receiving_source)
         self.assertIn("<EmptyState", receiving_source)
         self.assertIn("<ReceivingRecordsPage data={data}", app_source)
         self.assertNotIn('<PlaceholderPage data={data} title="Receiving Records"', app_source)
@@ -433,7 +423,7 @@ class UIRegistryTests(SimpleTestCase):
         app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
         detail_source = app_source[
             app_source.index("function ReceivingRecordDetailPage"):
-            app_source.index("function Header")
+            app_source.index("function ReceivingCorrectionPanel")
         ]
 
         self.assertIn("data.api.receivingRecordDetail", detail_source)
@@ -583,8 +573,8 @@ class UIRegistryTests(SimpleTestCase):
         self.assertIn("function CreateIssuePage", app_source)
         self.assertIn("data.api.issues", app_source)
         self.assertIn("data.api.issueDetail", app_source)
-        self.assertIn("Return Issue", app_source)
-        self.assertIn("Issued units must be returned before delivery.", app_source)
+        self.assertIn("Return Temporary Assignment", app_source)
+        self.assertIn("Assigned units must be returned before delivery.", app_source)
 
     def test_frontend_has_repair_list_detail_and_create_screens(self):
         app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
@@ -843,7 +833,6 @@ class ReceivingAdminTests(SimpleTestCase):
                 "receiving_number",
                 "supplier",
                 "received_date",
-                "reference_number",
                 "status",
                 "total_quantity",
                 "created_by",
@@ -855,7 +844,6 @@ class ReceivingAdminTests(SimpleTestCase):
             receiving_admin.search_fields,
             (
                 "receiving_number",
-                "reference_number",
                 "supplier__name",
                 "items__product__descript",
                 "items__serial_number",
@@ -1378,7 +1366,7 @@ class BIMPOSAccessTests(TestCase):
         inventory_module = next(
             module
             for module in response.context["initial_data"]["modules"]
-            if module["name"] == "BIM Stock"
+            if module["name"] == "Inventory"
         )
         self.assertTrue(inventory_module["enabled"])
         self.assertEqual(inventory_module["href"], "/inventory/")
@@ -1585,7 +1573,6 @@ class BIMPOSAccessTests(TestCase):
         supplier = Supplier.objects.create(name="Gulf Networks LLC")
         receiving = create_receiving_record(
             supplier=supplier,
-            reference_number="SUP-REF-77",
             items=[
                 {
                     "product": product,
@@ -1707,7 +1694,7 @@ class BIMPOSAccessTests(TestCase):
                 "Add Product",
                 "Create Delivery",
                 "Create Reservation",
-                "Create Issue",
+                "Create Temporary Assignment",
                 "Create Repair",
                 "Create Client Return",
                 "Receive Stock",
@@ -1719,7 +1706,7 @@ class BIMPOSAccessTests(TestCase):
         self.assertEqual(actions_by_label["Add Product"]["href"], "/inventory/products/new/")
         self.assertEqual(actions_by_label["Create Delivery"]["href"], "/operations/deliveries/new/")
         self.assertEqual(actions_by_label["Create Reservation"]["href"], "/operations/reservations/new/")
-        self.assertEqual(actions_by_label["Create Issue"]["href"], "/operations/issues/new/")
+        self.assertEqual(actions_by_label["Create Temporary Assignment"]["href"], "/operations/issues/new/")
         self.assertEqual(actions_by_label["Create Repair"]["href"], "/operations/repairs/new/")
         self.assertEqual(actions_by_label["Create Client Return"]["href"], "/operations/client-returns/new/")
         self.assertEqual(actions_by_label["Receive Stock"]["href"], "/operations/receiving/new/")
@@ -1727,15 +1714,15 @@ class BIMPOSAccessTests(TestCase):
         self.assertTrue(actions_by_label["Add Product"]["enabled"])
         self.assertTrue(actions_by_label["Create Delivery"]["enabled"])
         self.assertTrue(actions_by_label["Create Reservation"]["enabled"])
-        self.assertTrue(actions_by_label["Create Issue"]["enabled"])
+        self.assertTrue(actions_by_label["Create Temporary Assignment"]["enabled"])
         self.assertTrue(actions_by_label["Create Repair"]["enabled"])
         self.assertTrue(actions_by_label["Create Client Return"]["enabled"])
         self.assertTrue(actions_by_label["Receive Stock"]["enabled"])
         self.assertTrue(actions_by_label["Add Unit"]["enabled"])
         self.assertEqual(actions_by_label["Create Delivery"]["icon"], "delivery")
         self.assertEqual(actions_by_label["Create Delivery"]["tone"], "indigo")
-        self.assertEqual(actions_by_label["Create Issue"]["icon"], "user-check")
-        self.assertEqual(actions_by_label["Create Issue"]["tone"], "indigo")
+        self.assertEqual(actions_by_label["Create Temporary Assignment"]["icon"], "user-check")
+        self.assertEqual(actions_by_label["Create Temporary Assignment"]["tone"], "indigo")
         self.assertEqual(actions_by_label["Create Repair"]["icon"], "wrench")
         self.assertEqual(actions_by_label["Create Repair"]["tone"], "danger")
         self.assertEqual(actions_by_label["Create Client Return"]["icon"], "reset")
@@ -1805,10 +1792,10 @@ class BIMPOSAccessTests(TestCase):
 
         self.assertEqual(out_of_stock_kpi["value"], "1")
         self.assertEqual(out_of_stock_kpi["tone"], "danger")
-        self.assertEqual(out_of_stock_kpi["detail"], "1 product out of stock")
+        self.assertEqual(out_of_stock_kpi["detail"], "Reorder needed")
         self.assertEqual(low_stock_kpi["value"], "1")
         self.assertEqual(low_stock_kpi["tone"], "warning")
-        self.assertEqual(low_stock_kpi["detail"], "1 product with low stock")
+        self.assertEqual(low_stock_kpi["detail"], "Review items")
         self.assertLess(
             response.context["initial_data"]["kpis"].index(low_stock_kpi),
             response.context["initial_data"]["kpis"].index(out_of_stock_kpi),
@@ -1824,6 +1811,47 @@ class BIMPOSAccessTests(TestCase):
         )
         self.assertEqual(low_stock_alert["status"], "Low Stock")
         self.assertEqual(low_stock_alert["status_class"], "low_stock")
+
+    def test_command_center_pending_actions_kpi_sums_active_operations_records(self):
+        user = User.objects.create_user(username="viewer", password="test-pass")
+        user.user_permissions.add(Permission.objects.get(codename="view_product"))
+        ReservationRecord.objects.create(reserved_for="Service desk")
+        IssueRecord.objects.create(issued_to="Technician Team")
+        RepairRecord.objects.create(repair_reason="Printer head failure")
+        RepairRecord.objects.create(
+            repair_reason="Already resolved unit",
+            status=RepairRecord.STATUS_RESOLVED,
+        )
+        self.client.force_login(user)
+
+        response = self.client.get("/")
+        pending_actions_kpi = next(
+            item
+            for item in response.context["initial_data"]["kpis"]
+            if item["label"] == "Pending Actions"
+        )
+
+        self.assertEqual(pending_actions_kpi["value"], "3")
+        self.assertEqual(pending_actions_kpi["tone"], "warning")
+        self.assertEqual(
+            pending_actions_kpi["detail"], "1 reservation, 1 issue, 1 repair"
+        )
+
+    def test_command_center_pending_actions_kpi_is_neutral_when_empty(self):
+        user = User.objects.create_user(username="viewer-empty", password="test-pass")
+        user.user_permissions.add(Permission.objects.get(codename="view_product"))
+        self.client.force_login(user)
+
+        response = self.client.get("/")
+        pending_actions_kpi = next(
+            item
+            for item in response.context["initial_data"]["kpis"]
+            if item["label"] == "Pending Actions"
+        )
+
+        self.assertEqual(pending_actions_kpi["value"], "0")
+        self.assertEqual(pending_actions_kpi["tone"], "neutral")
+        self.assertEqual(pending_actions_kpi["detail"], "Nothing awaiting action")
 
     def test_command_center_quick_add_includes_disabled_supplier_action(self):
         user = User.objects.create_user(username="operator", password="test-pass")
@@ -1851,7 +1879,7 @@ class BIMPOSAccessTests(TestCase):
                 "Add Product",
                 "Create Delivery",
                 "Create Reservation",
-                "Create Issue",
+                "Create Temporary Assignment",
                 "Create Repair",
                 "Create Client Return",
                 "Receive Stock",
@@ -1867,7 +1895,7 @@ class BIMPOSAccessTests(TestCase):
         self.assertIsNone(actions_by_label["Add Client"]["href"])
         self.assertEqual(actions_by_label["Add Client"]["description"], "Create client master data")
 
-    def test_command_center_uses_final_sidebar_and_search_labels(self):
+    def test_command_center_uses_final_sidebar_labels_and_theme(self):
         user = User.objects.create_user(username="viewer", password="test-pass")
         user.user_permissions.add(Permission.objects.get(codename="view_product"))
         self.client.force_login(user)
@@ -1877,14 +1905,6 @@ class BIMPOSAccessTests(TestCase):
 
         self.assertEqual(secondary_nav, [])
         self.assertFalse(response.context["initial_data"]["user"]["canAccessAdmin"])
-        self.assertEqual(
-            response.context["initial_data"]["hero"]["searchPlaceholder"],
-            "Search products, stock units, deliveries, suppliers, clients...",
-        )
-        self.assertEqual(
-            response.context["initial_data"]["hero"]["greetingName"],
-            "viewer",
-        )
         self.assertEqual(
             response.context["initial_data"]["theme"]["storageKey"],
             "bim-nexus-theme",
@@ -1909,7 +1929,7 @@ class BIMPOSAccessTests(TestCase):
         self.assertEqual(secondary_nav[0]["href"], "/admin/")
         self.assertEqual(secondary_nav[0]["detail"], "Django admin")
 
-    def test_command_center_low_stock_kpi_pluralizes_product_detail(self):
+    def test_command_center_low_stock_kpi_detail_is_constant_regardless_of_count(self):
         user = User.objects.create_user(username="viewer", password="test-pass")
         user.user_permissions.add(Permission.objects.get(codename="view_product"))
         category = Category.objects.create(name="Laser")
@@ -1944,7 +1964,7 @@ class BIMPOSAccessTests(TestCase):
         )
 
         self.assertEqual(low_stock_kpi["value"], "2")
-        self.assertEqual(low_stock_kpi["detail"], "2 products with low stock")
+        self.assertEqual(low_stock_kpi["detail"], "Review items")
 
     def test_inventory_react_page_uses_inventory_navigation(self):
         user = User.objects.create_user(username="viewer", password="test-pass")
@@ -1959,7 +1979,7 @@ class BIMPOSAccessTests(TestCase):
         inventory_nav = next(
             item
             for item in response.context["initial_data"]["navigation"]["primary"]
-            if item["name"] == "BIM Stock"
+            if item["name"] == "Inventory"
         )
         self.assertTrue(inventory_nav["active"])
         self.assertEqual(
@@ -2162,7 +2182,7 @@ class BIMPOSAccessTests(TestCase):
         inventory_module = next(
             module
             for module in response.context["initial_data"]["modules"]
-            if module["name"] == "BIM Stock"
+            if module["name"] == "Inventory"
         )
         self.assertFalse(inventory_module["enabled"])
         self.assertIsNone(inventory_module["href"])
@@ -2435,7 +2455,6 @@ class ReceivingServiceTests(TestCase):
         )
 
         self.assertIsNone(receiving.supplier)
-        self.assertEqual(receiving.reference_number, "")
         self.assertEqual(receiving.total_quantity, 3)
         self.assertEqual(receiving.items.get().product, self.product)
         self.assertEqual(ProductUnit.objects.filter(serial_number="").count(), 0)
@@ -2446,7 +2465,6 @@ class ReceivingServiceTests(TestCase):
 
         receiving = create_receiving_record(
             supplier=self.supplier,
-            reference_number="SUP-DOC-100",
             created_by=self.user,
             received_date=timezone.localdate(),
             items=[
@@ -2461,7 +2479,6 @@ class ReceivingServiceTests(TestCase):
         )
 
         self.assertEqual(receiving.supplier, self.supplier)
-        self.assertEqual(receiving.reference_number, "SUP-DOC-100")
         self.assertEqual(receiving.total_quantity, 2)
         self.assertEqual(receiving.items.count(), 2)
         units = ProductUnit.objects.filter(serial_number__in=["RCV-SN-1", "RCV-SN-2"])
@@ -2725,6 +2742,60 @@ class InventoryApiTests(TestCase):
             ProductModel.objects.filter(brand=self.brand, modelname="L300").exists()
         )
 
+    def test_product_api_creates_product_with_new_category_and_brand_names(self):
+        user = self._user_with_permissions("view_product", "add_product")
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/api/stock/products/",
+            {
+                "descript": "Epson inkjet printer L500",
+                "category_name_input": "Inkjet",
+                "brand_name_input": "Epson",
+                "model_name_input": "L500",
+                "barcode": "BAR-EPSON-L500",
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(response.json()["category_name"], "Inkjet")
+        self.assertEqual(response.json()["brand_name"], "Epson")
+        self.assertEqual(response.json()["model_name"], "L500")
+        self.assertTrue(Category.objects.filter(name="Inkjet").exists())
+        self.assertTrue(Brand.objects.filter(brandname="Epson").exists())
+        self.assertTrue(
+            ProductModel.objects.filter(brand__brandname="Epson", modelname="L500").exists()
+        )
+
+    def test_product_api_does_not_persist_new_category_and_brand_on_save_failure(self):
+        user = self._user_with_permissions("view_product", "add_product")
+        self.client.force_login(user)
+
+        # "Laser2"/"Canonical"/"L100" generate the same SKU (LAS-CAN-L100) as the
+        # existing self.product, so Product.save()'s unique SKU constraint fails
+        # after the new Category/Brand/ProductModel rows would otherwise have been
+        # created -- proving the whole thing rolls back together, not just the
+        # Product row.
+        with self.assertRaises(IntegrityError):
+            self.client.post(
+                "/api/stock/products/",
+                {
+                    "descript": "Duplicate SKU collision",
+                    "category_name_input": "Laser2",
+                    "brand_name_input": "Canonical",
+                    "model_name_input": "L100",
+                    "barcode": "BAR-COLLISION",
+                },
+                content_type="application/json",
+            )
+
+        self.assertFalse(Category.objects.filter(name="Laser2").exists())
+        self.assertFalse(Brand.objects.filter(brandname="Canonical").exists())
+        self.assertFalse(
+            ProductModel.objects.filter(brand__brandname="Canonical", modelname="L100").exists()
+        )
+
     def test_product_api_creates_product_with_image_upload(self):
         user = self._user_with_permissions("view_product", "add_product")
         self.client.force_login(user)
@@ -2898,7 +2969,6 @@ class InventoryApiTests(TestCase):
             {
                 "reserved_for": "Front Office POS refresh",
                 "reason": "Hold for installation",
-                "expected_release_date": str(timezone.localdate()),
                 "notes": "Install window pending",
                 "unit_ids": [unit.pk],
             },
@@ -3184,11 +3254,8 @@ class InventoryApiTests(TestCase):
             "/api/stock/issues/",
             {
                 "issued_to": "Technician Team",
-                "department": "IT",
-                "branch_or_site": "Main Branch",
                 "reason": "Temporary setup",
                 "issue_date": str(timezone.localdate()),
-                "expected_return_date": str(timezone.localdate()),
                 "notes": "Return after event",
                 "unit_ids": [unit.pk],
             },
@@ -3265,8 +3332,6 @@ class InventoryApiTests(TestCase):
         unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
         issue = IssueRecord.objects.create(
             issued_to="Technician Team",
-            department="IT",
-            branch_or_site="Main Branch",
             reason="Temporary setup",
             issued_by=user,
         )
@@ -3469,11 +3534,8 @@ class InventoryApiTests(TestCase):
             "/api/stock/repairs/",
             {
                 "repair_reason": "Printer head failure",
-                "reported_by_name": "Front Office",
-                "repair_location": "Workshop",
                 "technician": "Internal IT",
                 "repair_date": str(timezone.localdate()),
-                "expected_resolution_date": str(timezone.localdate()),
                 "notes": "Diagnose before reuse",
                 "unit_ids": [unit.pk],
             },
@@ -3556,8 +3618,6 @@ class InventoryApiTests(TestCase):
         unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
         repair = RepairRecord.objects.create(
             repair_reason="Printer head failure",
-            reported_by_name="Front Office",
-            repair_location="Workshop",
             technician="Internal IT",
             sent_by=user,
         )
@@ -3976,6 +4036,58 @@ class InventoryApiTests(TestCase):
             ).exists()
         )
 
+    def test_delivery_api_creates_record_with_invoice_number_and_sale_price(self):
+        user = self._user_with_permissions(
+            "add_deliveryrecord",
+            "change_productunit",
+        )
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/api/stock/deliveries/",
+            {
+                "customer_name": "Internal Department",
+                "receiver_name": "Receiver Name",
+                "invoice_number": "INV-2026-0007",
+                "delivery_date": str(timezone.localdate()),
+                "unit_ids": [unit.pk],
+                "unit_sale_prices": {str(unit.pk): "125.50"},
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        delivery = DeliveryRecord.objects.get(pk=response.json()["id"])
+        self.assertEqual(delivery.invoice_number, "INV-2026-0007")
+        item = DeliveryItem.objects.get(delivery=delivery, product_unit=unit)
+        self.assertEqual(item.sale_price, 125.50)
+        self.assertEqual(response.json()["invoice_number"], "INV-2026-0007")
+        self.assertEqual(response.json()["items"][0]["sale_price"], "125.50")
+
+    def test_delivery_api_creates_new_client_from_name_input(self):
+        user = self._user_with_permissions(
+            "add_deliveryrecord",
+            "change_productunit",
+        )
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/api/stock/deliveries/",
+            {
+                "client_name_input": "Coastal Retail Group",
+                "receiver_name": "Receiver Name",
+                "delivery_date": str(timezone.localdate()),
+                "unit_ids": [unit.pk],
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        new_client = Client.objects.get(name="Coastal Retail Group")
+        self.assertEqual(response.json()["client"], new_client.pk)
+
     def test_delivery_api_requires_add_delivery_permission_to_create(self):
         user = self._user_with_permissions(
             "view_deliveryrecord",
@@ -4341,6 +4453,59 @@ class InventoryApiTests(TestCase):
         self.assertEqual(movement.client_return_record, client_return)
         self.assertEqual(movement.performed_by, user)
 
+    def test_client_return_api_creates_new_client_from_name_input(self):
+        user = self._user_with_permissions(
+            "view_clientreturnrecord",
+            "add_clientreturnrecord",
+            "change_productunit",
+        )
+        unit, delivery, _delivery_item = self._sold_unit_with_delivery()
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/api/stock/client-returns/",
+            {
+                "delivery": delivery.pk,
+                "client_name_input": "Harbor Logistics LLC",
+                "received_from": "Client Receiver",
+                "return_date": str(timezone.localdate()),
+                "resolution": ProductUnit.STATUS_AVAILABLE,
+                "unit_ids": [unit.pk],
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        new_client = Client.objects.get(name="Harbor Logistics LLC")
+        self.assertEqual(response.json()["client"], new_client.pk)
+
+    def test_client_return_api_does_not_persist_new_client_on_save_failure(self):
+        user = self._user_with_permissions(
+            "view_clientreturnrecord",
+            "add_clientreturnrecord",
+            "change_productunit",
+        )
+        # An available (never-sold) unit -- client_return_record requires an active
+        # sold unit, so this fails inside the service function after the new
+        # client would otherwise have been created.
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/api/stock/client-returns/",
+            {
+                "client_name_input": "Rollback Client Co",
+                "received_from": "Client Receiver",
+                "return_date": str(timezone.localdate()),
+                "resolution": ProductUnit.STATUS_AVAILABLE,
+                "unit_ids": [unit.pk],
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertFalse(Client.objects.filter(name="Rollback Client Co").exists())
+
     def test_client_return_api_moves_sold_delivery_unit_to_repair(self):
         user = self._user_with_permissions(
             "view_clientreturnrecord",
@@ -4547,7 +4712,8 @@ class InventoryApiTests(TestCase):
             "/api/stock/receiving-records/",
             {
                 "supplier": self.supplier.pk,
-                "reference_number": "SUP-REF-1",
+                "po_number": "PO-1001",
+                "supplier_invoice_number": "INV-5001",
                 "received_date": str(timezone.localdate()),
                 "notes": "Supplier stock entry",
                 "item_inputs": [
@@ -4568,6 +4734,8 @@ class InventoryApiTests(TestCase):
             f"RCV-{timezone.localdate().year}-",
         )
         self.assertEqual(response.json()["supplier"], self.supplier.pk)
+        self.assertEqual(response.json()["po_number"], "PO-1001")
+        self.assertEqual(response.json()["supplier_invoice_number"], "INV-5001")
         self.assertEqual(response.json()["total_quantity"], 2)
         self.assertEqual(len(response.json()["items"]), 2)
         self.assertEqual(
@@ -4576,6 +4744,67 @@ class InventoryApiTests(TestCase):
             ).count(),
             2,
         )
+
+    def test_receiving_api_creates_new_supplier_from_name_input(self):
+        user = self._user_with_permissions(
+            "view_productunit",
+            "add_productunit",
+            "view_receivingrecord",
+            "add_receivingrecord",
+        )
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/api/stock/receiving-records/",
+            {
+                "supplier_name_input": "Metro Hardware Supply",
+                "received_date": str(timezone.localdate()),
+                "item_inputs": [
+                    {
+                        "product": self.product.pk,
+                        "quantity": 1,
+                        "serial_numbers": ["API-RCV-NEWSUP-1"],
+                        "cost": "40.00",
+                    }
+                ],
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        new_supplier = Supplier.objects.get(name="Metro Hardware Supply")
+        self.assertEqual(response.json()["supplier"], new_supplier.pk)
+
+    def test_receiving_api_does_not_persist_new_supplier_on_save_failure(self):
+        user = self._user_with_permissions(
+            "view_productunit",
+            "add_productunit",
+            "view_receivingrecord",
+            "add_receivingrecord",
+        )
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/api/stock/receiving-records/",
+            {
+                "supplier_name_input": "Rollback Supplier Co",
+                "received_date": str(timezone.localdate()),
+                "item_inputs": [
+                    {
+                        "product": self.product.pk,
+                        "quantity": 1,
+                        # Existing serial number -- forces _create_receiving_item to
+                        # fail after the new supplier would otherwise be created.
+                        "serial_numbers": ["API-AVAILABLE"],
+                        "cost": "40.00",
+                    }
+                ],
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertFalse(Supplier.objects.filter(name="Rollback Supplier Co").exists())
 
     def test_receiving_api_creates_manual_quantity_without_supplier_or_units(self):
         user = self._user_with_permissions(
@@ -4612,7 +4841,8 @@ class InventoryApiTests(TestCase):
 
         receiving = ReceivingRecord.objects.create(
             supplier=self.supplier,
-            reference_number="SUP-DETAIL-1",
+            po_number="PO-DETAIL-1",
+            supplier_invoice_number="INV-DETAIL-1",
             notes="Detail note",
             created_by=user,
         )
@@ -4634,7 +4864,8 @@ class InventoryApiTests(TestCase):
         self.assertEqual(response.json()["id"], receiving.pk)
         self.assertEqual(response.json()["receiving_number"], receiving.receiving_number)
         self.assertEqual(response.json()["supplier_name"], self.supplier.name)
-        self.assertEqual(response.json()["reference_number"], "SUP-DETAIL-1")
+        self.assertEqual(response.json()["po_number"], "PO-DETAIL-1")
+        self.assertEqual(response.json()["supplier_invoice_number"], "INV-DETAIL-1")
         self.assertEqual(response.json()["notes"], "Detail note")
         self.assertEqual(response.json()["created_by_name"], user.username)
         self.assertEqual(response.json()["total_quantity"], 1)
@@ -4650,7 +4881,8 @@ class InventoryApiTests(TestCase):
         )
         receiving = ReceivingRecord.objects.create(
             supplier=self.supplier,
-            reference_number="OLD-REF",
+            po_number="OLD-PO",
+            supplier_invoice_number="OLD-INV",
             notes="Old notes",
             created_by=user,
         )
@@ -4677,7 +4909,8 @@ class InventoryApiTests(TestCase):
             f"/api/stock/receiving-records/{receiving.pk}/",
             {
                 "supplier": other_supplier.pk,
-                "reference_number": "NEW-REF",
+                "po_number": "NEW-PO",
+                "supplier_invoice_number": "NEW-INV",
                 "received_date": "2026-07-05",
                 "notes": "Updated header",
                 "receiving_number": "RCV-1999-9999",
@@ -4701,7 +4934,8 @@ class InventoryApiTests(TestCase):
         item.refresh_from_db()
         unit.refresh_from_db()
         self.assertEqual(receiving.supplier, other_supplier)
-        self.assertEqual(receiving.reference_number, "NEW-REF")
+        self.assertEqual(receiving.po_number, "NEW-PO")
+        self.assertEqual(receiving.supplier_invoice_number, "NEW-INV")
         self.assertEqual(str(receiving.received_date), "2026-07-05")
         self.assertEqual(receiving.notes, "Updated header")
         self.assertNotEqual(receiving.receiving_number, "RCV-1999-9999")
@@ -4723,7 +4957,6 @@ class InventoryApiTests(TestCase):
         )
         receiving = ReceivingRecord.objects.create(
             supplier=self.supplier,
-            reference_number="CANCEL-ME",
             created_by=user,
         )
         unit = ProductUnit.objects.create(

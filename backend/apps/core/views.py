@@ -16,6 +16,9 @@ from apps.stock.selectors import (
     delivery_record_count,
     low_stock_alerts,
     low_stock_counts,
+    pending_issue_count,
+    pending_repair_count,
+    pending_reservation_count,
     recent_deliveries,
     recent_receiving,
     recent_receiving_count,
@@ -76,8 +79,20 @@ def _plural(value, singular, plural=None):
     return plural or f"{singular}s"
 
 
-def _product_count_detail(value, suffix):
-    return f"{_format_count(value)} {_plural(value, 'product')} {suffix}"
+def _pending_actions_detail(reservations, issues, repairs):
+    counts = (reservations, issues, repairs)
+    if not all(isinstance(count, int) for count in counts):
+        return "Operations data unavailable"
+
+    parts = []
+    if reservations:
+        parts.append(f"{_format_count(reservations)} {_plural(reservations, 'reservation')}")
+    if issues:
+        parts.append(f"{_format_count(issues)} {_plural(issues, 'temporary assignment')}")
+    if repairs:
+        parts.append(f"{_format_count(repairs)} {_plural(repairs, 'repair')}")
+
+    return ", ".join(parts) if parts else "Nothing awaiting action"
 
 
 def _user_display_name(user):
@@ -95,6 +110,9 @@ def _command_center_initial_data(
     low_stock_alerts,
     recent_deliveries_panel,
     recent_receiving_panel,
+    pending_reservations,
+    pending_issues,
+    pending_repairs,
     current_path=None,
 ):
     can_view_stock = user_can_view_stock(request.user)
@@ -115,6 +133,13 @@ def _command_center_initial_data(
     )
     low_stock_tone = (
         "warning" if isinstance(low_stock, int) and low_stock > 0 else "neutral"
+    )
+    pending_counts = (pending_reservations, pending_issues, pending_repairs)
+    pending_actions_total = (
+        sum(pending_counts) if all(isinstance(count, int) for count in pending_counts) else "-"
+    )
+    pending_actions_tone = (
+        "warning" if isinstance(pending_actions_total, int) and pending_actions_total > 0 else "neutral"
     )
 
     can_create_delivery = user.has_perm(
@@ -272,39 +297,31 @@ def _command_center_initial_data(
                 )
             ] if can_access_admin else [],
         },
-        "hero": {
-            "greeting": f"Good evening, {_user_display_name(user)}",
-            "greetingName": _user_display_name(user),
-            "title": "BIM Nexus",
-            "subtitle": "Internal IT Operations Platform",
-            "tenant": "BIMPOS",
-            "searchPlaceholder": "Search products, stock units, deliveries, suppliers, clients...",
-        },
         "kpis": [
             {
                 "value": _format_count(total_products),
-                "detail": _product_count_detail(total_products, "in BIM Stock"),
+                "detail": "Active in catalogue",
                 "trend": "",
                 "href": reverse("inventory"),
                 **ui_item("total_products"),
             },
             {
                 "value": _format_count(available_stock),
-                "detail": f"{_format_count(available_stock)} {_plural(available_stock, 'unit')} ready for issue",
+                "detail": "Ready to allocate",
                 "trend": "",
                 "href": f"{reverse('inventory')}?status={ProductUnit.STATUS_AVAILABLE}",
                 **ui_item("available_stock"),
             },
             {
                 "value": _format_count(reserved_stock),
-                "detail": f"{_format_count(reserved_stock)} {_plural(reserved_stock, 'unit')} pending allocation",
+                "detail": "On hold, awaiting pickup or delivery",
                 "trend": "",
                 "href": f"{reverse('inventory')}?status={ProductUnit.STATUS_RESERVED}",
                 **ui_item("reserved_stock"),
             },
             {
                 "value": _format_count(low_stock),
-                "detail": _product_count_detail(low_stock, "with low stock"),
+                "detail": "Review items" if isinstance(low_stock, int) and low_stock > 0 else "None right now",
                 "trend": "",
                 "href": f"{reverse('inventory')}?stock=low",
                 "todo": "Replace with backend low-stock filter when product stock filters move server-side.",
@@ -312,11 +329,18 @@ def _command_center_initial_data(
             },
             {
                 "value": _format_count(out_of_stock),
-                "detail": _product_count_detail(out_of_stock, "out of stock"),
+                "detail": "Reorder needed" if isinstance(out_of_stock, int) and out_of_stock > 0 else "None right now",
                 "trend": "",
                 "href": f"{reverse('inventory')}?stock=out",
                 "todo": "Replace with backend out-of-stock filter when product stock filters move server-side.",
                 **ui_item("out_of_stock", tone=out_of_stock_tone),
+            },
+            {
+                "value": _format_count(pending_actions_total),
+                "detail": _pending_actions_detail(pending_reservations, pending_issues, pending_repairs),
+                "trend": "",
+                "href": operations_href,
+                **ui_item("pending_actions", tone=pending_actions_tone),
             },
         ],
         "overview": [
@@ -329,13 +353,13 @@ def _command_center_initial_data(
             },
             {
                 "value": _format_count(recent_receiving),
-                "detail": "stock entry records",
+                "detail": "Last 30 days",
                 "href": reverse("operations_receiving"),
                 **ui_item("receiving_records"),
             },
             {
                 "value": _format_count(recent_deliveries),
-                "detail": "stock exit records",
+                "detail": "All-time total",
                 "href": reverse("operations_deliveries"),
                 **ui_item("delivery_records"),
             },
@@ -374,6 +398,9 @@ def _build_command_center_initial_data(request, current_path=None):
     can_view_stock = user_can_view_stock(user)
     can_use_operations = user_can_use_stock_operations(user)
     low_stock_count, out_of_stock_count = low_stock_counts() if can_view_stock else ("-", 0)
+    pending_reservations = pending_reservation_count() if can_view_stock else "-"
+    pending_issues = pending_issue_count() if can_view_stock else "-"
+    pending_repairs = pending_repair_count() if can_view_stock else "-"
     can_create_delivery = user.has_perm(
         stock_constants.ADD_DELIVERY_RECORD
     ) and user.has_perm(stock_constants.CHANGE_PRODUCT_UNIT)
@@ -456,7 +483,7 @@ def _build_command_center_initial_data(request, current_path=None):
             if can_create_issue
             else None,
             "enabled": can_create_issue,
-            "description": "Temporarily issue stock to a person, branch, or site",
+            "description": "Temporarily assign stock to a person that is expected to come back",
             **ui_item("create_issue"),
         },
         {
@@ -519,7 +546,7 @@ def _build_command_center_initial_data(request, current_path=None):
             **ui_item("inventory"),
         },
         {
-            "description": "Receiving, delivery, reservation, issue, repair, client returns, stock history",
+            "description": "Receiving, delivery, reservation, temporary assignment, repair, client returns, stock history",
             "href": reverse("operations") if can_use_operations else None,
             "enabled": can_use_operations,
             "count": 6,
@@ -566,6 +593,9 @@ def _build_command_center_initial_data(request, current_path=None):
         low_stock_alerts=low_stock_alerts_panel,
         recent_deliveries_panel=recent_deliveries_panel,
         recent_receiving_panel=recent_receiving_panel,
+        pending_reservations=pending_reservations,
+        pending_issues=pending_issues,
+        pending_repairs=pending_repairs,
         current_path=current_path,
     )
 

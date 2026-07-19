@@ -250,6 +250,6 @@ Current Delivery Records integration:
 ## Role-Aware Actions
 
 - Admin / IT lead accounts can use Django Admin when `is_staff` or superuser access is granted.
-- IT Support can use normal stock workflow actions exposed by its BIM Stock add/change/view permissions.
+- IT Support can use normal stock workflow actions exposed by its Inventory add/change/view permissions.
 - Viewer can open dashboard, inventory, master-data, records, and movement-history screens, but frontend create/edit/cancel/return/resolve controls are hidden where permission flags are available.
 - Backend APIs still enforce permissions directly; frontend hiding is usability, not security.

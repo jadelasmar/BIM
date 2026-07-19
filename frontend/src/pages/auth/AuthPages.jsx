@@ -236,7 +236,15 @@ export function LoginPage({ data }) {
       </form>
 
       <p className="mt-5 text-center text-[10px] leading-4 text-zinc-400">
-        Built for <strong className="font-medium text-white">BIMPOS</strong>
+        Built for{" "}
+        <a
+          href="https://www.bimpos.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="font-medium text-white hover:underline"
+        >
+          BIMPOS
+        </a>
       </p>
     </AuthShell>
   );

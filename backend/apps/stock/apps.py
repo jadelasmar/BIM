@@ -5,7 +5,7 @@ from django.db.models.signals import post_migrate
 class BimStockConfig(AppConfig):
     name = "apps.stock"
     label = "bim_stock"
-    verbose_name = "BIM Stock"
+    verbose_name = "Inventory"
 
     def ready(self):
         post_migrate.connect(
