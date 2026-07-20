@@ -7,6 +7,7 @@ import {
   Camera,
   Check,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   Circle,
   ClipboardList,
@@ -53,6 +54,7 @@ import {
 export {
   Camera,
   Check,
+  ChevronDown,
   ChevronRight,
   Circle,
   Edit3,

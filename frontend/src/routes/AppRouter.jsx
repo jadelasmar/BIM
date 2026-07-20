@@ -2,6 +2,7 @@
 import {
   Camera,
   Check,
+  ChevronDown,
   ChevronRight,
   Circle,
   Edit3,
@@ -43,7 +44,7 @@ import { formatCount, formatCurrency, formatDate } from "../utils/formatters";
 import logoPrimary from "../assets/brand/logo-primary.svg";
 import logoWhite from "../assets/brand/logo-white.svg";
 
-function Shell({ data, children, onRefresh }) {
+function Shell({ data, children }) {
   const secondaryNavigation = data.navigation.secondary || [];
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -70,11 +71,7 @@ function Shell({ data, children, onRefresh }) {
       />
 
       <main className="min-w-0 px-4 py-5 sm:px-6 lg:px-7">
-        <Topbar
-          data={data}
-          onRefresh={onRefresh}
-          onOpenSidebar={() => setSidebarOpen(true)}
-        />
+        <Topbar data={data} onOpenSidebar={() => setSidebarOpen(true)} />
         {children}
       </main>
     </div>
@@ -190,32 +187,23 @@ function Sidebar({ data, secondaryNavigation, isOpen, onClose }) {
   );
 }
 
-function Topbar({ data, onRefresh, onOpenSidebar }) {
+function Topbar({ data, onOpenSidebar }) {
   return (
     <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-nexus-line pb-4 text-xs">
-      <Button
-        type="button"
-        onClick={onOpenSidebar}
-        className="lg:hidden"
-        aria-label="Open navigation"
-        variant="outline"
-      >
-        <Menu className="h-4 w-4" aria-hidden="true" />
-        Menu
-      </Button>
-      <div className="flex flex-wrap items-center justify-end gap-3">
-        <ThemeToggle storageKey={data.theme?.storageKey} />
+      <div className="flex flex-wrap items-center gap-3">
         <Button
           type="button"
-          onClick={onRefresh || (() => window.location.reload())}
+          onClick={onOpenSidebar}
+          className="lg:hidden"
+          aria-label="Open navigation"
           variant="outline"
         >
-          <RefreshCw className="h-4 w-4" aria-hidden="true" />
-          Refresh
+          <Menu className="h-4 w-4" aria-hidden="true" />
+          Menu
         </Button>
-        <QuickAddMenu actions={data.quickActions || []} />
-        <LogoutForm data={data} />
+        <ThemeToggle storageKey={data.theme?.storageKey} />
       </div>
+      <AccountMenu data={data} />
     </div>
   );
 }
@@ -235,16 +223,39 @@ function ThemeToggle({ storageKey = DEFAULT_THEME_STORAGE_KEY }) {
   const isLight = theme === "light";
 
   return (
-    <Button
+    <button
       type="button"
       onClick={() => setThemeState(applyTheme(isLight ? "dark" : "light", storageKey))}
-      aria-label="Toggle dark and light mode"
-      title="Toggle dark and light mode"
-      variant="outline"
+      aria-label={isLight ? "Switch to dark mode" : "Switch to light mode"}
+      title={isLight ? "Switch to dark mode" : "Switch to light mode"}
+      className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-nexus-line text-zinc-300 hover:bg-nexus-panel focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--bim-orange-focus)] focus-visible:ring-offset-2 focus-visible:ring-offset-nexus-page"
     >
       {isLight ? <Sun className="h-4 w-4" aria-hidden="true" /> : <Moon className="h-4 w-4" aria-hidden="true" />}
-      {isLight ? "Light" : "Dark"}
-    </Button>
+    </button>
+  );
+}
+
+function AccountMenu({ data }) {
+  const accountLabel = data.user?.displayName || data.user?.username || "Account";
+
+  return (
+    <details className="relative">
+      <summary className="inline-flex h-9 cursor-pointer list-none items-center gap-2 rounded-md border border-nexus-line px-3 font-medium text-zinc-200 marker:hidden hover:bg-nexus-panel2">
+        {accountLabel}
+        <ChevronDown className="h-4 w-4 text-zinc-500" aria-hidden="true" />
+      </summary>
+      <div className="absolute right-0 z-20 mt-2 w-44 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel shadow-2xl">
+        <form method="post" action={data.logoutHref}>
+          <input type="hidden" name="csrfmiddlewaretoken" value={data.csrfToken} />
+          <button
+            type="submit"
+            className="flex w-full items-center px-3 py-3 text-left text-sm font-semibold text-zinc-200 hover:bg-nexus-panel2"
+          >
+            Log out
+          </button>
+        </form>
+      </div>
+    </details>
   );
 }
 
@@ -287,7 +298,7 @@ function CommandCenter({ data }) {
   }, [commandCenterEndpoint, pollIntervalMs, refreshDashboardData]);
 
   return (
-    <Shell data={dashboardData} onRefresh={refreshDashboardData}>
+    <Shell data={dashboardData}>
       <header className="mb-5 border-b border-nexus-line pb-4">
         <h1 className="bim-page-title">Command Center</h1>
         <p className="bim-page-description">Live snapshot of inventory levels, pending operations, and recent activity.</p>
@@ -6743,35 +6754,6 @@ function DetailRow({ label, value, highlight = false, strong = false }) {
   );
 }
 
-function QuickAddMenu({ actions }) {
-  const quickActionLabels = new Set(["Add Product", "Add Unit", "Receive Stock", "Create Delivery"]);
-  const visibleActions = actions.filter(
-    (action) => quickActionLabels.has(action.label) && action.enabled && action.href
-  );
-
-  if (!visibleActions.length) return null;
-
-  return (
-    <details className="relative">
-      <summary className="inline-flex h-9 cursor-pointer list-none items-center gap-2 rounded-md bg-nexus-orange px-4 font-semibold text-black marker:hidden">
-        <Plus className="h-4 w-4" aria-hidden="true" />
-        Quick Add
-      </summary>
-      <div className="absolute right-0 z-20 mt-2 w-64 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel shadow-2xl">
-        {visibleActions.map((action) => (
-          <a key={action.label} href={action.href} className="flex items-start gap-3 border-b border-nexus-line px-3 py-3 last:border-b-0 hover:bg-nexus-panel2">
-            <ActionIcon name={action.icon} tone={action.tone} />
-            <span>
-              <span className="block text-sm font-semibold text-white">{action.label}</span>
-              <span className="block text-xs text-zinc-500">{action.description}</span>
-            </span>
-          </a>
-        ))}
-      </div>
-    </details>
-  );
-}
-
 function parseCardCount(value) {
   if (typeof value === "number") {
     return value;
@@ -7073,25 +7055,6 @@ function PanelHeader({ title, action, actionHref, badge }) {
 
 function SectionTitle({ title }) {
   return <h2 className="mb-3 bim-section-title">{title}</h2>;
-}
-
-function ActionIcon({ name, tone = "neutral" }) {
-  return (
-    <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${toneClasses[tone] || toneClasses.neutral}`}>
-      <Icon name={name} className="h-5 w-5" />
-    </span>
-  );
-}
-
-function LogoutForm({ data }) {
-  return (
-    <form method="post" action={data.logoutHref}>
-      <input type="hidden" name="csrfmiddlewaretoken" value={data.csrfToken} />
-      <Button className="text-zinc-300" type="submit" variant="outline">
-        Log out
-      </Button>
-    </form>
-  );
 }
 
 const appRoutes = [

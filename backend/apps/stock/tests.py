@@ -173,7 +173,7 @@ class UIRegistryTests(SimpleTestCase):
         self.assertNotIn("<Truck", app_source)
         self.assertIn("workflowMeta", REACT_REGISTRY_SOURCE.read_text(encoding="utf-8"))
 
-    def test_command_center_layout_removes_duplicate_panels_and_keeps_refresh(self):
+    def test_command_center_layout_removes_duplicate_panels(self):
         app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
 
         command_center_source = app_source[
@@ -183,10 +183,8 @@ class UIRegistryTests(SimpleTestCase):
 
         self.assertNotIn("<QuickActions", command_center_source)
         self.assertNotIn("<LowStockPanel", command_center_source)
-        self.assertIn("onRefresh", command_center_source)
-        self.assertIn("Refresh", app_source)
 
-    def test_topbar_omits_redundant_user_avatar_and_keeps_actions(self):
+    def test_topbar_has_theme_toggle_and_account_menu_without_refresh_or_quick_add(self):
         app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
         topbar_source = app_source[
             app_source.index("function Topbar"):
@@ -194,12 +192,18 @@ class UIRegistryTests(SimpleTestCase):
         ]
 
         self.assertIn("<ThemeToggle", topbar_source)
-        self.assertIn("<QuickAddMenu", topbar_source)
-        self.assertIn("<LogoutForm", topbar_source)
-        self.assertNotIn("data.user?.initials", topbar_source)
-        self.assertNotIn("aria-label={`Signed in as", topbar_source)
-        self.assertNotIn("max-w-36 truncate", topbar_source)
-        self.assertNotIn("data.user?.displayName || data.user?.username", topbar_source)
+        self.assertIn("<AccountMenu", topbar_source)
+        self.assertNotIn("<QuickAddMenu", topbar_source)
+        self.assertNotIn("<LogoutForm", topbar_source)
+        self.assertNotIn("Refresh", topbar_source)
+
+        account_menu_source = app_source[
+            app_source.index("function AccountMenu"):
+            app_source.index("function CommandCenter")
+        ]
+        self.assertIn("data.user?.displayName || data.user?.username", account_menu_source)
+        self.assertIn("action={data.logoutHref}", account_menu_source)
+        self.assertIn("Log out", account_menu_source)
 
     def test_product_details_page_renders_stock_units_and_permission_aware_actions(self):
         app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
@@ -2273,11 +2277,6 @@ class BIMPOSAccessTests(TestCase):
     def test_frontend_hides_viewer_write_controls(self):
         routes_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
 
-        self.assertIn(
-            "quickActionLabels.has(action.label) && action.enabled && action.href",
-            routes_source,
-        )
-        self.assertIn("if (!visibleActions.length) return null;", routes_source)
         self.assertIn('disabled={!canSave}', routes_source)
         self.assertIn(
             "workflows.filter((workflow) => workflow.enabled || !workflow.href)",
