@@ -171,10 +171,10 @@ UI_TOKENS = {
         "icon": "clients",
         "tone": "blue",
     },
-    "stock_movement": {
-        "label": "Stock Movement",
-        "icon": "trending-up",
-        "tone": "neutral",
+    "create_removal": {
+        "label": "Remove Unit",
+        "icon": "package-x",
+        "tone": "danger",
     },
 }
 

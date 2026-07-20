@@ -57,6 +57,8 @@ from .models import (
     ProductUnit,
     ReceivingItem,
     ReceivingRecord,
+    RemovalItem,
+    RemovalRecord,
     RepairItem,
     RepairRecord,
     ReservationItem,
@@ -591,6 +593,17 @@ class UIRegistryTests(SimpleTestCase):
         self.assertIn("Resolve Repair", app_source)
         self.assertIn("Reserved, issued, and sold units must use their own workflows before repair.", app_source)
 
+    def test_frontend_has_removal_list_detail_and_create_screens(self):
+        app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
+
+        self.assertIn("function RemovalRecordsPage", app_source)
+        self.assertIn("function RemovalRecordDetailPage", app_source)
+        self.assertIn("function CreateRemovalPage", app_source)
+        self.assertIn("data.api.removals", app_source)
+        self.assertIn("data.api.removalDetail", app_source)
+        self.assertIn("exclude_status=sold,removed", app_source)
+        self.assertIn("This removal is permanent. Units do not return to active stock.", app_source)
+
     def test_frontend_has_client_return_list_detail_and_create_screens(self):
         app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
 
@@ -683,15 +696,25 @@ class ProductAdminStockCountTests(TestCase):
             status=ProductUnit.STATUS_REPAIR,
             isactive=True,
         )
+        ProductUnit.objects.create(
+            product=self.product,
+            serial_number="REMOVED",
+            status=ProductUnit.STATUS_REMOVED,
+            isactive=True,
+        )
 
-        self.assertEqual(self.product.total_units, 6)
+        # Total Stock = available + reserved + issued + repair. The sold unit,
+        # the removed unit, and the isactive=False unit must not count toward it.
+        self.assertEqual(self.product.total_units, 5)
         self.assertEqual(self.product.available_units, 2)
         self.assertEqual(self.product.reserved_units, 1)
         self.assertEqual(self.product.issued_units, 1)
         self.assertEqual(self.product.sold_units, 1)
         self.assertEqual(self.product.repair_units, 1)
-        self.assertEqual(self.product_admin.total_quantity(self.product), 6)
+        self.assertEqual(self.product.removed_units, 1)
+        self.assertEqual(self.product_admin.total_quantity(self.product), 5)
         self.assertEqual(self.product_admin.available_quantity(self.product), 2)
+        self.assertEqual(self.product_admin.removed_quantity(self.product), 1)
 
     def test_product_stock_alert_uses_product_thresholds(self):
         self.product.reorder_stock_level = 3
@@ -1471,7 +1494,7 @@ class BIMPOSAccessTests(TestCase):
 
         self.assertTrue(operations_module["enabled"])
         self.assertEqual(operations_module["href"], "/operations/")
-        self.assertEqual(operations_module["count"], 6)
+        self.assertEqual(operations_module["count"], 7)
         self.assertTrue(operations_nav["enabled"])
         self.assertEqual(operations_nav["href"], "/operations/")
         self.assertEqual(operations_response.status_code, 200)
@@ -1560,6 +1583,98 @@ class BIMPOSAccessTests(TestCase):
         self.assertNotIn(unit.serial_number, str(initial_data["recentActivity"]))
         self.assertNotIn("LEGACY-", str(initial_data["recentActivity"]))
         self.assertNotIn("RCV-", str(initial_data["recentActivity"]))
+
+    def test_command_center_recent_activity_merges_and_sorts_all_workflow_types(self):
+        from datetime import timedelta
+        from .models import RemovalRecord
+
+        user = User.objects.create_user(username="viewer", password="test-pass")
+        user.user_permissions.add(Permission.objects.get(codename="view_product"))
+        today = timezone.localdate()
+
+        removal = RemovalRecord.objects.create(
+            reason=RemovalRecord.REASON_LOST,
+            removal_date=today,
+        )
+        client_return = ClientReturnRecord.objects.create(
+            customer_name="Acme Co",
+            resolution=ClientReturnRecord.RESOLUTION_AVAILABLE,
+            return_date=today - timedelta(days=1),
+        )
+        repair = RepairRecord.objects.create(
+            repair_reason="Screen crack",
+            repair_date=today - timedelta(days=2),
+        )
+        issue = IssueRecord.objects.create(
+            issued_to="Field Tech",
+            issue_date=today - timedelta(days=3),
+        )
+        reservation = ReservationRecord.objects.create(
+            reserved_for="Front Desk",
+            reserved_at=timezone.now() - timedelta(days=4),
+        )
+        delivery = DeliveryRecord.objects.create(
+            customer_name="Acme Co",
+            delivery_date=today - timedelta(days=5),
+        )
+        receiving = ReceivingRecord.objects.create(
+            received_date=today - timedelta(days=6),
+        )
+        self.client.force_login(user)
+
+        response = self.client.get("/")
+        activity = response.context["initial_data"]["recentActivity"]
+
+        self.assertEqual(len(activity), 7)
+        self.assertEqual(
+            [item["reference"] for item in activity],
+            [
+                removal.removal_number,
+                client_return.return_number,
+                repair.repair_number,
+                issue.issue_number,
+                reservation.reservation_number,
+                delivery.delivery_number,
+                receiving.receiving_number,
+            ],
+        )
+        self.assertEqual(
+            [item["type"] for item in activity],
+            [
+                "Removal",
+                "Client Return",
+                "Repair",
+                "Temporary Assignment",
+                "Reservation",
+                "Delivery",
+                "Receiving",
+            ],
+        )
+        self.assertEqual(
+            [item["status_class"] for item in activity],
+            ["removed", "released", "repair", "issued", "reserved", "delivered", "received"],
+        )
+
+    def test_command_center_recent_activity_respects_per_type_permission(self):
+        from .models import RemovalRecord
+
+        user = User.objects.create_user(username="limited-viewer", password="test-pass")
+        user.groups.clear()
+        user.user_permissions.add(
+            Permission.objects.get(codename="view_product"),
+            Permission.objects.get(codename="view_removalrecord"),
+        )
+        ReceivingRecord.objects.create()
+        DeliveryRecord.objects.create(customer_name="Acme Co")
+        removal = RemovalRecord.objects.create(reason=RemovalRecord.REASON_STOLEN)
+        self.client.force_login(user)
+
+        response = self.client.get("/")
+        activity = response.context["initial_data"]["recentActivity"]
+
+        self.assertEqual(len(activity), 1)
+        self.assertEqual(activity[0]["type"], "Removal")
+        self.assertEqual(activity[0]["reference"], removal.removal_number)
 
     def test_command_center_recent_activity_uses_receiving_records(self):
         from .services import create_receiving_record
@@ -1700,6 +1815,7 @@ class BIMPOSAccessTests(TestCase):
                 "Create Reservation",
                 "Create Temporary Assignment",
                 "Create Repair",
+                "Remove Unit",
                 "Create Client Return",
                 "Receive Stock",
                 "Add Unit",
@@ -1735,6 +1851,8 @@ class BIMPOSAccessTests(TestCase):
         self.assertIsNone(actions_by_label["Add Supplier"]["href"])
         self.assertFalse(actions_by_label["Add Client"]["enabled"])
         self.assertIsNone(actions_by_label["Add Client"]["href"])
+        self.assertFalse(actions_by_label["Remove Unit"]["enabled"])
+        self.assertIsNone(actions_by_label["Remove Unit"]["href"])
 
     def test_command_center_create_delivery_requires_add_delivery_permission(self):
         user = User.objects.create_user(username="operator", password="test-pass")
@@ -1885,6 +2003,7 @@ class BIMPOSAccessTests(TestCase):
                 "Create Reservation",
                 "Create Temporary Assignment",
                 "Create Repair",
+                "Remove Unit",
                 "Create Client Return",
                 "Receive Stock",
                 "Add Unit",
@@ -2265,6 +2384,7 @@ class BIMPOSAccessTests(TestCase):
             "/operations/reservations/new/",
             "/operations/issues/new/",
             "/operations/repairs/new/",
+            "/operations/removals/new/",
             "/operations/client-returns/new/",
             "/suppliers/new/",
             "/clients/new/",
@@ -2287,6 +2407,7 @@ class BIMPOSAccessTests(TestCase):
             "canCreateReservation",
             "canCreateIssue",
             "canCreateRepair",
+            "canCreateRemoval",
             "canCreateClientReturn",
             "canCreateDelivery",
         ):
@@ -2539,6 +2660,87 @@ class ReceivingServiceTests(TestCase):
             )
 
 
+class RemovalServiceTests(TestCase):
+    def setUp(self):
+        self.category = Category.objects.create(name="Laser")
+        self.brand = Brand.objects.create(brandname="Canon")
+        self.model = ProductModel.objects.create(brand=self.brand, modelname="L100")
+        self.product = Product.objects.create(
+            descript="Canon laser printer",
+            category=self.category,
+            model=self.model,
+        )
+        self.user = User.objects.create_user(username="remover", password="test-pass")
+
+    def test_removal_allows_units_in_any_status_except_sold_or_removed(self):
+        from .models import RemovalRecord, StockMovement
+        from .services import create_removal_record
+
+        available_unit = ProductUnit.objects.create(
+            product=self.product,
+            serial_number="RMV-AVAILABLE",
+            status=ProductUnit.STATUS_AVAILABLE,
+        )
+        reserved_unit = ProductUnit.objects.create(
+            product=self.product,
+            serial_number="RMV-RESERVED",
+            status=ProductUnit.STATUS_RESERVED,
+        )
+
+        removal = create_removal_record(
+            unit_ids=[available_unit.pk, reserved_unit.pk],
+            reason=RemovalRecord.REASON_DAMAGED,
+            notes="Water damage found during audit",
+            removed_by=self.user,
+        )
+
+        available_unit.refresh_from_db()
+        reserved_unit.refresh_from_db()
+        self.assertEqual(removal.removal_number[:9], f"RMV-{timezone.localdate().year}-")
+        self.assertEqual(removal.total_units, 2)
+        self.assertEqual(available_unit.status, ProductUnit.STATUS_REMOVED)
+        self.assertEqual(reserved_unit.status, ProductUnit.STATUS_REMOVED)
+        for unit in (available_unit, reserved_unit):
+            movement = StockMovement.objects.get(
+                product_unit=unit,
+                movement_type=StockMovement.TYPE_REMOVED,
+            )
+            self.assertEqual(movement.to_status, ProductUnit.STATUS_REMOVED)
+            self.assertEqual(movement.removal_record, removal)
+            self.assertEqual(movement.performed_by, self.user)
+
+    def test_removal_rejects_sold_units(self):
+        from django.core.exceptions import ValidationError
+        from .models import RemovalRecord
+        from .services import create_removal_record
+
+        sold_unit = ProductUnit.objects.create(
+            product=self.product,
+            serial_number="RMV-SOLD",
+            status=ProductUnit.STATUS_SOLD,
+        )
+
+        with self.assertRaises(ValidationError):
+            create_removal_record(unit_ids=[sold_unit.pk], reason=RemovalRecord.REASON_LOST)
+
+        sold_unit.refresh_from_db()
+        self.assertEqual(sold_unit.status, ProductUnit.STATUS_SOLD)
+
+    def test_removal_rejects_already_removed_units(self):
+        from django.core.exceptions import ValidationError
+        from .models import RemovalRecord
+        from .services import create_removal_record
+
+        unit = ProductUnit.objects.create(
+            product=self.product,
+            serial_number="RMV-ALREADY",
+            status=ProductUnit.STATUS_REMOVED,
+        )
+
+        with self.assertRaises(ValidationError):
+            create_removal_record(unit_ids=[unit.pk], reason=RemovalRecord.REASON_OTHER)
+
+
 class InventoryApiTests(TestCase):
     def setUp(self):
         self.category = Category.objects.create(name="Laser")
@@ -2697,6 +2899,32 @@ class InventoryApiTests(TestCase):
         response = self.client.get("/api/stock/products/")
 
         self.assertEqual(response.status_code, 403)
+
+    def test_product_api_total_units_excludes_sold_units(self):
+        # self.product already has one available and one reserved active unit
+        # (plus one isactive=False unit that never counts). Selling the
+        # available unit must drop it out of Total Stock entirely rather than
+        # still being counted -- Total Stock = available + reserved + issued + repair.
+        user = self._user_with_permissions("view_product")
+        sold_unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        sold_unit.status = ProductUnit.STATUS_SOLD
+        sold_unit.sold_date = timezone.localdate()
+        sold_unit.save(update_fields=("status", "sold_date"))
+        self.client.force_login(user)
+
+        list_response = self.client.get("/api/stock/products/")
+        detail_response = self.client.get(f"/api/stock/products/{self.product.pk}/")
+
+        self.assertEqual(list_response.status_code, 200, list_response.content)
+        self.assertEqual(detail_response.status_code, 200, detail_response.content)
+        list_data = list_response.json()[0]
+        detail_data = detail_response.json()
+
+        for payload in (list_data, detail_data):
+            self.assertEqual(payload["sold_units"], 1)
+            self.assertEqual(payload["reserved_units"], 1)
+            self.assertEqual(payload["available_units"], 0)
+            self.assertEqual(payload["total_units"], 1)
 
     def test_product_api_creates_product_with_auto_sku(self):
         user = self._user_with_permissions("view_product", "add_product")
@@ -4835,6 +5063,77 @@ class InventoryApiTests(TestCase):
         self.assertEqual(response.json()["items"][0]["product"], self.product.pk)
         self.assertIsNone(response.json()["items"][0]["product_unit"])
 
+    def test_receiving_api_idempotency_key_prevents_duplicate_on_retry(self):
+        # Manual-quantity lines create no ProductUnit rows, so there's no
+        # serial-number collision to catch a double-submit the way there is
+        # for serialized receiving -- idempotency_key is the only guard.
+        user = self._user_with_permissions(
+            "view_productunit",
+            "add_productunit",
+            "view_receivingrecord",
+            "add_receivingrecord",
+        )
+        self.client.force_login(user)
+        payload = {
+            "received_date": str(timezone.localdate()),
+            "idempotency_key": "retry-key-1",
+            "item_inputs": [
+                {
+                    "product": self.product.pk,
+                    "quantity": 4,
+                    "cost": "0.00",
+                }
+            ],
+        }
+
+        first_response = self.client.post(
+            "/api/stock/receiving-records/", payload, content_type="application/json"
+        )
+        second_response = self.client.post(
+            "/api/stock/receiving-records/", payload, content_type="application/json"
+        )
+
+        self.assertEqual(first_response.status_code, 201, first_response.content)
+        self.assertEqual(second_response.status_code, 201, second_response.content)
+        self.assertEqual(first_response.json()["id"], second_response.json()["id"])
+        self.assertEqual(ReceivingRecord.objects.count(), 1)
+        self.assertEqual(ReceivingItem.objects.count(), 1)
+        self.assertEqual(ReceivingRecord.objects.get().total_quantity, 4)
+
+    def test_receiving_api_idempotency_key_does_not_block_distinct_submissions(self):
+        user = self._user_with_permissions(
+            "view_productunit",
+            "add_productunit",
+            "view_receivingrecord",
+            "add_receivingrecord",
+        )
+        self.client.force_login(user)
+
+        def submit(key):
+            return self.client.post(
+                "/api/stock/receiving-records/",
+                {
+                    "received_date": str(timezone.localdate()),
+                    "idempotency_key": key,
+                    "item_inputs": [
+                        {
+                            "product": self.product.pk,
+                            "quantity": 2,
+                            "cost": "0.00",
+                        }
+                    ],
+                },
+                content_type="application/json",
+            )
+
+        first_response = submit("form-load-a")
+        second_response = submit("form-load-b")
+
+        self.assertEqual(first_response.status_code, 201, first_response.content)
+        self.assertEqual(second_response.status_code, 201, second_response.content)
+        self.assertNotEqual(first_response.json()["id"], second_response.json()["id"])
+        self.assertEqual(ReceivingRecord.objects.count(), 2)
+
     def test_receiving_api_returns_single_record_detail(self):
         user = self._user_with_permissions("view_receivingrecord")
 
@@ -5133,3 +5432,238 @@ class InventoryApiTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 400)
+
+    def test_global_search_requires_minimum_query_length(self):
+        user = self._user_with_permissions("view_product")
+        self.client.force_login(user)
+
+        response = self.client.get("/api/stock/search/", {"q": "c"})
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["groups"], [])
+
+    def test_global_search_matches_product_by_name_sku_and_barcode(self):
+        user = self._user_with_permissions("view_product")
+        self.client.force_login(user)
+
+        for query in ("Canon", self.product.sku, "BAR-CANON-L100"):
+            response = self.client.get("/api/stock/search/", {"q": query})
+            self.assertEqual(response.status_code, 200, response.content)
+            groups = {group["key"]: group for group in response.json()["groups"]}
+            self.assertIn("products", groups, query)
+            self.assertEqual(groups["products"]["count"], 1)
+            self.assertEqual(groups["products"]["results"][0]["id"], self.product.pk)
+            self.assertEqual(
+                groups["products"]["results"][0]["href"],
+                f"/inventory/products/{self.product.pk}/",
+            )
+
+    def test_global_search_omits_groups_the_user_cannot_view(self):
+        # _user_with_permissions() only adds explicit permissions, but new
+        # users auto-join the "Viewer" group (see accounts.signals) which
+        # grants every view_* permission -- clear it here so this user
+        # genuinely has only view_product, or the omission being tested
+        # would never actually happen.
+        user = self._user_with_permissions("view_product")
+        user.groups.clear()
+        self.client.force_login(user)
+
+        response = self.client.get("/api/stock/search/", {"q": "Gulf Networks"})
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["groups"], [])
+
+    def test_global_search_covers_every_record_type_for_a_fully_permissioned_user(self):
+        user = self._user_with_permissions(
+            "view_supplier",
+            "view_client",
+            "view_receivingrecord",
+            "view_deliveryrecord",
+            "view_reservationrecord",
+            "view_issuerecord",
+            "view_repairrecord",
+            "view_removalrecord",
+            "view_clientreturnrecord",
+        )
+        marker = "Zephyr9000"
+        client_obj = Client.objects.create(name=f"{marker} Client")
+        supplier_obj = Supplier.objects.create(name=f"{marker} Supplier")
+        receiving = ReceivingRecord.objects.create(po_number=f"PO-{marker}")
+        delivery = DeliveryRecord.objects.create(
+            customer_name=f"{marker} Customer",
+            invoice_number=f"INV-{marker}",
+        )
+        reservation = ReservationRecord.objects.create(reserved_for=f"{marker} Team")
+        issue = IssueRecord.objects.create(issued_to=f"{marker} Tech")
+        repair = RepairRecord.objects.create(repair_reason=f"{marker} diagnosis")
+        removal = RemovalRecord.objects.create(
+            reason=RemovalRecord.REASON_OTHER,
+            notes=f"{marker} notes",
+        )
+        client_return = ClientReturnRecord.objects.create(
+            customer_name=f"{marker} Customer",
+            received_from=f"{marker} Person",
+        )
+        self.client.force_login(user)
+
+        response = self.client.get("/api/stock/search/", {"q": marker})
+
+        self.assertEqual(response.status_code, 200, response.content)
+        groups = {group["key"]: group for group in response.json()["groups"]}
+        self.assertNotIn("products", groups)
+        self.assertEqual(groups["clients"]["results"][0]["id"], client_obj.pk)
+        self.assertEqual(groups["suppliers"]["results"][0]["id"], supplier_obj.pk)
+        self.assertEqual(groups["receiving_records"]["results"][0]["id"], receiving.pk)
+        self.assertEqual(groups["delivery_records"]["results"][0]["id"], delivery.pk)
+        self.assertEqual(groups["reservations"]["results"][0]["id"], reservation.pk)
+        self.assertEqual(groups["temporary_assignments"]["results"][0]["id"], issue.pk)
+        self.assertEqual(groups["repairs"]["results"][0]["id"], repair.pk)
+        self.assertEqual(groups["removals"]["results"][0]["id"], removal.pk)
+        self.assertEqual(groups["client_returns"]["results"][0]["id"], client_return.pk)
+
+    def test_removal_api_creates_record_and_marks_units_removed(self):
+        user = self._user_with_permissions(
+            "view_removalrecord",
+            "add_removalrecord",
+            "change_productunit",
+        )
+        available_unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        reserved_unit = ProductUnit.objects.get(serial_number="API-RESERVED")
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/api/stock/removals/",
+            {
+                "reason": "damaged",
+                "removal_date": str(timezone.localdate()),
+                "notes": "Cracked housing found during audit",
+                "unit_ids": [available_unit.pk, reserved_unit.pk],
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(
+            response.json()["removal_number"][:9],
+            f"RMV-{timezone.localdate().year}-",
+        )
+        self.assertEqual(response.json()["reason_label"], "Damaged")
+        self.assertEqual(response.json()["total_units"], 2)
+        available_unit.refresh_from_db()
+        reserved_unit.refresh_from_db()
+        self.assertEqual(available_unit.status, ProductUnit.STATUS_REMOVED)
+        self.assertEqual(reserved_unit.status, ProductUnit.STATUS_REMOVED)
+        movement = StockMovement.objects.get(
+            product_unit=available_unit,
+            movement_type=StockMovement.TYPE_REMOVED,
+        )
+        self.assertEqual(movement.from_status, ProductUnit.STATUS_AVAILABLE)
+        self.assertEqual(movement.to_status, ProductUnit.STATUS_REMOVED)
+        self.assertEqual(movement.performed_by, user)
+
+    def test_removal_api_rejects_sold_or_already_removed_units(self):
+        user = self._user_with_permissions(
+            "view_removalrecord",
+            "add_removalrecord",
+            "change_productunit",
+        )
+        ineligible_units = [
+            ProductUnit.objects.create(
+                product=self.product,
+                serial_number="RMV-API-SOLD",
+                status=ProductUnit.STATUS_SOLD,
+                isactive=True,
+            ),
+            ProductUnit.objects.create(
+                product=self.product,
+                serial_number="RMV-API-REMOVED",
+                status=ProductUnit.STATUS_REMOVED,
+                isactive=True,
+            ),
+        ]
+        self.client.force_login(user)
+
+        for unit in ineligible_units:
+            response = self.client.post(
+                "/api/stock/removals/",
+                {
+                    "reason": "lost",
+                    "unit_ids": [unit.pk],
+                },
+                content_type="application/json",
+            )
+            self.assertEqual(response.status_code, 400, response.content)
+
+        self.assertEqual(RemovalRecord.objects.count(), 0)
+
+    def test_removal_api_requires_add_removal_permission_to_create(self):
+        user = self._user_with_permissions("view_removalrecord", "change_productunit")
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/api/stock/removals/",
+            {"reason": "damaged", "unit_ids": [unit.pk]},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_removal_api_returns_list_and_detail(self):
+        user = self._user_with_permissions("view_removalrecord")
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        removal = RemovalRecord.objects.create(
+            reason=RemovalRecord.REASON_STOLEN,
+            notes="Reported missing from storage",
+        )
+        RemovalItem.objects.create(removal=removal, product=self.product, product_unit=unit)
+        self.client.force_login(user)
+
+        list_response = self.client.get("/api/stock/removals/", {"q": "Stolen"})
+        detail_response = self.client.get(f"/api/stock/removals/{removal.pk}/")
+
+        self.assertEqual(list_response.status_code, 200)
+        self.assertEqual(len(list_response.json()), 1)
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertEqual(detail_response.json()["removal_number"], removal.removal_number)
+        self.assertEqual(detail_response.json()["reason_label"], "Stolen")
+        self.assertEqual(detail_response.json()["items"][0]["product_unit"], unit.pk)
+
+    def test_removal_api_requires_view_permission(self):
+        user = User.objects.create_user(username="no-removal-perm", password="test-pass")
+        user.groups.clear()
+        self.client.force_login(user)
+
+        response = self.client.get("/api/stock/removals/")
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_product_units_api_exclude_status_filters_out_multiple_statuses(self):
+        user = self._user_with_permissions("view_productunit")
+        removed_unit = ProductUnit.objects.create(
+            product=self.product,
+            serial_number="RMV-EXCLUDE-REMOVED",
+            status=ProductUnit.STATUS_REMOVED,
+            isactive=True,
+        )
+        sold_unit = ProductUnit.objects.create(
+            product=self.product,
+            serial_number="RMV-EXCLUDE-SOLD",
+            status=ProductUnit.STATUS_SOLD,
+            isactive=True,
+        )
+        self.client.force_login(user)
+
+        response = self.client.get(
+            "/api/stock/product-units/",
+            {"exclude_status": "sold,removed"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        returned_ids = {unit["id"] for unit in response.json()}
+        self.assertNotIn(removed_unit.pk, returned_ids)
+        self.assertNotIn(sold_unit.pk, returned_ids)
+        self.assertIn(
+            ProductUnit.objects.get(serial_number="API-AVAILABLE").pk,
+            returned_ids,
+        )

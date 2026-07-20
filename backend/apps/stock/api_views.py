@@ -19,11 +19,13 @@ from .models import (
     ProductModel,
     ProductUnit,
     ReceivingRecord,
+    RemovalRecord,
     RepairRecord,
     ReservationRecord,
     StockMovement,
     Supplier,
 )
+from .selectors import global_search
 from .serializers import (
     BrandSerializer,
     CategorySerializer,
@@ -40,6 +42,7 @@ from .serializers import (
     ReceivingRecordCancelSerializer,
     ReceivingRecordCorrectionSerializer,
     ReceivingRecordSerializer,
+    RemovalRecordSerializer,
     RepairRecordSerializer,
     RepairResolveSerializer,
     ReservationRecordSerializer,
@@ -76,7 +79,13 @@ def _product_queryset():
         Product.objects.filter(isactive=True)
         .select_related("category", "model__brand")
         .annotate(
-            api_total_units=Count("units", filter=_active_unit_filter(), distinct=True),
+            # Total Stock excludes sold (and inactive-status) units -- they've
+            # permanently left inventory. See ProductUnit.IN_STOCK_STATUSES.
+            api_total_units=Count(
+                "units",
+                filter=Q(units__isactive=True, units__status__in=ProductUnit.IN_STOCK_STATUSES),
+                distinct=True,
+            ),
             api_available_units=Count(
                 "units",
                 filter=_active_unit_filter(ProductUnit.STATUS_AVAILABLE),
@@ -100,6 +109,11 @@ def _product_queryset():
             api_repair_units=Count(
                 "units",
                 filter=_active_unit_filter(ProductUnit.STATUS_REPAIR),
+                distinct=True,
+            ),
+            api_removed_units=Count(
+                "units",
+                filter=_active_unit_filter(ProductUnit.STATUS_REMOVED),
                 distinct=True,
             ),
         )
@@ -177,6 +191,11 @@ class ProductUnitListCreateAPIView(WritePermissionRequiredMixin, generics.ListCr
         )
         query = self.request.query_params.get("q", "").strip()
         status = self.request.query_params.get("status", "").strip()
+        exclude_status = [
+            value.strip()
+            for value in self.request.query_params.get("exclude_status", "").split(",")
+            if value.strip()
+        ]
         category = self.request.query_params.get("category", "").strip()
         brand = self.request.query_params.get("brand", "").strip()
         product = self.request.query_params.get("product", "").strip()
@@ -190,6 +209,8 @@ class ProductUnitListCreateAPIView(WritePermissionRequiredMixin, generics.ListCr
             )
         if status:
             queryset = queryset.filter(status=status)
+        if exclude_status:
+            queryset = queryset.exclude(status__in=exclude_status)
         if category:
             queryset = queryset.filter(product__category_id=category)
         if brand:
@@ -271,6 +292,7 @@ class ProductStockMovementListAPIView(generics.ListAPIView):
                 "issue_record",
                 "repair_record",
                 "client_return_record",
+                "removal_record",
             )
             .order_by("-movement_date", "-crdate", "-pk")[:50]
         )
@@ -704,6 +726,65 @@ class RepairRecordResolveAPIView(APIView):
         return Response(RepairRecordSerializer(repair).data)
 
 
+class RemovalRecordListCreateAPIView(WritePermissionRequiredMixin, generics.ListCreateAPIView):
+    serializer_class = RemovalRecordSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+    write_permissions = {
+        "POST": (
+            stock_constants.ADD_REMOVAL_RECORD,
+            stock_constants.CHANGE_PRODUCT_UNIT,
+        )
+    }
+
+    def get_queryset(self):
+        _require_perm(self.request.user, stock_constants.VIEW_REMOVAL_RECORD)
+        queryset = (
+            RemovalRecord.objects.all()
+            .select_related("removed_by")
+            .prefetch_related(
+                "items",
+                "items__product",
+                "items__product_unit",
+            )
+            .order_by("-removal_date", "-removal_number")
+        )
+        query = self.request.query_params.get("q", "").strip()
+
+        if query:
+            queryset = queryset.filter(
+                Q(removal_number__icontains=query)
+                | Q(reason__icontains=query)
+                | Q(notes__icontains=query)
+                | Q(items__product_unit__serial_number__icontains=query)
+                | Q(items__product__descript__icontains=query)
+                | Q(items__product__sku__icontains=query)
+            ).distinct()
+
+        return queryset
+
+    def perform_create(self, serializer):
+        _require_perm(self.request.user, stock_constants.ADD_REMOVAL_RECORD)
+        _require_perm(self.request.user, stock_constants.CHANGE_PRODUCT_UNIT)
+        serializer.save()
+
+
+class RemovalRecordDetailAPIView(generics.RetrieveAPIView):
+    serializer_class = RemovalRecordSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get_queryset(self):
+        _require_perm(self.request.user, stock_constants.VIEW_REMOVAL_RECORD)
+        return (
+            RemovalRecord.objects.all()
+            .select_related("removed_by")
+            .prefetch_related(
+                "items",
+                "items__product",
+                "items__product_unit",
+            )
+        )
+
+
 class ReceivingRecordListCreateAPIView(WritePermissionRequiredMixin, generics.ListCreateAPIView):
     serializer_class = ReceivingRecordSerializer
     permission_classes = (permissions.IsAuthenticated,)
@@ -965,3 +1046,12 @@ class ClientDetailAPIView(WritePermissionRequiredMixin, generics.RetrieveUpdateA
     def perform_update(self, serializer):
         _require_perm(self.request.user, stock_constants.CHANGE_CLIENT)
         serializer.save()
+
+
+class GlobalSearchAPIView(APIView):
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get(self, request):
+        query = request.query_params.get("q", "")
+        groups = global_search(request.user, query)
+        return Response({"query": query.strip(), "groups": groups})

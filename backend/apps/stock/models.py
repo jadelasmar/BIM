@@ -96,7 +96,10 @@ class Product(models.Model):
 
     @property
     def total_units(self):
-        return self.active_unit_count()
+        return self.units.filter(
+            isactive=True,
+            status__in=ProductUnit.IN_STOCK_STATUSES,
+        ).count()
 
     @property
     def available_units(self):
@@ -117,6 +120,10 @@ class Product(models.Model):
     @property
     def repair_units(self):
         return self.active_unit_count(ProductUnit.STATUS_REPAIR)
+
+    @property
+    def removed_units(self):
+        return self.active_unit_count(ProductUnit.STATUS_REMOVED)
 
     @property
     def is_low_stock(self):
@@ -175,6 +182,7 @@ class ProductUnit(models.Model):
     STATUS_SOLD = "sold"
     STATUS_REPAIR = "repair"
     STATUS_INACTIVE = "inactive"
+    STATUS_REMOVED = "removed"
 
     STATUS_CHOICES = [
         (STATUS_AVAILABLE, "Available"),
@@ -183,7 +191,13 @@ class ProductUnit(models.Model):
         (STATUS_SOLD, "Sold"),
         (STATUS_REPAIR, "Repair"),
         (STATUS_INACTIVE, "Inactive"),
+        (STATUS_REMOVED, "Removed"),
     ]
+
+    # "Total Stock" for a product is everything still in inventory: available,
+    # reserved, issued, or in repair. Sold (and decommissioned/inactive-status)
+    # units have permanently left inventory and must never count toward it.
+    IN_STOCK_STATUSES = (STATUS_AVAILABLE, STATUS_RESERVED, STATUS_ISSUED, STATUS_REPAIR)
 
     product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="units")
 
@@ -275,11 +289,23 @@ class ReceivingRecord(models.Model):
         null=True,
         related_name="stock_receiving_records",
     )
+    # Client-generated, one-per-form-load token (see AppRouter.jsx's
+    # StockEntryPage). Lets create_receiving_record() detect a retried/
+    # double-submitted request and return the original record instead of
+    # creating a duplicate -- see services.create_receiving_record().
+    idempotency_key = models.CharField(max_length=64, blank=True, db_index=True)
     crdate = models.DateTimeField(auto_now_add=True)
     isactive = models.BooleanField(default=True)
 
     class Meta:
         ordering = ("-received_date", "-receiving_number")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("idempotency_key",),
+                condition=models.Q(idempotency_key__gt=""),
+                name="unique_receivingrecord_idempotency_key",
+            ),
+        ]
 
     def save(self, *args, **kwargs):
         if not self.receiving_number:
@@ -886,6 +912,102 @@ class ClientReturnItem(models.Model):
         return f"{self.client_return} - {self.product_unit.serial_number}"
 
 
+# RemovalRecord permanently takes a unit out of inventory for a reason no
+# other workflow owns (damaged beyond repair, lost, stolen, written off).
+# Unlike the other six workflow records, this transition is terminal -- there
+# is no cancel/release/return/resolve action, matching how Sold units only
+# come back through their own separate workflow (Client Return).
+class RemovalRecord(models.Model):
+    REASON_DAMAGED = "damaged"
+    REASON_LOST = "lost"
+    REASON_STOLEN = "stolen"
+    REASON_WRITTEN_OFF = "written_off"
+    REASON_OTHER = "other"
+
+    REASON_CHOICES = [
+        (REASON_DAMAGED, "Damaged"),
+        (REASON_LOST, "Lost"),
+        (REASON_STOLEN, "Stolen"),
+        (REASON_WRITTEN_OFF, "Written Off"),
+        (REASON_OTHER, "Other"),
+    ]
+
+    removal_number = models.CharField(
+        max_length=32,
+        unique=True,
+        blank=True,
+        editable=False,
+    )
+    reason = models.CharField(max_length=20, choices=REASON_CHOICES)
+    removal_date = models.DateField(default=timezone.localdate)
+    notes = models.TextField(blank=True)
+    removed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="stock_removal_records",
+    )
+    crdate = models.DateTimeField(auto_now_add=True)
+    isactive = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("-removal_date", "-removal_number")
+
+    def save(self, *args, **kwargs):
+        if not self.removal_number:
+            year = (self.removal_date or timezone.localdate()).year
+            prefix = f"RMV-{year}-"
+            latest = (
+                RemovalRecord.objects.filter(removal_number__startswith=prefix)
+                .order_by("-removal_number")
+                .first()
+            )
+            next_number = 1
+            if latest:
+                try:
+                    next_number = int(latest.removal_number.rsplit("-", 1)[1]) + 1
+                except (IndexError, ValueError):
+                    next_number = latest.pk + 1
+            self.removal_number = f"{prefix}{next_number:04d}"
+        super().save(*args, **kwargs)
+
+    @property
+    def total_units(self):
+        return self.items.filter(isactive=True).count()
+
+    def __str__(self):
+        return self.removal_number or "Removal"
+
+
+class RemovalItem(models.Model):
+    removal = models.ForeignKey(
+        RemovalRecord,
+        on_delete=models.CASCADE,
+        related_name="items",
+    )
+    product_unit = models.OneToOneField(
+        ProductUnit,
+        on_delete=models.PROTECT,
+        related_name="removal_item",
+    )
+    product = models.ForeignKey(Product, on_delete=models.PROTECT)
+    notes = models.TextField(blank=True)
+    crdate = models.DateTimeField(auto_now_add=True)
+    isactive = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("product__descript", "product_unit__serial_number")
+
+    def save(self, *args, **kwargs):
+        if self.product_unit_id and not self.product_id:
+            self.product = self.product_unit.product
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.removal} - {self.product_unit.serial_number}"
+
+
 class StockMovement(models.Model):
     TYPE_RECEIVED = "received"
     TYPE_RECEIVING_CANCELLED = "receiving_cancelled"
@@ -902,6 +1024,7 @@ class StockMovement(models.Model):
     TYPE_REPAIR_DEACTIVATED = "repair_deactivated"
     TYPE_CLIENT_RETURNED_AVAILABLE = "client_returned_available"
     TYPE_CLIENT_RETURNED_REPAIR = "client_returned_repair"
+    TYPE_REMOVED = "removed"
 
     MOVEMENT_TYPE_CHOICES = [
         (TYPE_RECEIVED, "Received"),
@@ -919,6 +1042,7 @@ class StockMovement(models.Model):
         (TYPE_REPAIR_DEACTIVATED, "Repair Deactivated"),
         (TYPE_CLIENT_RETURNED_AVAILABLE, "Client Returned Available"),
         (TYPE_CLIENT_RETURNED_REPAIR, "Client Returned Repair"),
+        (TYPE_REMOVED, "Removed"),
     ]
 
     product_unit = models.ForeignKey(
@@ -981,6 +1105,13 @@ class StockMovement(models.Model):
     )
     client_return_record = models.ForeignKey(
         ClientReturnRecord,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="stock_movements",
+    )
+    removal_record = models.ForeignKey(
+        RemovalRecord,
         on_delete=models.SET_NULL,
         blank=True,
         null=True,

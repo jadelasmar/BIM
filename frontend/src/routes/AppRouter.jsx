@@ -189,21 +189,136 @@ function Sidebar({ data, secondaryNavigation, isOpen, onClose }) {
 
 function Topbar({ data, onOpenSidebar }) {
   return (
-    <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-nexus-line pb-4 text-xs">
-      <div className="flex flex-wrap items-center gap-3">
-        <Button
-          type="button"
-          onClick={onOpenSidebar}
-          className="lg:hidden"
-          aria-label="Open navigation"
-          variant="outline"
-        >
-          <Menu className="h-4 w-4" aria-hidden="true" />
-          Menu
-        </Button>
+    <div className="mb-5 flex flex-wrap items-center gap-3 border-b border-nexus-line pb-4 text-xs">
+      <Button
+        type="button"
+        onClick={onOpenSidebar}
+        className="lg:hidden"
+        aria-label="Open navigation"
+        variant="outline"
+      >
+        <Menu className="h-4 w-4" aria-hidden="true" />
+        Menu
+      </Button>
+      <GlobalSearch data={data} />
+      <div className="ml-auto flex items-center gap-2">
         <ThemeToggle storageKey={data.theme?.storageKey} />
+        <AccountMenu data={data} />
       </div>
-      <AccountMenu data={data} />
+    </div>
+  );
+}
+
+const GLOBAL_SEARCH_MIN_QUERY_LENGTH = 2;
+const GLOBAL_SEARCH_DEBOUNCE_MS = 300;
+
+function GlobalSearch({ data }) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [groups, setGroups] = useState([]);
+  const trimmedQuery = query.trim();
+  const hasQuery = trimmedQuery.length >= GLOBAL_SEARCH_MIN_QUERY_LENGTH;
+  const hasResults = groups.some((group) => group.results.length);
+  const searchEndpoint = data.api?.search;
+
+  useEffect(() => {
+    if (!searchEndpoint || trimmedQuery.length < GLOBAL_SEARCH_MIN_QUERY_LENGTH) {
+      setGroups([]);
+      setLoading(false);
+      setError("");
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    setLoading(true);
+    setError("");
+
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        const response = await fetch(
+          `${searchEndpoint}?q=${encodeURIComponent(trimmedQuery)}`,
+          { signal: controller.signal }
+        );
+        if (!response.ok) {
+          throw new Error("Search failed.");
+        }
+        const payload = await response.json();
+        setGroups(payload.groups || []);
+      } catch (searchError) {
+        if (searchError.name !== "AbortError") {
+          setError("Could not load search results.");
+        }
+      } finally {
+        setLoading(false);
+      }
+    }, GLOBAL_SEARCH_DEBOUNCE_MS);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      controller.abort();
+    };
+  }, [searchEndpoint, trimmedQuery]);
+
+  return (
+    <div className="relative min-w-0 flex-1 sm:max-w-md">
+      <label className="flex h-9 items-center gap-2 rounded-control border border-nexus-line bg-black px-3 text-zinc-500 transition-colors focus-within:border-[var(--bim-orange-focus)] focus-within:ring-2 focus-within:ring-[rgb(var(--bim-orange-focus-rgb)/20%)]">
+        <Search className="h-4 w-4 shrink-0" aria-hidden="true" />
+        <input
+          value={query}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") {
+              setOpen(false);
+              event.currentTarget.blur();
+            }
+          }}
+          onBlur={() => window.setTimeout(() => setOpen(false), 150)}
+          placeholder="Search products, records, suppliers..."
+          aria-label="Global search"
+          className="w-full bg-transparent text-sm text-zinc-200 outline-none placeholder:text-zinc-600"
+        />
+      </label>
+
+      {open && hasQuery ? (
+        <div className="absolute z-30 mt-2 max-h-96 w-full overflow-auto rounded-md border border-nexus-line bg-zinc-950 p-1 text-left shadow-2xl shadow-black/50">
+          {loading ? <div className="px-3 py-3 text-sm text-zinc-500">Searching...</div> : null}
+          {!loading && error ? (
+            <div className="px-3 py-3 text-sm font-semibold text-[var(--tone-red-text)]">{error}</div>
+          ) : null}
+          {!loading && !error && !hasResults ? (
+            <div className="px-3 py-3 text-sm text-zinc-500">No results for &quot;{trimmedQuery}&quot;.</div>
+          ) : null}
+          {!loading && !error
+            ? groups.map((group) => (
+                <div key={group.key} className="py-1">
+                  <p className="px-3 py-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                    {group.label} ({group.count})
+                  </p>
+                  {group.results.map((result) => (
+                    <button
+                      key={`${group.key}-${result.id}`}
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => window.location.assign(result.href)}
+                      className="flex w-full flex-col items-start rounded px-3 py-2 text-left hover:bg-nexus-panel"
+                    >
+                      <span className="truncate text-sm font-semibold text-white">{result.title}</span>
+                      {result.subtitle ? (
+                        <span className="truncate text-xs text-zinc-500">{result.subtitle}</span>
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+              ))
+            : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -632,15 +747,19 @@ function MasterDataDetailPage({ data, type, isNew = false }) {
       const saved = await response.json();
       showSuccess(`${config.singular} saved.`);
       navigateAfterDelay(`${config.path}${saved.id}/`);
+      // saving intentionally stays true here -- SavingOverlay keeps the whole
+      // page (Save button, Cancel link, sidebar nav) locked until the
+      // navigateAfterDelay redirect above actually fires. Only reset it on
+      // the error path below, where there's no navigation to wait for.
     } catch (saveError) {
       showError(saveError.message);
-    } finally {
       setSaving(false);
     }
   }
 
   return (
     <Shell data={data}>
+      <SavingOverlay active={saving} />
       <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <a href={data.routes[config.routeKey]} className="mb-2 inline-flex text-sm font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
@@ -770,12 +889,12 @@ function OperationsPage({ data }) {
       tone: workflowMeta.create_client_return.tone
     },
     {
-      title: "Stock Movement",
-      detail: "Manual adjustments and exceptions.",
-      href: null,
-      enabled: false,
-      icon: workflowMeta.stock_movement.icon,
-      tone: workflowMeta.stock_movement.tone
+      title: "Remove Unit",
+      detail: "Permanently remove a unit for damage, loss, theft, or write-off.",
+      href: data.routes.createRemoval,
+      enabled: data.quickActions.some((action) => action.label === "Remove Unit" && action.enabled),
+      icon: workflowMeta.create_removal.icon,
+      tone: workflowMeta.create_removal.tone
     }
   ];
   const visibleWorkflows = workflows.filter((workflow) => workflow.enabled || !workflow.href);
@@ -1937,13 +2056,13 @@ function CreateReservationPage({ data }) {
       navigateAfterDelay(created.id ? `/operations/reservations/${created.id}/` : data.routes.reservationRecords);
     } catch (saveError) {
       showError(saveError.message);
-    } finally {
       setSaving(false);
     }
   }
 
   return (
     <Shell data={data}>
+      <SavingOverlay active={saving} />
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
         <div className="min-w-0">
           <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -2527,13 +2646,13 @@ function CreateIssuePage({ data }) {
       navigateAfterDelay(created.id ? `/operations/issues/${created.id}/` : data.routes.issueRecords);
     } catch (saveError) {
       showError(saveError.message);
-    } finally {
       setSaving(false);
     }
   }
 
   return (
     <Shell data={data}>
+      <SavingOverlay active={saving} />
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
         <div className="min-w-0">
           <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -3102,13 +3221,13 @@ function CreateRepairPage({ data }) {
       navigateAfterDelay(created.id ? `/operations/repairs/${created.id}/` : data.routes.repairRecords);
     } catch (saveError) {
       showError(saveError.message);
-    } finally {
       setSaving(false);
     }
   }
 
   return (
     <Shell data={data}>
+      <SavingOverlay active={saving} />
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
         <div className="min-w-0">
           <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -3212,6 +3331,499 @@ function issueStatusLabel(record) {
 function reservationStatusLabel(record) {
   if (!record?.status) return "-";
   return record.status.charAt(0).toUpperCase() + record.status.slice(1);
+}
+
+const REMOVAL_REASON_OPTIONS = [
+  ["damaged", "Damaged"],
+  ["lost", "Lost"],
+  ["stolen", "Stolen"],
+  ["written_off", "Written Off"],
+  ["other", "Other"]
+];
+
+function RemovalRecordsPage({ data }) {
+  const canCreateRemoval = Boolean(data.permissions?.canCreateRemoval);
+  const [records, setRecords] = useState([]);
+  const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadRemovals() {
+      setLoading(true);
+      setError("");
+      try {
+        const params = new URLSearchParams();
+        if (query.trim()) params.set("q", query.trim());
+        const endpoint = params.toString()
+          ? `${data.api.removals}?${params.toString()}`
+          : data.api.removals;
+        const response = await fetch(endpoint, { signal: controller.signal });
+        if (!response.ok) {
+          throw new Error("Could not load removal records.");
+        }
+        setRecords(await response.json());
+      } catch (loadError) {
+        if (loadError.name !== "AbortError") {
+          setError(loadError.message);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadRemovals();
+    return () => controller.abort();
+  }, [data.api.removals, query]);
+
+  const totalUnits = records.reduce((sum, record) => sum + Number(record.total_units || 0), 0);
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const thisMonthCount = records.filter(
+    (record) => (record.removal_date || "").slice(0, 7) === currentMonth
+  ).length;
+  const latestRecord = records[0];
+  const removalKpis = [
+    {
+      label: "Removal Records",
+      value: formatCount(records.length),
+      detail: "permanent removals",
+      icon: "package-x",
+      tone: records.length > 0 ? "danger" : "neutral"
+    },
+    {
+      label: "Removed Units",
+      value: formatCount(totalUnits),
+      detail: "units in these records",
+      icon: "layers",
+      tone: "blue"
+    },
+    {
+      label: "This Month",
+      value: formatCount(thisMonthCount),
+      detail: "removed so far this month",
+      icon: "clock-3",
+      tone: thisMonthCount > 0 ? "warning" : "neutral"
+    },
+    {
+      label: "Latest Removal",
+      value: latestRecord ? formatDate(latestRecord.removal_date) : "-",
+      detail: latestRecord?.removal_number || "no removals yet",
+      icon: "shield-alert",
+      tone: "neutral"
+    }
+  ];
+
+  return (
+    <Shell data={data}>
+      <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h1 className="bim-page-title">Removal Records</h1>
+          <p className="bim-page-description">Track units permanently removed from inventory for damage, loss, theft, or write-off.</p>
+        </div>
+        {canCreateRemoval ? (
+          <Button as="a" href={data.routes.createRemoval} variant="primary">
+            <Plus className="h-4 w-4" />
+            Remove Unit
+          </Button>
+        ) : null}
+      </header>
+
+      <KpiGrid items={removalKpis} />
+
+      <section className="mt-4 rounded-lg border border-nexus-line bg-nexus-panel p-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <SearchBar
+            className="flex-1"
+            inputClassName="placeholder:text-zinc-500"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search removal number, reason, notes, product, or serial..."
+          />
+          <span className="text-xs text-zinc-500">{records.length} records</span>
+        </div>
+      </section>
+
+      <RemovalRecordsTable records={records} loading={loading} error={error} />
+    </Shell>
+  );
+}
+
+function RemovalRecordsTable({ records, loading, error }) {
+  return (
+    <section className="mt-4 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-zinc-800/80 text-zinc-400">
+            <tr>
+              <th className="px-4 py-3 font-medium">Removal</th>
+              <th className="px-4 py-3 font-medium">Reason</th>
+              <th className="px-4 py-3 font-medium">Removal Date</th>
+              <th className="px-4 py-3 font-medium">Units</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <TableMessage message="Loading removal records..." />
+            ) : error ? (
+              <TableMessage message={error} />
+            ) : records.length ? (
+              records.map((record) => (
+                <tr key={record.id} className="border-t border-nexus-line hover:bg-zinc-900/70">
+                  <td className="px-4 py-4">
+                    <a href={`/operations/removals/${record.id}/`} className="font-mono text-xs font-bold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
+                      {record.removal_number}
+                    </a>
+                    <p className="mt-1 text-xs text-zinc-500">Removed by {record.removed_by_name || "-"}</p>
+                  </td>
+                  <td className="px-4 py-4 font-semibold text-white">{record.reason_label || "-"}</td>
+                  <td className="px-4 py-4 text-zinc-300">{formatDate(record.removal_date)}</td>
+                  <td className="px-4 py-4">
+                    <p className="font-bold text-white">{formatCount(record.total_units || 0)}</p>
+                    <p className="mt-1 text-xs text-zinc-500">{formatCount(record.items?.length || 0)} lines</p>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan="4">
+                  <EmptyState
+                    className="border-t border-nexus-line"
+                    title="No removal records yet."
+                    description="Remove Unit permanently takes a unit out of inventory for damage, loss, theft, or write-off."
+                  />
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+function RemovalRecordDetailPage({ data }) {
+  const removalId = (data.currentPath || window.location.pathname).match(/\/operations\/removals\/(\d+)\//)?.[1];
+  const [record, setRecord] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadRemoval() {
+      setLoading(true);
+      setError("");
+      try {
+        const endpoint = data.api.removalDetail.replace("{id}", removalId);
+        const response = await fetch(endpoint, { signal: controller.signal });
+        if (!response.ok) {
+          throw new Error(response.status === 404 ? "Removal record was not found." : "Could not load removal record.");
+        }
+        setRecord(await response.json());
+      } catch (loadError) {
+        if (loadError.name !== "AbortError") {
+          setError(loadError.message);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadRemoval();
+    return () => controller.abort();
+  }, [data.api.removalDetail, removalId]);
+
+  if (loading) {
+    return (
+      <Shell data={data}>
+        <div className="rounded-lg border border-nexus-line bg-nexus-panel p-6 text-zinc-400">
+          Loading removal record...
+        </div>
+      </Shell>
+    );
+  }
+
+  if (error || !record) {
+    return (
+      <Shell data={data}>
+        <div className="rounded-lg border border-[rgb(var(--bim-red-rgb)/60%)] bg-red-500/10 p-6 text-[var(--tone-red-text)]">
+          {error || "Removal record was not found."}
+        </div>
+      </Shell>
+    );
+  }
+
+  return (
+    <Shell data={data}>
+      <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <a href="/operations/removals/" className="mb-2 inline-flex text-sm font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
+            Back to removals
+          </a>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="bim-page-title">{record.removal_number}</h1>
+            <Status status="Removed" statusClass="removed" />
+          </div>
+          <p className="bim-page-description">This removal is permanent. Units do not return to active stock.</p>
+        </div>
+      </header>
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="space-y-5">
+          <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
+            <SectionTitle title="Removal Details" />
+            <dl className="mt-4 divide-y divide-nexus-line">
+              <DetailRow label="Removal Date" value={formatDate(record.removal_date)} />
+              <DetailRow label="Reason" value={record.reason_label || "-"} />
+              <DetailRow label="Removed By" value={record.removed_by_name || "-"} />
+              <DetailRow label="Notes" value={record.notes || "-"} />
+            </dl>
+          </section>
+
+          <RemovalItemsTable items={record.items || []} />
+        </div>
+
+        <aside className="space-y-4">
+          <section className="rounded-lg border border-nexus-line bg-nexus-panel">
+            <PanelHeader title="Removal Summary" />
+            <dl className="divide-y divide-nexus-line p-4">
+              <DetailRow label="Reference" value={record.removal_number} />
+              <DetailRow label="Units" value={record.total_units || 0} strong />
+            </dl>
+          </section>
+        </aside>
+      </div>
+    </Shell>
+  );
+}
+
+function RemovalItemsTable({ items }) {
+  return (
+    <section className="overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
+      <PanelHeader title="Removed Units" badge={`${formatCount(items.length)} units`} />
+      {items.length ? (
+        <div className="overflow-x-auto border-t border-nexus-line">
+          <table className="min-w-full text-left text-sm">
+            <thead className="bg-zinc-800/80 text-zinc-400">
+              <tr>
+                <th className="px-4 py-3 font-medium">Product</th>
+                <th className="px-4 py-3 font-medium">SKU</th>
+                <th className="px-4 py-3 font-medium">Unit ID</th>
+                <th className="px-4 py-3 font-medium">Serial</th>
+                <th className="px-4 py-3 font-medium">Status</th>
+                <th className="px-4 py-3 font-medium">Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={item.id} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
+                  <td className="px-4 py-3 font-semibold text-white">{item.product_name}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-[var(--bim-orange-text)]">{item.product_sku || "-"}</td>
+                  <td className="px-4 py-3 text-zinc-400">#{item.product_unit}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-zinc-300">{item.serial_number || "-"}</td>
+                  <td className="px-4 py-3">
+                    <Status status={item.product_unit_status_label || item.product_unit_status} statusClass={item.product_unit_status} />
+                  </td>
+                  <td className="px-4 py-3 text-zinc-400">{item.notes || "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="border-t border-nexus-line px-4 py-5 text-sm text-zinc-500">
+          No removed units are linked to this record.
+        </p>
+      )}
+    </section>
+  );
+}
+
+function CreateRemovalPage({ data }) {
+  const today = new Date().toISOString().slice(0, 10);
+  const [form, setForm] = useState({
+    removalDate: today,
+    reason: "",
+    notes: ""
+  });
+  const [units, setUnits] = useState([]);
+  const [query, setQuery] = useState("");
+  const [selectedUnits, setSelectedUnits] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const { showSuccess, showError } = useToast();
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadUnits() {
+      const response = await fetch(`${data.api.productUnits}?exclude_status=sold,removed`, {
+        signal: controller.signal
+      });
+      setUnits(response.ok ? await response.json() : []);
+    }
+
+    loadUnits().catch((loadFailure) => {
+      if (loadFailure.name !== "AbortError") {
+        setLoadError("Could not load stock units.");
+      }
+    });
+
+    return () => controller.abort();
+  }, [data.api.productUnits]);
+
+  const selectedIds = new Set(selectedUnits.map((unit) => unit.id));
+  const filteredUnits = units
+    .filter((unit) => !selectedIds.has(unit.id))
+    .filter((unit) => {
+      const text = `${unit.product_name} ${unit.product_sku} ${unit.product_barcode || ""} ${unit.serial_number}`.toLowerCase();
+      return query && text.includes(query.toLowerCase());
+    })
+    .slice(0, 8);
+
+  function updateField(name, value) {
+    setForm((current) => ({ ...current, [name]: value }));
+  }
+
+  function addUnit(unit) {
+    setSelectedUnits((current) => [...current, unit]);
+    setQuery("");
+  }
+
+  function removeUnit(unitId) {
+    setSelectedUnits((current) => current.filter((unit) => unit.id !== unitId));
+  }
+
+  async function saveRemoval() {
+    setSaving(true);
+    try {
+      if (!form.reason || !selectedUnits.length) {
+        throw new Error("Reason and at least one stock unit are required.");
+      }
+
+      const response = await fetch(data.api.removals, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": data.csrfToken
+        },
+        body: JSON.stringify({
+          reason: form.reason,
+          removal_date: form.removalDate || null,
+          notes: form.notes,
+          unit_ids: selectedUnits.map((unit) => unit.id)
+        })
+      });
+
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        throw new Error(firstApiError(details) || "Could not create removal record.");
+      }
+
+      const created = await response.json();
+      showSuccess("Unit removed from inventory.");
+      navigateAfterDelay(created.id ? `/operations/removals/${created.id}/` : data.routes.removalRecords);
+    } catch (saveError) {
+      showError(saveError.message);
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Shell data={data}>
+      <SavingOverlay active={saving} />
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="min-w-0">
+          <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h1 className="bim-page-title">Remove Unit</h1>
+              <p className="bim-page-description">Permanently remove a unit from inventory for damage, loss, theft, or write-off.</p>
+            </div>
+            <div className="flex flex-wrap gap-3 text-sm">
+              <a href="/operations/removals/" className="inline-flex h-9 items-center gap-2 rounded-md px-3 font-semibold text-zinc-200 hover:bg-nexus-panel">
+                <X className="h-4 w-4" />
+                Cancel
+              </a>
+              <button disabled={saving} onClick={saveRemoval} type="button" className="inline-flex h-9 items-center gap-2 rounded-md bg-nexus-orange px-4 font-semibold text-black">
+                <Icon name="package-x" className="h-4 w-4" />
+                Save Removal
+              </button>
+            </div>
+          </header>
+
+          {loadError ? (
+            <div className="mb-4 rounded-lg border border-[rgb(var(--bim-red-rgb)/60%)] bg-red-500/10 px-4 py-3 text-sm font-semibold text-[var(--tone-red-text)]">
+              {loadError}
+            </div>
+          ) : null}
+
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] xl:items-start">
+            <FormSection icon="package-x" title="Removal Information" subtitle="Permanent removal details for selected stock units.">
+              <div className="grid gap-5">
+                <Field label="Removal Date">
+                  <TextInput type="date" value={form.removalDate} onChange={(value) => updateField("removalDate", value)} />
+                </Field>
+                <Field label="Reason" required>
+                  <SelectInput
+                    value={form.reason}
+                    onChange={(value) => updateField("reason", value)}
+                    options={REMOVAL_REASON_OPTIONS}
+                    placeholder="Select a reason..."
+                  />
+                </Field>
+                <Field label="Notes">
+                  <TextInput value={form.notes} onChange={(value) => updateField("notes", value)} placeholder="Operational notes" />
+                </Field>
+              </div>
+            </FormSection>
+
+            <FormSection icon="box" title="Eligible Units" subtitle="Any unit not already sold or removed can be selected -- available, reserved, issued, or in repair.">
+              <SearchBar
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search product, SKU, barcode, or serial..."
+              />
+              {filteredUnits.length ? (
+                <div className="mt-2 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
+                  {filteredUnits.map((unit) => (
+                    <button
+                      key={unit.id}
+                      onClick={() => addUnit(unit)}
+                      type="button"
+                      className="flex w-full items-center justify-between border-b border-nexus-line px-4 py-3 text-left last:border-b-0 hover:bg-nexus-panel2"
+                    >
+                      <span>
+                        <span className="block text-sm font-bold text-white">{unit.product_name}</span>
+                        <span className="font-mono text-xs text-[var(--bim-orange-text)]">{unit.serial_number}</span>
+                      </span>
+                      <Plus className="h-4 w-4 text-zinc-500" />
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+
+              <SelectedUnitsTable units={selectedUnits} onRemove={removeUnit} emptyText="No units selected for removal yet." />
+            </FormSection>
+          </div>
+        </div>
+
+        <aside className="space-y-4">
+          <section className="rounded-lg border border-nexus-line bg-nexus-panel">
+            <PanelHeader title="Removal Summary" />
+            <dl className="divide-y divide-nexus-line p-4">
+              <DetailRow label="Removal Date" value={formatDate(form.removalDate)} />
+              <DetailRow
+                label="Reason"
+                value={REMOVAL_REASON_OPTIONS.find(([value]) => value === form.reason)?.[1] || "-"}
+              />
+              <DetailRow label="Selected Units" value={selectedUnits.length} strong />            </dl>
+          </section>
+        </aside>
+      </div>
+    </Shell>
+  );
 }
 
 function ClientReturnRecordsPage({ data }) {
@@ -3654,13 +4266,13 @@ function CreateClientReturnPage({ data }) {
       navigateAfterDelay(created.id ? `/operations/client-returns/${created.id}/` : data.routes.clientReturnRecords);
     } catch (saveError) {
       showError(saveError.message);
-    } finally {
       setSaving(false);
     }
   }
 
   return (
     <Shell data={data}>
+      <SavingOverlay active={saving} />
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
         <div className="min-w-0">
           <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -4598,7 +5210,8 @@ function InventoryPage({ data }) {
                   ["issued", "Issued"],
                   ["sold", "Sold"],
                   ["repair", "Repair"],
-                  ["inactive", "Inactive"]
+                  ["inactive", "Inactive"],
+                  ["removed", "Removed"]
                 ]}
                 label="Status"
               />
@@ -5056,7 +5669,7 @@ function ProductDetailsPage({ data }) {
       <nav className="mt-5 flex gap-1 overflow-x-auto border-b border-nexus-line text-sm font-semibold">
         {[
           ["Overview", ""],
-          ["Stock Units", product.total_units],
+          ["Stock Units", units.length],
           ["Movements", movements.length],
           ["Receiving", 0],
           ["Deliveries", 0],
@@ -5119,7 +5732,6 @@ function ProductDetailsPage({ data }) {
           </div>
 
           <ProductUnitRegister
-            product={product}
             units={units}
             accessDenied={unitsAccessDenied}
             canAccessAdmin={data.user?.canAccessAdmin}
@@ -5224,13 +5836,13 @@ function ProductDetailActionLink({ action, primary = false }) {
   );
 }
 
-function ProductUnitRegister({ product, units, accessDenied, canAccessAdmin = false }) {
+function ProductUnitRegister({ units, accessDenied, canAccessAdmin = false }) {
   const visibleUnits = units.slice(0, 10);
-  const unitLabel = product.total_units === 1 ? "unit" : "units";
+  const unitLabel = units.length === 1 ? "unit" : "units";
 
   return (
     <section className="overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel" aria-label="Stock unit register">
-      <PanelHeader title="Stock Unit Register" badge={`${formatCount(product.total_units)} ${unitLabel}`} />
+      <PanelHeader title="Stock Unit Register" badge={`${formatCount(units.length)} ${unitLabel}`} />
       {accessDenied ? (
         <p className="border-t border-nexus-line px-4 py-5 text-sm text-zinc-500">
           Stock-unit details require stock-unit access.
@@ -5502,19 +6114,22 @@ function AddProductPage({ data }) {
       if (addAnother) {
         resetForm();
         showSuccess("Product saved. Form cleared for a new entry.");
+        setSaving(false);
       } else {
         showSuccess("Product saved.");
         navigateAfterDelay(data.routes.inventory);
+        // saving intentionally stays true here until navigateAfterDelay's
+        // redirect fires -- see SavingOverlay.
       }
     } catch (saveError) {
       showError(saveError.message);
-    } finally {
       setSaving(false);
     }
   }
 
   return (
     <Shell data={data}>
+      <SavingOverlay active={saving} />
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
         <div className="min-w-0">
           <AddProductHeader
@@ -5692,6 +6307,13 @@ function StockEntryPage({ data, mode = "add-unit" }) {
   const [loadError, setLoadError] = useState("");
   const { showSuccess, showError } = useToast();
   const serialBatch = useMemo(() => String(Date.now()).slice(-6), []);
+  // One token per page load, reused for every submit attempt from this form
+  // instance -- lets the backend recognize and no-op a retried/double-click
+  // submission instead of creating a duplicate receiving record.
+  const idempotencyKey = useMemo(
+    () => `rcv-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+    []
+  );
 
   useEffect(() => {
     const controller = new AbortController();
@@ -5843,6 +6465,7 @@ function StockEntryPage({ data, mode = "add-unit" }) {
         po_number: form.poNumber,
         supplier_invoice_number: form.supplierInvoiceNumber,
         notes: form.notes,
+        idempotency_key: idempotencyKey,
         item_inputs: itemInputs
       })
     });
@@ -5911,15 +6534,18 @@ function StockEntryPage({ data, mode = "add-unit" }) {
       } else {
         await createProductUnits();
       }
+      // saving intentionally stays true here until navigateAfterDelay's
+      // redirect fires (scheduled inside createReceivingRecord/
+      // createProductUnits above) -- see SavingOverlay.
     } catch (saveError) {
       showError(saveError.message);
-    } finally {
       setSaving(false);
     }
   }
 
   return (
     <Shell data={data}>
+      <SavingOverlay active={saving} />
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
         <div className="min-w-0">
           <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -6227,13 +6853,13 @@ function CreateDeliveryPage({ data }) {
       navigateAfterDelay(created.id ? `/operations/deliveries/${created.id}/` : data.routes.deliveryRecords);
     } catch (saveError) {
       showError(saveError.message);
-    } finally {
       setSaving(false);
     }
   }
 
   return (
     <Shell data={data}>
+      <SavingOverlay active={saving} />
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
         <div className="min-w-0">
           <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -6735,12 +7361,35 @@ function firstApiError(details) {
   return message;
 }
 
-// Give the success toast its full 1.5s display window before a full-page
+// Give the success toast its full 1s display window before a full-page
 // navigation unmounts it -- otherwise it's shown and torn down early.
-const SUCCESS_NAVIGATE_DELAY_MS = 1500;
+const SUCCESS_NAVIGATE_DELAY_MS = 1000;
 
 function navigateAfterDelay(path) {
   setTimeout(() => window.location.assign(path), SUCCESS_NAVIGATE_DELAY_MS);
+}
+
+// Blocks all page interaction (Save button, Cancel link, sidebar nav,
+// topbar search, everything) from the moment a save starts until the
+// post-success navigation actually fires. Callers must keep their `saving`
+// state true all the way through navigateAfterDelay's timeout on the
+// success path -- only clear it early on a caught error -- otherwise this
+// overlay disappears before the redirect happens and the page is briefly
+// interactive again, reopening the double-submit window this exists to close.
+function SavingOverlay({ active, message = "Saving..." }) {
+  if (!active) return null;
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed inset-0 z-[55] flex items-center justify-center bg-black/50 backdrop-blur-[1px]"
+    >
+      <div className="flex items-center gap-3 rounded-lg border border-nexus-line bg-nexus-panel px-5 py-3 text-sm font-semibold text-zinc-200 shadow-2xl">
+        <RefreshCw className="h-4 w-4 animate-spin text-[var(--bim-orange-text)]" aria-hidden="true" />
+        {message}
+      </div>
+    </div>
+  );
 }
 
 function DetailRow({ label, value, highlight = false, strong = false }) {
@@ -7153,6 +7802,18 @@ const appRoutes = [
   {
     match: (path) => path === "/operations/repairs/",
     render: (data) => <RepairRecordsPage data={data} />
+  },
+  {
+    match: (path) => /^\/operations\/removals\/\d+\//.test(path),
+    render: (data) => <RemovalRecordDetailPage data={data} />
+  },
+  {
+    match: (path) => path.startsWith("/operations/removals/new"),
+    render: (data) => <CreateRemovalPage data={data} />
+  },
+  {
+    match: (path) => path === "/operations/removals/",
+    render: (data) => <RemovalRecordsPage data={data} />
   },
   {
     match: (path) => /^\/operations\/client-returns\/\d+\//.test(path),

@@ -1,16 +1,19 @@
 from datetime import timedelta
 
+from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
 
 from . import constants as stock_constants
 from .models import (
     Client,
+    ClientReturnRecord,
     DeliveryRecord,
     IssueRecord,
     Product,
     ProductUnit,
     ReceivingRecord,
+    RemovalRecord,
     RepairRecord,
     ReservationRecord,
     Supplier,
@@ -93,58 +96,189 @@ def low_stock_counts():
     return low_count, out_of_stock_count
 
 
-def recent_stock_activity():
+RECENT_ACTIVITY_LIMIT = 8
+
+
+def _items_summary(record, fallback_label):
+    items = [item for item in record.items.all() if item.isactive]
+    if not items:
+        return fallback_label
+    if len(items) == 1:
+        return f"1 {items[0].product}"
+    return f"{len(items)} stock units"
+
+
+def recent_stock_activity(user):
+    """Merge the most recent record of every stock-movement workflow type
+    the given user can view, newest first. When a new record type/model is
+    added to the app, add its group here too -- see the standing rule in
+    CLAUDE.md (the same one that applies to global_search())."""
     activity = []
 
-    deliveries = (
-        DeliveryRecord.objects.filter(isactive=True)
-        .select_related("created_by")
-        .prefetch_related("items__product")
-        .order_by("-crdate")[:8]
-    )
-    for delivery in deliveries:
-        activity.append(
-            {
-                "type": "Delivery",
-                "reference": delivery.delivery_number,
-                "related": delivery_record_summary(delivery),
-                "user": _user_display_name(delivery.created_by)
-                if delivery.created_by
-                else "",
-                "date": delivery.delivery_date,
-                "status": "Delivered",
-                "status_class": "delivered",
-                "href": reverse("operations_delivery_detail", kwargs={"pk": delivery.pk}),
-            }
+    if user.has_perm(stock_constants.VIEW_DELIVERY_RECORD):
+        deliveries = (
+            DeliveryRecord.objects.filter(isactive=True)
+            .select_related("created_by")
+            .prefetch_related("items__product")
+            .order_by("-crdate")[:RECENT_ACTIVITY_LIMIT]
         )
+        for delivery in deliveries:
+            activity.append(
+                {
+                    "type": "Delivery",
+                    "reference": delivery.delivery_number,
+                    "related": delivery_record_summary(delivery),
+                    "user": _user_display_name(delivery.created_by)
+                    if delivery.created_by
+                    else "",
+                    "date": delivery.delivery_date,
+                    "status": "Delivered",
+                    "status_class": "delivered",
+                    "href": reverse("operations_delivery_detail", kwargs={"pk": delivery.pk}),
+                }
+            )
 
-    receiving_records = (
-        ReceivingRecord.objects.filter(isactive=True)
-        .select_related("supplier", "created_by")
-        .prefetch_related("items__product")
-        .order_by("-crdate")[:8]
-    )
-    for receiving in receiving_records:
-        activity.append(
-            {
-                "type": "Receiving",
-                "reference": receiving.receiving_number,
-                "related": receiving_record_summary(receiving),
-                "user": _user_display_name(receiving.created_by)
-                if receiving.created_by
-                else "",
-                "date": receiving.received_date,
-                "status": "Received",
-                "status_class": "received",
-                "href": reverse("operations_receiving_detail", kwargs={"pk": receiving.pk}),
-            }
+    if user.has_perm(stock_constants.VIEW_RECEIVING_RECORD):
+        receiving_records = (
+            ReceivingRecord.objects.filter(isactive=True)
+            .select_related("supplier", "created_by")
+            .prefetch_related("items__product")
+            .order_by("-crdate")[:RECENT_ACTIVITY_LIMIT]
         )
+        for receiving in receiving_records:
+            activity.append(
+                {
+                    "type": "Receiving",
+                    "reference": receiving.receiving_number,
+                    "related": receiving_record_summary(receiving),
+                    "user": _user_display_name(receiving.created_by)
+                    if receiving.created_by
+                    else "",
+                    "date": receiving.received_date,
+                    "status": "Received",
+                    "status_class": "received",
+                    "href": reverse("operations_receiving_detail", kwargs={"pk": receiving.pk}),
+                }
+            )
+
+    if user.has_perm(stock_constants.VIEW_RESERVATION_RECORD):
+        reservations = (
+            ReservationRecord.objects.filter(isactive=True)
+            .select_related("reserved_by")
+            .prefetch_related("items__product")
+            .order_by("-reserved_at")[:RECENT_ACTIVITY_LIMIT]
+        )
+        for reservation in reservations:
+            activity.append(
+                {
+                    "type": "Reservation",
+                    "reference": reservation.reservation_number,
+                    "related": _items_summary(reservation, "Reservation record"),
+                    "user": _user_display_name(reservation.reserved_by)
+                    if reservation.reserved_by
+                    else "",
+                    "date": reservation.reserved_at.date() if reservation.reserved_at else None,
+                    "status": "Reserved",
+                    "status_class": "reserved",
+                    "href": reverse("operations_reservation_detail", kwargs={"pk": reservation.pk}),
+                }
+            )
+
+    if user.has_perm(stock_constants.VIEW_ISSUE_RECORD):
+        issues = (
+            IssueRecord.objects.filter(isactive=True)
+            .select_related("issued_by")
+            .prefetch_related("items__product")
+            .order_by("-issue_date")[:RECENT_ACTIVITY_LIMIT]
+        )
+        for issue in issues:
+            activity.append(
+                {
+                    "type": "Temporary Assignment",
+                    "reference": issue.issue_number,
+                    "related": _items_summary(issue, "Temporary assignment record"),
+                    "user": _user_display_name(issue.issued_by) if issue.issued_by else "",
+                    "date": issue.issue_date,
+                    "status": "Issued",
+                    "status_class": "issued",
+                    "href": reverse("operations_issue_detail", kwargs={"pk": issue.pk}),
+                }
+            )
+
+    if user.has_perm(stock_constants.VIEW_REPAIR_RECORD):
+        repairs = (
+            RepairRecord.objects.filter(isactive=True)
+            .select_related("sent_by")
+            .prefetch_related("items__product")
+            .order_by("-repair_date")[:RECENT_ACTIVITY_LIMIT]
+        )
+        for repair in repairs:
+            activity.append(
+                {
+                    "type": "Repair",
+                    "reference": repair.repair_number,
+                    "related": _items_summary(repair, "Repair record"),
+                    "user": _user_display_name(repair.sent_by) if repair.sent_by else "",
+                    "date": repair.repair_date,
+                    "status": "In Repair",
+                    "status_class": "repair",
+                    "href": reverse("operations_repair_detail", kwargs={"pk": repair.pk}),
+                }
+            )
+
+    if user.has_perm(stock_constants.VIEW_CLIENT_RETURN_RECORD):
+        client_returns = (
+            ClientReturnRecord.objects.filter(isactive=True)
+            .select_related("received_by")
+            .prefetch_related("items__product")
+            .order_by("-return_date")[:RECENT_ACTIVITY_LIMIT]
+        )
+        for client_return in client_returns:
+            activity.append(
+                {
+                    "type": "Client Return",
+                    "reference": client_return.return_number,
+                    "related": _items_summary(client_return, "Client return record"),
+                    "user": _user_display_name(client_return.received_by)
+                    if client_return.received_by
+                    else "",
+                    "date": client_return.return_date,
+                    "status": "Returned",
+                    "status_class": "released",
+                    "href": reverse(
+                        "operations_client_return_detail", kwargs={"pk": client_return.pk}
+                    ),
+                }
+            )
+
+    if user.has_perm(stock_constants.VIEW_REMOVAL_RECORD):
+        removals = (
+            RemovalRecord.objects.filter(isactive=True)
+            .select_related("removed_by")
+            .prefetch_related("items__product")
+            .order_by("-removal_date")[:RECENT_ACTIVITY_LIMIT]
+        )
+        for removal in removals:
+            activity.append(
+                {
+                    "type": "Removal",
+                    "reference": removal.removal_number,
+                    "related": _items_summary(removal, "Removal record"),
+                    "user": _user_display_name(removal.removed_by)
+                    if removal.removed_by
+                    else "",
+                    "date": removal.removal_date,
+                    "status": "Removed",
+                    "status_class": "removed",
+                    "href": reverse("operations_removal_detail", kwargs={"pk": removal.pk}),
+                }
+            )
 
     return sorted(
         activity,
         key=lambda item: str(item["date"] or ""),
         reverse=True,
-    )[:8]
+    )[:RECENT_ACTIVITY_LIMIT]
 
 
 def low_stock_alerts(limit=4):
@@ -242,3 +376,240 @@ def receiving_record_summary(receiving):
 def _user_display_name(user):
     full_name = user.get_full_name().strip()
     return full_name or user.get_username()
+
+
+GLOBAL_SEARCH_MIN_QUERY_LENGTH = 2
+GLOBAL_SEARCH_RESULT_LIMIT = 5
+
+
+def _search_group(key, label, queryset, mapper, limit):
+    total = queryset.count()
+    if not total:
+        return None
+    return {
+        "key": key,
+        "label": label,
+        "count": total,
+        "results": [mapper(obj) for obj in queryset[:limit]],
+    }
+
+
+def global_search(user, query, limit=GLOBAL_SEARCH_RESULT_LIMIT):
+    """Search across every record type the given user can view.
+
+    Every group here corresponds to one searchable model. When a new record
+    type/model is added to the app, add its group here too -- see the
+    standing rule in CLAUDE.md.
+    """
+    query = (query or "").strip()
+    groups = []
+    if len(query) < GLOBAL_SEARCH_MIN_QUERY_LENGTH:
+        return groups
+
+    if user.has_perm(stock_constants.VIEW_PRODUCT):
+        matches = Product.objects.filter(isactive=True).filter(
+            Q(descript__icontains=query)
+            | Q(sku__icontains=query)
+            | Q(barcode__icontains=query)
+        ).order_by("descript")
+        group = _search_group(
+            "products",
+            "Products",
+            matches,
+            lambda product: {
+                "id": product.pk,
+                "title": product.descript,
+                "subtitle": product.sku,
+                "href": reverse("inventory_product_detail", kwargs={"pk": product.pk}),
+            },
+            limit,
+        )
+        if group:
+            groups.append(group)
+
+    if user.has_perm(stock_constants.VIEW_SUPPLIER):
+        matches = Supplier.objects.filter(isactive=True).filter(
+            Q(name__icontains=query) | Q(contact_person__icontains=query)
+        ).order_by("name")
+        group = _search_group(
+            "suppliers",
+            "Suppliers",
+            matches,
+            lambda supplier: {
+                "id": supplier.pk,
+                "title": supplier.name,
+                "subtitle": supplier.contact_person or supplier.phone or "",
+                "href": reverse("supplier_detail", kwargs={"pk": supplier.pk}),
+            },
+            limit,
+        )
+        if group:
+            groups.append(group)
+
+    if user.has_perm(stock_constants.VIEW_CLIENT):
+        matches = Client.objects.filter(isactive=True).filter(
+            Q(name__icontains=query) | Q(contact_person__icontains=query)
+        ).order_by("name")
+        group = _search_group(
+            "clients",
+            "Clients",
+            matches,
+            lambda client: {
+                "id": client.pk,
+                "title": client.name,
+                "subtitle": client.contact_person or client.phone or "",
+                "href": reverse("client_detail", kwargs={"pk": client.pk}),
+            },
+            limit,
+        )
+        if group:
+            groups.append(group)
+
+    if user.has_perm(stock_constants.VIEW_RECEIVING_RECORD):
+        matches = ReceivingRecord.objects.select_related("supplier").filter(
+            Q(receiving_number__icontains=query)
+            | Q(po_number__icontains=query)
+            | Q(supplier_invoice_number__icontains=query)
+        ).order_by("-received_date", "-receiving_number")
+        group = _search_group(
+            "receiving_records",
+            "Receiving Records",
+            matches,
+            lambda receiving: {
+                "id": receiving.pk,
+                "title": receiving.receiving_number,
+                "subtitle": receiving.supplier.name if receiving.supplier_id else "Manual entry",
+                "href": reverse("operations_receiving_detail", kwargs={"pk": receiving.pk}),
+            },
+            limit,
+        )
+        if group:
+            groups.append(group)
+
+    if user.has_perm(stock_constants.VIEW_DELIVERY_RECORD):
+        matches = DeliveryRecord.objects.select_related("client").filter(
+            Q(delivery_number__icontains=query) | Q(invoice_number__icontains=query)
+        ).order_by("-delivery_date", "-delivery_number")
+        group = _search_group(
+            "delivery_records",
+            "Delivery Records",
+            matches,
+            lambda delivery: {
+                "id": delivery.pk,
+                "title": delivery.delivery_number,
+                "subtitle": delivery.client.name if delivery.client_id else delivery.customer_name,
+                "href": reverse("operations_delivery_detail", kwargs={"pk": delivery.pk}),
+            },
+            limit,
+        )
+        if group:
+            groups.append(group)
+
+    if user.has_perm(stock_constants.VIEW_RESERVATION_RECORD):
+        matches = ReservationRecord.objects.filter(
+            Q(reservation_number__icontains=query)
+            | Q(reserved_for__icontains=query)
+            | Q(reason__icontains=query)
+        ).order_by("-reserved_at", "-reservation_number")
+        group = _search_group(
+            "reservations",
+            "Reservations",
+            matches,
+            lambda reservation: {
+                "id": reservation.pk,
+                "title": reservation.reservation_number,
+                "subtitle": reservation.reserved_for,
+                "href": reverse("operations_reservation_detail", kwargs={"pk": reservation.pk}),
+            },
+            limit,
+        )
+        if group:
+            groups.append(group)
+
+    if user.has_perm(stock_constants.VIEW_ISSUE_RECORD):
+        matches = IssueRecord.objects.filter(
+            Q(issue_number__icontains=query)
+            | Q(issued_to__icontains=query)
+            | Q(reason__icontains=query)
+        ).order_by("-issue_date", "-issue_number")
+        group = _search_group(
+            "temporary_assignments",
+            "Temporary Assignments",
+            matches,
+            lambda issue: {
+                "id": issue.pk,
+                "title": issue.issue_number,
+                "subtitle": issue.issued_to,
+                "href": reverse("operations_issue_detail", kwargs={"pk": issue.pk}),
+            },
+            limit,
+        )
+        if group:
+            groups.append(group)
+
+    if user.has_perm(stock_constants.VIEW_REPAIR_RECORD):
+        matches = RepairRecord.objects.filter(
+            Q(repair_number__icontains=query)
+            | Q(repair_reason__icontains=query)
+            | Q(technician__icontains=query)
+        ).order_by("-repair_date", "-repair_number")
+        group = _search_group(
+            "repairs",
+            "Repairs",
+            matches,
+            lambda repair: {
+                "id": repair.pk,
+                "title": repair.repair_number,
+                "subtitle": repair.repair_reason,
+                "href": reverse("operations_repair_detail", kwargs={"pk": repair.pk}),
+            },
+            limit,
+        )
+        if group:
+            groups.append(group)
+
+    if user.has_perm(stock_constants.VIEW_REMOVAL_RECORD):
+        matches = RemovalRecord.objects.filter(
+            Q(removal_number__icontains=query)
+            | Q(reason__icontains=query)
+            | Q(notes__icontains=query)
+        ).order_by("-removal_date", "-removal_number")
+        group = _search_group(
+            "removals",
+            "Removals",
+            matches,
+            lambda removal: {
+                "id": removal.pk,
+                "title": removal.removal_number,
+                "subtitle": removal.get_reason_display(),
+                "href": reverse("operations_removal_detail", kwargs={"pk": removal.pk}),
+            },
+            limit,
+        )
+        if group:
+            groups.append(group)
+
+    if user.has_perm(stock_constants.VIEW_CLIENT_RETURN_RECORD):
+        matches = ClientReturnRecord.objects.select_related("client").filter(
+            Q(return_number__icontains=query)
+            | Q(client__name__icontains=query)
+            | Q(customer_name__icontains=query)
+            | Q(received_from__icontains=query)
+            | Q(reason__icontains=query)
+        ).order_by("-return_date", "-return_number")
+        group = _search_group(
+            "client_returns",
+            "Client Returns",
+            matches,
+            lambda client_return: {
+                "id": client_return.pk,
+                "title": client_return.return_number,
+                "subtitle": client_return.client.name if client_return.client_id else client_return.customer_name,
+                "href": reverse("operations_client_return_detail", kwargs={"pk": client_return.pk}),
+            },
+            limit,
+        )
+        if group:
+            groups.append(group)
+
+    return groups

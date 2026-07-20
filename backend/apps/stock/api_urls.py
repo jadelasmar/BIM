@@ -5,6 +5,7 @@ from . import api_views
 app_name = "bim_stock_api"
 
 urlpatterns = [
+    path("search/", api_views.GlobalSearchAPIView.as_view(), name="search"),
     path("summary/", api_views.InventorySummaryAPIView.as_view(), name="summary"),
     path("products/", api_views.ProductListCreateAPIView.as_view(), name="products"),
     path(
@@ -91,6 +92,16 @@ urlpatterns = [
         "repairs/<int:pk>/",
         api_views.RepairRecordDetailAPIView.as_view(),
         name="repair-detail",
+    ),
+    path(
+        "removals/",
+        api_views.RemovalRecordListCreateAPIView.as_view(),
+        name="removals",
+    ),
+    path(
+        "removals/<int:pk>/",
+        api_views.RemovalRecordDetailAPIView.as_view(),
+        name="removal-detail",
     ),
     path(
         "client-returns/",

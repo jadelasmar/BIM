@@ -53,6 +53,10 @@ WRITE_PAGE_PERMISSIONS = {
         stock_constants.ADD_REPAIR_RECORD,
         stock_constants.CHANGE_PRODUCT_UNIT,
     ),
+    "operations_create_removal": (
+        stock_constants.ADD_REMOVAL_RECORD,
+        stock_constants.CHANGE_PRODUCT_UNIT,
+    ),
     "operations_create_client_return": (
         stock_constants.ADD_CLIENT_RETURN_RECORD,
         stock_constants.CHANGE_PRODUCT_UNIT,
@@ -154,6 +158,9 @@ def _command_center_initial_data(
     can_create_repair = user.has_perm(
         stock_constants.ADD_REPAIR_RECORD
     ) and user.has_perm(stock_constants.CHANGE_PRODUCT_UNIT)
+    can_create_removal = user.has_perm(
+        stock_constants.ADD_REMOVAL_RECORD
+    ) and user.has_perm(stock_constants.CHANGE_PRODUCT_UNIT)
     can_create_client_return = user.has_perm(
         stock_constants.ADD_CLIENT_RETURN_RECORD
     ) and user.has_perm(stock_constants.CHANGE_PRODUCT_UNIT)
@@ -201,6 +208,7 @@ def _command_center_initial_data(
             "canCreateRepair": can_create_repair,
             "canResolveRepair": user.has_perm(stock_constants.CHANGE_REPAIR_RECORD)
             and can_change_product_unit,
+            "canCreateRemoval": can_create_removal,
             "canCreateClientReturn": can_create_client_return,
             "canCreateSupplier": user.has_perm(stock_constants.ADD_SUPPLIER),
             "canEditSupplier": user.has_perm(stock_constants.CHANGE_SUPPLIER),
@@ -217,6 +225,7 @@ def _command_center_initial_data(
         },
         "api": {
             "commandCenter": reverse("command_center_data"),
+            "search": "/api/stock/search/",
             "summary": "/api/stock/summary/",
             "products": "/api/stock/products/",
             "productDetail": "/api/stock/products/{id}/",
@@ -231,6 +240,8 @@ def _command_center_initial_data(
             "issueDetail": "/api/stock/issues/{id}/",
             "repairs": "/api/stock/repairs/",
             "repairDetail": "/api/stock/repairs/{id}/",
+            "removals": "/api/stock/removals/",
+            "removalDetail": "/api/stock/removals/{id}/",
             "clientReturns": "/api/stock/client-returns/",
             "clientReturnDetail": "/api/stock/client-returns/{id}/",
             "receivingRecords": "/api/stock/receiving-records/",
@@ -253,6 +264,7 @@ def _command_center_initial_data(
             "createReservation": reverse("operations_create_reservation"),
             "createIssue": reverse("operations_create_issue"),
             "createRepair": reverse("operations_create_repair"),
+            "createRemoval": reverse("operations_create_removal"),
             "createClientReturn": reverse("operations_create_client_return"),
             "suppliers": reverse("suppliers"),
             "supplierNew": reverse("supplier_new"),
@@ -261,6 +273,7 @@ def _command_center_initial_data(
             "reservationRecords": reverse("operations_reservations"),
             "issueRecords": reverse("operations_issues"),
             "repairRecords": reverse("operations_repairs"),
+            "removalRecords": reverse("operations_removals"),
             "clientReturnRecords": reverse("operations_client_returns"),
             "clients": reverse("clients"),
             "clientNew": reverse("client_new"),
@@ -413,6 +426,9 @@ def _build_command_center_initial_data(request, current_path=None):
     can_create_repair = user.has_perm(
         stock_constants.ADD_REPAIR_RECORD
     ) and user.has_perm(stock_constants.CHANGE_PRODUCT_UNIT)
+    can_create_removal = user.has_perm(
+        stock_constants.ADD_REMOVAL_RECORD
+    ) and user.has_perm(stock_constants.CHANGE_PRODUCT_UNIT)
     can_create_client_return = user.has_perm(
         stock_constants.ADD_CLIENT_RETURN_RECORD
     ) and user.has_perm(stock_constants.CHANGE_PRODUCT_UNIT)
@@ -495,6 +511,14 @@ def _build_command_center_initial_data(request, current_path=None):
             **ui_item("create_repair"),
         },
         {
+            "href": reverse("operations_create_removal")
+            if can_create_removal
+            else None,
+            "enabled": can_create_removal,
+            "description": "Permanently remove a unit for damage, loss, theft, or write-off",
+            **ui_item("create_removal"),
+        },
+        {
             "href": reverse("operations_create_client_return")
             if can_create_client_return
             else None,
@@ -546,10 +570,10 @@ def _build_command_center_initial_data(request, current_path=None):
             **ui_item("inventory"),
         },
         {
-            "description": "Receiving, delivery, reservation, temporary assignment, repair, client returns, stock history",
+            "description": "Receiving, delivery, reservation, temporary assignment, repair, unit removal, client returns, stock history",
             "href": reverse("operations") if can_use_operations else None,
             "enabled": can_use_operations,
-            "count": 6,
+            "count": 7,
             "meta": "active workflows",
             **ui_item("operations"),
         },
@@ -579,7 +603,7 @@ def _build_command_center_initial_data(request, current_path=None):
         },
     ]
 
-    recent_activity = recent_stock_activity() if can_view_stock else []
+    recent_activity = recent_stock_activity(user) if can_view_stock else []
     low_stock_alerts_panel = low_stock_alerts() if can_view_stock else []
     recent_deliveries_panel = recent_deliveries() if can_view_stock else []
     recent_receiving_panel = recent_receiving() if can_view_stock else []

@@ -1,5 +1,5 @@
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from .models import (
@@ -13,6 +13,8 @@ from .models import (
     ProductUnit,
     ReceivingItem,
     ReceivingRecord,
+    RemovalItem,
+    RemovalRecord,
     RepairItem,
     RepairRecord,
     ReservationItem,
@@ -48,6 +50,7 @@ def create_stock_movement(
     issue_record=None,
     repair_record=None,
     client_return_record=None,
+    removal_record=None,
     reference="",
 ):
     return StockMovement.objects.create(
@@ -66,6 +69,7 @@ def create_stock_movement(
         issue_record=issue_record,
         repair_record=repair_record,
         client_return_record=client_return_record,
+        removal_record=removal_record,
         reference=(reference or "").strip()[:150],
     )
 
@@ -173,21 +177,46 @@ def create_receiving_record(
     received_date=None,
     notes="",
     created_by=None,
+    idempotency_key="",
 ):
     if not items:
         raise ValidationError("At least one receiving item is required.")
 
+    idempotency_key = (idempotency_key or "").strip()
+    if idempotency_key:
+        # A retried/double-submitted request (e.g. a duplicate click before the
+        # frontend's Save button re-disables) replays the same key -- return
+        # the record that request already created instead of making another.
+        # Manual-quantity receiving lines have no linked ProductUnit, so
+        # nothing else guards against this the way unique serial numbers do
+        # for serialized lines.
+        existing = ReceivingRecord.objects.filter(idempotency_key=idempotency_key).first()
+        if existing:
+            return existing
+
     if not supplier and supplier_name_input.strip():
         supplier, _created = Supplier.objects.get_or_create(name=supplier_name_input.strip())
 
-    receiving = ReceivingRecord.objects.create(
-        supplier=supplier,
-        po_number=(po_number or "").strip(),
-        supplier_invoice_number=(supplier_invoice_number or "").strip(),
-        received_date=received_date or timezone.localdate(),
-        notes=notes,
-        created_by=created_by,
-    )
+    try:
+        with transaction.atomic():
+            receiving = ReceivingRecord.objects.create(
+                supplier=supplier,
+                po_number=(po_number or "").strip(),
+                supplier_invoice_number=(supplier_invoice_number or "").strip(),
+                received_date=received_date or timezone.localdate(),
+                notes=notes,
+                created_by=created_by,
+                idempotency_key=idempotency_key,
+            )
+    except IntegrityError:
+        # Two near-simultaneous requests both passed the check above before
+        # either committed -- the unique constraint on idempotency_key caught
+        # the loser. Return the winner's record rather than erroring out.
+        if idempotency_key:
+            existing = ReceivingRecord.objects.filter(idempotency_key=idempotency_key).first()
+            if existing:
+                return existing
+        raise
 
     for item_data in items:
         _create_receiving_item(
@@ -899,6 +928,79 @@ def resolve_repair_record(
         )
 
     return repair
+
+
+@transaction.atomic
+def create_removal_record(
+    *,
+    unit_ids,
+    reason,
+    removal_date=None,
+    notes="",
+    removed_by=None,
+):
+    unique_ids = list(dict.fromkeys(unit_ids or []))
+    if not unique_ids:
+        raise ValidationError("At least one stock unit is required.")
+
+    units = list(
+        ProductUnit.objects.select_for_update()
+        .select_related("product")
+        .filter(pk__in=unique_ids)
+        .order_by("product__descript", "serial_number")
+    )
+    units_by_id = {unit.pk: unit for unit in units}
+    missing_ids = [unit_id for unit_id in unique_ids if unit_id not in units_by_id]
+    if missing_ids:
+        raise ValidationError("One or more stock units were not found.")
+
+    # Sold units have their own lifecycle via Client Return; already-removed
+    # units can't be removed again. Every other status (available, reserved,
+    # issued, repair) is eligible -- unlike the other five workflows, this one
+    # isn't restricted to "available" only, since a unit can turn out lost,
+    # stolen, or damaged beyond repair while reserved, issued, or in repair.
+    ineligible_units = [
+        unit.serial_number
+        for unit in units
+        if not unit.isactive
+        or unit.status in (ProductUnit.STATUS_SOLD, ProductUnit.STATUS_REMOVED)
+    ]
+    if ineligible_units:
+        raise ValidationError(
+            "Sold or already-removed stock units cannot be removed: "
+            + ", ".join(sorted(ineligible_units))
+        )
+
+    removal = RemovalRecord.objects.create(
+        reason=reason,
+        removal_date=removal_date or timezone.localdate(),
+        notes=notes,
+        removed_by=removed_by,
+    )
+
+    for unit in units:
+        from_status = unit.status
+        RemovalItem.objects.create(
+            removal=removal,
+            product_unit=unit,
+            product=unit.product,
+        )
+        unit.status = ProductUnit.STATUS_REMOVED
+        unit.save(update_fields=("status",))
+        create_stock_movement(
+            product_unit=unit,
+            movement_type=StockMovement.TYPE_REMOVED,
+            from_status=from_status,
+            to_status=ProductUnit.STATUS_REMOVED,
+            reason=removal.get_reason_display(),
+            notes=notes,
+            performed_by=removed_by,
+            movement_date=removal.removal_date,
+            removal_record=removal,
+            reference=removal.removal_number,
+        )
+
+    return removal
 
 
 def _unit_has_delivery(unit):

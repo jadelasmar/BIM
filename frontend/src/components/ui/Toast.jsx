@@ -4,7 +4,7 @@ import { X } from "../../constants/icons";
 
 const ToastContext = createContext(null);
 
-const TOAST_DISMISS_MS = 1500;
+const TOAST_DISMISS_MS = 1000;
 const TOAST_FADE_MS = 300;
 
 const TONE_STYLES = {

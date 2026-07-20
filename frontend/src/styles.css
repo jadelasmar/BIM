@@ -170,6 +170,13 @@
   box-sizing: border-box;
 }
 
+html {
+  /* Reserve scrollbar space on every page, whether or not it actually
+     scrolls -- otherwise right-aligned topbar content (account menu) shifts
+     horizontally between short and tall pages. */
+  scrollbar-gutter: stable;
+}
+
 body {
   margin: 0;
   min-width: 320px;

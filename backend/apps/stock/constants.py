@@ -32,6 +32,10 @@ VIEW_CLIENT_RETURN_RECORD = f"{APP_LABEL}.view_clientreturnrecord"
 ADD_CLIENT_RETURN_RECORD = f"{APP_LABEL}.add_clientreturnrecord"
 CHANGE_CLIENT_RETURN_RECORD = f"{APP_LABEL}.change_clientreturnrecord"
 
+VIEW_REMOVAL_RECORD = f"{APP_LABEL}.view_removalrecord"
+ADD_REMOVAL_RECORD = f"{APP_LABEL}.add_removalrecord"
+CHANGE_REMOVAL_RECORD = f"{APP_LABEL}.change_removalrecord"
+
 VIEW_STOCK_MOVEMENT = f"{APP_LABEL}.view_stockmovement"
 
 ADD_CATEGORY = f"{APP_LABEL}.add_category"

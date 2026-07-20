@@ -17,6 +17,8 @@ from .models import (
     ProductUnit,
     ReceivingItem,
     ReceivingRecord,
+    RemovalItem,
+    RemovalRecord,
     RepairItem,
     RepairRecord,
     ReservationItem,
@@ -31,6 +33,7 @@ from .services import (
     create_delivery_record,
     create_issue_record,
     create_receiving_record,
+    create_removal_record,
     create_repair_record,
     create_reservation_record,
     release_reservation_record,
@@ -177,6 +180,7 @@ class ProductSerializer(serializers.ModelSerializer):
     issued_units = serializers.SerializerMethodField()
     sold_units = serializers.SerializerMethodField()
     repair_units = serializers.SerializerMethodField()
+    removed_units = serializers.SerializerMethodField()
     is_low_stock = serializers.SerializerMethodField()
     stock_alert_tone = serializers.SerializerMethodField()
 
@@ -208,6 +212,7 @@ class ProductSerializer(serializers.ModelSerializer):
             "issued_units",
             "sold_units",
             "repair_units",
+            "removed_units",
             "is_low_stock",
             "stock_alert_tone",
         )
@@ -220,6 +225,7 @@ class ProductSerializer(serializers.ModelSerializer):
             "issued_units",
             "sold_units",
             "repair_units",
+            "removed_units",
             "is_low_stock",
             "stock_alert_tone",
         )
@@ -301,6 +307,9 @@ class ProductSerializer(serializers.ModelSerializer):
 
     def get_repair_units(self, obj):
         return self._count(obj, "api_repair_units", "repair_units")
+
+    def get_removed_units(self, obj):
+        return self._count(obj, "api_removed_units", "removed_units")
 
     def get_is_low_stock(self, obj):
         available_units = self.get_available_units(obj)
@@ -391,6 +400,8 @@ class StockMovementSerializer(serializers.ModelSerializer):
     repair_number = serializers.SerializerMethodField()
     client_return = serializers.IntegerField(source="client_return_record_id", read_only=True)
     client_return_number = serializers.SerializerMethodField()
+    removal = serializers.IntegerField(source="removal_record_id", read_only=True)
+    removal_number = serializers.SerializerMethodField()
 
     class Meta:
         model = StockMovement
@@ -426,6 +437,9 @@ class StockMovementSerializer(serializers.ModelSerializer):
             "client_return",
             "client_return_record",
             "client_return_number",
+            "removal",
+            "removal_record",
+            "removal_number",
             "reference",
             "crdate",
             "isactive",
@@ -455,6 +469,9 @@ class StockMovementSerializer(serializers.ModelSerializer):
 
     def get_client_return_number(self, obj):
         return obj.client_return_record.return_number if obj.client_return_record else ""
+
+    def get_removal_number(self, obj):
+        return obj.removal_record.removal_number if obj.removal_record else ""
 
 
 class DeliveryItemSerializer(serializers.ModelSerializer):
@@ -887,6 +904,102 @@ class RepairResolveSerializer(serializers.Serializer):
             raise serializers.ValidationError(exc.messages) from exc
 
 
+class RemovalItemSerializer(serializers.ModelSerializer):
+    product_name = serializers.SerializerMethodField()
+    product_sku = serializers.CharField(source="product.sku", read_only=True)
+    serial_number = serializers.CharField(
+        source="product_unit.serial_number",
+        read_only=True,
+    )
+    product_unit_status = serializers.CharField(
+        source="product_unit.status",
+        read_only=True,
+    )
+    product_unit_status_label = serializers.CharField(
+        source="product_unit.get_status_display",
+        read_only=True,
+    )
+
+    class Meta:
+        model = RemovalItem
+        fields = (
+            "id",
+            "product",
+            "product_name",
+            "product_sku",
+            "product_unit",
+            "serial_number",
+            "product_unit_status",
+            "product_unit_status_label",
+            "notes",
+            "crdate",
+            "isactive",
+        )
+        read_only_fields = fields
+
+    def get_product_name(self, obj):
+        return str(obj.product)
+
+
+class RemovalRecordSerializer(serializers.ModelSerializer):
+    items = RemovalItemSerializer(many=True, read_only=True)
+    total_units = serializers.SerializerMethodField()
+    unit_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=True,
+        allow_empty=False,
+    )
+    reason_label = serializers.CharField(source="get_reason_display", read_only=True)
+    removed_by_name = serializers.CharField(
+        source="removed_by.get_username",
+        read_only=True,
+        default="",
+    )
+
+    class Meta:
+        model = RemovalRecord
+        fields = (
+            "id",
+            "removal_number",
+            "reason",
+            "reason_label",
+            "removal_date",
+            "notes",
+            "removed_by",
+            "removed_by_name",
+            "total_units",
+            "unit_ids",
+            "items",
+            "crdate",
+            "isactive",
+        )
+        read_only_fields = (
+            "removal_number",
+            "reason_label",
+            "removed_by",
+            "removed_by_name",
+            "total_units",
+            "items",
+            "crdate",
+        )
+
+    def get_total_units(self, obj):
+        return obj.total_units
+
+    def create(self, validated_data):
+        unit_ids = validated_data.pop("unit_ids")
+        request = self.context.get("request")
+        try:
+            return create_removal_record(
+                unit_ids=unit_ids,
+                removed_by=request.user if request else None,
+                **validated_data,
+            )
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc
+
+
 class ClientReturnItemSerializer(serializers.ModelSerializer):
     delivery = serializers.IntegerField(source="delivery_item.delivery_id", read_only=True)
     delivery_number = serializers.CharField(
@@ -1273,6 +1386,12 @@ class ReceivingRecordSerializer(serializers.ModelSerializer):
         source="created_by.get_username",
         read_only=True,
     )
+    idempotency_key = serializers.CharField(
+        required=False,
+        write_only=True,
+        allow_blank=True,
+        max_length=64,
+    )
 
     class Meta:
         model = ReceivingRecord
@@ -1294,6 +1413,7 @@ class ReceivingRecordSerializer(serializers.ModelSerializer):
             "created_by_name",
             "total_quantity",
             "item_inputs",
+            "idempotency_key",
             "items",
             "crdate",
             "isactive",

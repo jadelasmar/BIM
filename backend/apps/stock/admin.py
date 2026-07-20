@@ -17,6 +17,8 @@ from .models import (
     ProductUnit,
     ReceivingItem,
     ReceivingRecord,
+    RemovalItem,
+    RemovalRecord,
     RepairItem,
     RepairRecord,
     ReservationItem,
@@ -51,6 +53,7 @@ class ProductAdmin(admin.ModelAdmin):
         "issued_quantity",
         "sold_quantity",
         "repair_quantity",
+        "removed_quantity",
         "reorder_stock_level",
         "stock_alert",
         "category",
@@ -80,9 +83,11 @@ class ProductAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
         return queryset.annotate(
+            # Total Stock excludes sold (and inactive-status) units -- they've
+            # permanently left inventory. See ProductUnit.IN_STOCK_STATUSES.
             total_unit_count=Count(
                 "units",
-                filter=Q(units__isactive=True),
+                filter=Q(units__isactive=True, units__status__in=ProductUnit.IN_STOCK_STATUSES),
             ),
             available_unit_count=Count(
                 "units",
@@ -119,6 +124,13 @@ class ProductAdmin(admin.ModelAdmin):
                     units__isactive=True,
                 ),
             ),
+            removed_unit_count=Count(
+                "units",
+                filter=Q(
+                    units__status=ProductUnit.STATUS_REMOVED,
+                    units__isactive=True,
+                ),
+            ),
         )
 
     def stock_quantity(self, obj, annotation_name, property_name):
@@ -150,6 +162,10 @@ class ProductAdmin(admin.ModelAdmin):
     @admin.display(description="Repair Qty", ordering="repair_unit_count")
     def repair_quantity(self, obj):
         return self.stock_quantity(obj, "repair_unit_count", "repair_units")
+
+    @admin.display(description="Removed Qty", ordering="removed_unit_count")
+    def removed_quantity(self, obj):
+        return self.stock_quantity(obj, "removed_unit_count", "removed_units")
 
     @admin.display(description="Stock Alert")
     def stock_alert(self, obj):
@@ -590,6 +606,80 @@ class RepairRecordAdmin(admin.ModelAdmin):
                     "resolution_notes",
                     "resolved_by",
                     "resolved_at",
+                )
+            },
+        ),
+        (
+            "Notes",
+            {
+                "fields": (
+                    "notes",
+                    "crdate",
+                )
+            },
+        ),
+    )
+
+    @admin.display(description="Units")
+    def unit_count(self, obj):
+        return obj.total_units
+
+
+class RemovalItemInline(admin.TabularInline):
+    model = RemovalItem
+    extra = 0
+    autocomplete_fields = ("product_unit",)
+    readonly_fields = ("product", "crdate")
+    fields = (
+        "product_unit",
+        "product",
+        "notes",
+        "isactive",
+        "crdate",
+    )
+
+
+@admin.register(RemovalRecord)
+class RemovalRecordAdmin(admin.ModelAdmin):
+    inlines = (RemovalItemInline,)
+    list_display = (
+        "removal_number",
+        "reason",
+        "removal_date",
+        "unit_count",
+        "removed_by",
+        "isactive",
+        "crdate",
+    )
+    search_fields = (
+        "removal_number",
+        "notes",
+        "items__product_unit__serial_number",
+        "items__product__descript",
+        "items__product__sku",
+    )
+    list_filter = (
+        "reason",
+        "removal_date",
+        "isactive",
+    )
+    readonly_fields = (
+        "removal_number",
+        "crdate",
+    )
+    autocomplete_fields = ("removed_by",)
+    ordering = ("-removal_date", "-removal_number")
+
+    fieldsets = (
+        (
+            "Removal record",
+            {
+                "fields": (
+                    "removal_number",
+                    "reason",
+                    "removal_date",
+                    "removed_by",
+                    "isactive",
                 )
             },
         ),
