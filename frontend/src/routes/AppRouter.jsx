@@ -836,6 +836,7 @@ function OperationsPage({ data }) {
       title: "Receive Stock",
       detail: "Record supplier receipts with delivery or reference details.",
       href: data.routes.receiveStock,
+      recordsHref: data.routes.receivingRecords,
       enabled: data.quickActions.some((action) => action.label === "Receive Stock" && action.enabled),
       icon: workflowMeta.receive_stock.icon,
       tone: workflowMeta.receive_stock.tone
@@ -844,6 +845,7 @@ function OperationsPage({ data }) {
       title: "Add Unit",
       detail: "Create manual stock units from count or correction.",
       href: data.routes.addStockUnit,
+      recordsHref: data.routes.inventory,
       enabled: data.quickActions.some((action) => action.label === "Add Unit" && action.enabled),
       icon: workflowMeta.add_stock_unit.icon,
       tone: workflowMeta.add_stock_unit.tone
@@ -852,6 +854,7 @@ function OperationsPage({ data }) {
       title: "Create Delivery",
       detail: "Dispatch available stock units.",
       href: data.routes.createDelivery,
+      recordsHref: data.routes.deliveryRecords,
       enabled: data.quickActions.some((action) => action.label === "Create Delivery" && action.enabled),
       icon: workflowMeta.create_delivery.icon,
       tone: workflowMeta.create_delivery.tone
@@ -860,6 +863,7 @@ function OperationsPage({ data }) {
       title: "Create Reservation",
       detail: "Hold available units for a person, client, or job.",
       href: data.routes.createReservation,
+      recordsHref: data.routes.reservationRecords,
       enabled: data.quickActions.some((action) => action.label === "Create Reservation" && action.enabled),
       icon: workflowMeta.create_reservation.icon,
       tone: workflowMeta.create_reservation.tone
@@ -868,6 +872,7 @@ function OperationsPage({ data }) {
       title: "Create Temporary Assignment",
       detail: "Temporarily assign available units that are expected to come back.",
       href: data.routes.createIssue,
+      recordsHref: data.routes.issueRecords,
       enabled: data.quickActions.some((action) => action.label === "Create Temporary Assignment" && action.enabled),
       icon: workflowMeta.create_issue.icon,
       tone: workflowMeta.create_issue.tone
@@ -876,6 +881,7 @@ function OperationsPage({ data }) {
       title: "Create Repair",
       detail: "Move available units into repair, testing, or diagnosis.",
       href: data.routes.createRepair,
+      recordsHref: data.routes.repairRecords,
       enabled: data.quickActions.some((action) => action.label === "Create Repair" && action.enabled),
       icon: workflowMeta.create_repair.icon,
       tone: workflowMeta.create_repair.tone
@@ -884,6 +890,7 @@ function OperationsPage({ data }) {
       title: "Create Client Return",
       detail: "Record sold stock that came back from a client.",
       href: data.routes.createClientReturn,
+      recordsHref: data.routes.clientReturnRecords,
       enabled: data.quickActions.some((action) => action.label === "Create Client Return" && action.enabled),
       icon: workflowMeta.create_client_return.icon,
       tone: workflowMeta.create_client_return.tone
@@ -892,6 +899,7 @@ function OperationsPage({ data }) {
       title: "Remove Unit",
       detail: "Permanently remove a unit for damage, loss, theft, or write-off.",
       href: data.routes.createRemoval,
+      recordsHref: data.routes.removalRecords,
       enabled: data.quickActions.some((action) => action.label === "Remove Unit" && action.enabled),
       icon: workflowMeta.create_removal.icon,
       tone: workflowMeta.create_removal.tone
@@ -908,7 +916,7 @@ function OperationsPage({ data }) {
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {visibleWorkflows.map((workflow) => {
-          const content = (
+          const topContent = (
             <>
               <span className={`inline-flex rounded-lg p-3 ${toneClasses[workflow.tone] || toneClasses.neutral}`}>
                 <Icon name={workflow.icon} className="h-5 w-5" />
@@ -919,21 +927,44 @@ function OperationsPage({ data }) {
               <p className={`mt-2 text-sm ${workflow.enabled ? "text-zinc-400" : "text-zinc-600"}`}>
                 {workflow.detail}
               </p>
-              <div className="mt-5 border-t border-nexus-line pt-3 text-sm font-semibold">
-                <span className={workflow.enabled ? "text-[var(--bim-orange-text)]" : "text-zinc-600"}>
-                  {workflow.enabled ? "Open" : "Pending"}
-                </span>
-              </div>
             </>
           );
 
+          const footer = (
+            <div className="mt-5 flex items-center justify-between gap-3 border-t border-nexus-line pt-3 text-sm font-semibold">
+              {workflow.enabled && workflow.href ? (
+                <a href={workflow.href} className="text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
+                  Open
+                </a>
+              ) : (
+                <span className="text-zinc-600">Pending</span>
+              )}
+              {workflow.recordsHref ? (
+                <a
+                  href={workflow.recordsHref}
+                  className="inline-flex items-center gap-1 text-zinc-400 hover:text-[var(--bim-orange-text)]"
+                >
+                  View Records
+                  <ChevronRight className="h-4 w-4" />
+                </a>
+              ) : null}
+            </div>
+          );
+
           return workflow.enabled && workflow.href ? (
-            <a key={workflow.title} href={workflow.href} className="rounded-lg border border-nexus-line bg-nexus-panel p-5 hover:border-[rgb(var(--bim-orange-focus-rgb)/80%)]">
-              {content}
-            </a>
+            <article
+              key={workflow.title}
+              className="rounded-lg border border-nexus-line bg-nexus-panel p-5 hover:border-[rgb(var(--bim-orange-focus-rgb)/80%)]"
+            >
+              <a href={workflow.href} className="block">
+                {topContent}
+              </a>
+              {footer}
+            </article>
           ) : (
             <article key={workflow.title} aria-disabled="true" className="cursor-not-allowed rounded-lg border border-nexus-line bg-nexus-panel p-5 opacity-45 grayscale">
-              {content}
+              {topContent}
+              {footer}
             </article>
           );
         })}
@@ -7422,21 +7453,30 @@ function parseCardCount(value) {
 // true. Any card not listed here -- including one added later -- renders
 // neutral automatically; nothing silently inherits a static backend tone the
 // way the Clients card once did.
+// Icon color per dashboard card. Out of Stock / Low Stock stay
+// severity-driven (red/amber only once their count is > 0); every other
+// card gets a fixed, always-on color regardless of its value, so red/amber
+// stay reserved for those two severity cards alone.
+const FIXED_CARD_TONES = {
+  "Total Products": "blue",
+  "Available Stock": "green",
+  "Reserved Stock": "indigo",
+  "Pending Actions": "cyan",
+  "Suppliers": "purple",
+  "Receiving Records": "sky",
+  "Delivery Records": "yellow",
+  "Clients": "blue"
+};
+
 function dynamicIconTone(item) {
   const count = parseCardCount(item.value);
-  if (item.label === "Available Stock") {
-    return count > 0 ? "green" : "neutral";
-  }
   if (item.label === "Low Stock Alerts") {
     return count > 0 ? "warning" : "neutral";
   }
   if (item.label === "Out of Stock Products") {
     return count > 0 ? "danger" : "neutral";
   }
-  if (item.label === "Pending Actions") {
-    return count > 0 ? "warning" : "neutral";
-  }
-  return "neutral";
+  return FIXED_CARD_TONES[item.label] || "neutral";
 }
 
 function KpiGrid({ items }) {
@@ -7546,6 +7586,7 @@ function RecentActivity({ items }) {
               <th className="px-4 py-3 font-medium">Reference</th>
               <th className="px-4 py-3 font-medium">Activity</th>
               <th className="px-4 py-3 font-medium">Product / Record</th>
+              <th className="px-4 py-3 font-medium">Client / Supplier</th>
               <th className="px-4 py-3 font-medium">Performed by</th>
               <th className="px-4 py-3 font-medium">Date</th>
               <th className="px-4 py-3 font-medium">Status</th>
@@ -7560,6 +7601,7 @@ function RecentActivity({ items }) {
                     <td className="px-4 py-4 font-mono text-xs text-[var(--bim-orange-text)]">{item.reference || "-"}</td>
                     <td className="px-4 py-4 font-semibold text-white">{item.type || "-"}</td>
                     <td className="px-4 py-4 text-zinc-400">{item.related || "-"}</td>
+                    <td className="px-4 py-4 text-zinc-400">{item.party || "-"}</td>
                     <td className="px-4 py-4 text-zinc-400">{item.user || "-"}</td>
                     <td className="px-4 py-4 text-zinc-400">{item.date ? String(item.date) : "-"}</td>
                     <td className="px-4 py-4">
@@ -7592,7 +7634,7 @@ function RecentActivity({ items }) {
               })
             ) : (
               <tr className="border-t border-nexus-line">
-                <td className="px-4 py-8 text-center text-sm text-zinc-500" colSpan="6">
+                <td className="px-4 py-8 text-center text-sm text-zinc-500" colSpan="7">
                   No activity recorded yet.
                 </td>
               </tr>

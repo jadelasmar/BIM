@@ -37,7 +37,7 @@ UI_TOKENS = {
     "reserved_stock": {
         "label": "Reserved Stock",
         "icon": "clock-3",
-        "tone": "neutral",
+        "tone": "indigo",
     },
     "out_of_stock": {
         "label": "Out of Stock Products",
@@ -52,7 +52,7 @@ UI_TOKENS = {
     "pending_actions": {
         "label": "Pending Actions",
         "icon": "clipboard",
-        "tone": "neutral",
+        "tone": "cyan",
     },
     "suppliers": {
         "label": "Suppliers",
@@ -67,12 +67,12 @@ UI_TOKENS = {
     "receiving_records": {
         "label": "Receiving Records",
         "icon": "inbox",
-        "tone": "green",
+        "tone": "sky",
     },
     "delivery_records": {
         "label": "Delivery Records",
         "icon": "delivery",
-        "tone": "indigo",
+        "tone": "yellow",
     },
     "reservation_records": {
         "label": "Reservation Records",

@@ -142,9 +142,6 @@ def _command_center_initial_data(
     pending_actions_total = (
         sum(pending_counts) if all(isinstance(count, int) for count in pending_counts) else "-"
     )
-    pending_actions_tone = (
-        "warning" if isinstance(pending_actions_total, int) and pending_actions_total > 0 else "neutral"
-    )
 
     can_create_delivery = user.has_perm(
         stock_constants.ADD_DELIVERY_RECORD
@@ -353,7 +350,7 @@ def _command_center_initial_data(
                 "detail": _pending_actions_detail(pending_reservations, pending_issues, pending_repairs),
                 "trend": "",
                 "href": operations_href,
-                **ui_item("pending_actions", tone=pending_actions_tone),
+                **ui_item("pending_actions"),
             },
         ],
         "overview": [

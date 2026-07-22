@@ -118,7 +118,7 @@ def recent_stock_activity(user):
     if user.has_perm(stock_constants.VIEW_DELIVERY_RECORD):
         deliveries = (
             DeliveryRecord.objects.filter(isactive=True)
-            .select_related("created_by")
+            .select_related("created_by", "client")
             .prefetch_related("items__product")
             .order_by("-crdate")[:RECENT_ACTIVITY_LIMIT]
         )
@@ -128,6 +128,7 @@ def recent_stock_activity(user):
                     "type": "Delivery",
                     "reference": delivery.delivery_number,
                     "related": delivery_record_summary(delivery),
+                    "party": delivery.client.name if delivery.client_id else delivery.customer_name,
                     "user": _user_display_name(delivery.created_by)
                     if delivery.created_by
                     else "",
@@ -151,6 +152,7 @@ def recent_stock_activity(user):
                     "type": "Receiving",
                     "reference": receiving.receiving_number,
                     "related": receiving_record_summary(receiving),
+                    "party": receiving.supplier.name if receiving.supplier_id else "",
                     "user": _user_display_name(receiving.created_by)
                     if receiving.created_by
                     else "",
@@ -174,6 +176,7 @@ def recent_stock_activity(user):
                     "type": "Reservation",
                     "reference": reservation.reservation_number,
                     "related": _items_summary(reservation, "Reservation record"),
+                    "party": reservation.reserved_for,
                     "user": _user_display_name(reservation.reserved_by)
                     if reservation.reserved_by
                     else "",
@@ -197,6 +200,7 @@ def recent_stock_activity(user):
                     "type": "Temporary Assignment",
                     "reference": issue.issue_number,
                     "related": _items_summary(issue, "Temporary assignment record"),
+                    "party": issue.issued_to,
                     "user": _user_display_name(issue.issued_by) if issue.issued_by else "",
                     "date": issue.issue_date,
                     "status": "Issued",
@@ -218,6 +222,7 @@ def recent_stock_activity(user):
                     "type": "Repair",
                     "reference": repair.repair_number,
                     "related": _items_summary(repair, "Repair record"),
+                    "party": "",
                     "user": _user_display_name(repair.sent_by) if repair.sent_by else "",
                     "date": repair.repair_date,
                     "status": "In Repair",
@@ -229,7 +234,7 @@ def recent_stock_activity(user):
     if user.has_perm(stock_constants.VIEW_CLIENT_RETURN_RECORD):
         client_returns = (
             ClientReturnRecord.objects.filter(isactive=True)
-            .select_related("received_by")
+            .select_related("received_by", "client")
             .prefetch_related("items__product")
             .order_by("-return_date")[:RECENT_ACTIVITY_LIMIT]
         )
@@ -239,6 +244,9 @@ def recent_stock_activity(user):
                     "type": "Client Return",
                     "reference": client_return.return_number,
                     "related": _items_summary(client_return, "Client return record"),
+                    "party": client_return.client.name
+                    if client_return.client_id
+                    else client_return.customer_name,
                     "user": _user_display_name(client_return.received_by)
                     if client_return.received_by
                     else "",
@@ -264,6 +272,7 @@ def recent_stock_activity(user):
                     "type": "Removal",
                     "reference": removal.removal_number,
                     "related": _items_summary(removal, "Removal record"),
+                    "party": "",
                     "user": _user_display_name(removal.removed_by)
                     if removal.removed_by
                     else "",
