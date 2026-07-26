@@ -1375,7 +1375,6 @@ class BIMPOSAccessTests(TestCase):
         self.assertEqual(data["currentPath"], "/")
         self.assertEqual(data["api"]["commandCenter"], "/api/command-center/")
         self.assertEqual(data["pollIntervalMs"], 60000)
-        self.assertEqual(data["recentReceiving"], [])
         self.assertNotIn(unit.serial_number, str(data["recentActivity"]))
 
     def test_command_center_shows_inventory_module_by_permission(self):
@@ -1441,16 +1440,28 @@ class BIMPOSAccessTests(TestCase):
         self.client.force_login(user)
 
         response = self.client.get("/")
+        initial_data = response.context["initial_data"]
         kpis_by_label = {
             item["label"]: item
-            for item in response.context["initial_data"]["kpis"]
+            for item in initial_data["kpis"]
         }
 
         self.assertEqual(kpis_by_label["Total Products"]["href"], "/inventory/")
-        self.assertEqual(kpis_by_label["Available Stock"]["href"], "/inventory/?status=available")
-        self.assertEqual(kpis_by_label["Reserved Stock"]["href"], "/inventory/?status=reserved")
         self.assertEqual(kpis_by_label["Out of Stock Products"]["href"], "/inventory/?stock=out")
         self.assertEqual(kpis_by_label["Low Stock Alerts"]["href"], "/inventory/?stock=low")
+        self.assertNotIn("Total Stock", kpis_by_label)
+        self.assertNotIn("Available Stock", kpis_by_label)
+        self.assertNotIn("Reserved Stock", kpis_by_label)
+
+        # Reserved/Issued/Repair are chart rows, not KPI cards -- each bar
+        # carries the same filtered-inventory link the old per-status KPI
+        # cards used.
+        bars_by_status = {
+            bar["status"]: bar for bar in initial_data["stockStatusChart"]["bars"]
+        }
+        self.assertEqual(bars_by_status["reserved"]["href"], "/inventory/?status=reserved")
+        self.assertEqual(bars_by_status["issued"]["href"], "/inventory/?status=issued")
+        self.assertEqual(bars_by_status["repair"]["href"], "/inventory/?status=repair")
 
     def test_command_center_pending_modules_and_actions_are_disabled(self):
         user = User.objects.create_user(username="viewer", password="test-pass")
@@ -1579,7 +1590,6 @@ class BIMPOSAccessTests(TestCase):
         }
 
         self.assertEqual(overview_by_label["Receiving Records"]["value"], "0")
-        self.assertEqual(initial_data["recentReceiving"], [])
         self.assertNotIn(unit.serial_number, str(initial_data["recentActivity"]))
         self.assertNotIn("LEGACY-", str(initial_data["recentActivity"]))
         self.assertNotIn("RCV-", str(initial_data["recentActivity"]))
@@ -1676,6 +1686,64 @@ class BIMPOSAccessTests(TestCase):
         self.assertEqual(activity[0]["type"], "Removal")
         self.assertEqual(activity[0]["reference"], removal.removal_number)
 
+    def test_recent_activity_api_paginates_older_rows(self):
+        from datetime import timedelta
+
+        from .models import RemovalRecord
+
+        user = User.objects.create_user(username="viewer", password="test-pass")
+        user.user_permissions.add(Permission.objects.get(codename="view_removalrecord"))
+        today = timezone.localdate()
+        removals = [
+            RemovalRecord.objects.create(
+                reason=RemovalRecord.REASON_OTHER,
+                removal_date=today - timedelta(days=index),
+            )
+            for index in range(10)
+        ]
+        self.client.force_login(user)
+
+        first_page = self.client.get("/api/stock/recent-activity/", {"limit": 8})
+        second_page = self.client.get(
+            "/api/stock/recent-activity/", {"limit": 8, "offset": 8}
+        )
+
+        self.assertEqual(first_page.status_code, 200)
+        first_data = first_page.json()
+        self.assertEqual(len(first_data["results"]), 8)
+        self.assertTrue(first_data["hasMore"])
+        self.assertEqual(
+            [item["reference"] for item in first_data["results"]],
+            [removal.removal_number for removal in removals[:8]],
+        )
+
+        second_data = second_page.json()
+        self.assertEqual(len(second_data["results"]), 2)
+        self.assertFalse(second_data["hasMore"])
+        self.assertEqual(
+            [item["reference"] for item in second_data["results"]],
+            [removal.removal_number for removal in removals[8:]],
+        )
+
+    def test_recent_activity_api_respects_per_type_permission(self):
+        from .models import RemovalRecord
+
+        user = User.objects.create_user(username="limited-viewer", password="test-pass")
+        user.groups.clear()
+        user.user_permissions.add(Permission.objects.get(codename="view_removalrecord"))
+        DeliveryRecord.objects.create(customer_name="Acme Co")
+        removal = RemovalRecord.objects.create(reason=RemovalRecord.REASON_STOLEN)
+        self.client.force_login(user)
+
+        response = self.client.get("/api/stock/recent-activity/")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(len(data["results"]), 1)
+        self.assertEqual(data["results"][0]["type"], "Removal")
+        self.assertEqual(data["results"][0]["reference"], removal.removal_number)
+        self.assertFalse(data["hasMore"])
+
     def test_command_center_recent_activity_uses_receiving_records(self):
         from .services import create_receiving_record
 
@@ -1704,7 +1772,6 @@ class BIMPOSAccessTests(TestCase):
 
         response = self.client.get("/")
         activity = response.context["initial_data"]["recentActivity"][0]
-        receiving_panel = response.context["initial_data"]["recentReceiving"][0]
         overview_by_label = {
             item["label"]: item for item in response.context["initial_data"]["overview"]
         }
@@ -1713,13 +1780,6 @@ class BIMPOSAccessTests(TestCase):
         self.assertEqual(activity["reference"], receiving.receiving_number)
         self.assertEqual(activity["related"], "2 stock units")
         self.assertEqual(activity["href"], f"/operations/receiving/{receiving.pk}/")
-        self.assertEqual(receiving_panel["reference"], receiving.receiving_number)
-        self.assertEqual(receiving_panel["title"], "Gulf Networks LLC")
-        self.assertEqual(receiving_panel["detail"], "2 stock units")
-        self.assertEqual(
-            receiving_panel["href"],
-            f"/operations/receiving/{receiving.pk}/",
-        )
         self.assertEqual(overview_by_label["Receiving Records"]["value"], "1")
 
     def test_manual_add_unit_is_not_counted_as_receiving_record(self):
@@ -1749,43 +1809,8 @@ class BIMPOSAccessTests(TestCase):
         }
 
         self.assertEqual(overview_by_label["Receiving Records"]["value"], "0")
-        self.assertEqual(initial_data["recentReceiving"], [])
         self.assertNotIn(manual_unit.serial_number, str(initial_data["recentActivity"]))
         self.assertNotIn("RCV-", str(initial_data["recentActivity"]))
-
-    def test_command_center_recent_deliveries_panel_uses_delivery_records(self):
-        user = User.objects.create_user(username="viewer", password="test-pass")
-        user.user_permissions.add(Permission.objects.get(codename="view_product"))
-        category = Category.objects.create(name="Laser")
-        brand = Brand.objects.create(brandname="Canon")
-        model = ProductModel.objects.create(brand=brand, modelname="L100")
-        product = Product.objects.create(
-            descript="Canon laser printer",
-            category=category,
-            model=model,
-        )
-        unit = ProductUnit.objects.create(
-            product=product,
-            serial_number="DELIVERY-PANEL",
-            status=ProductUnit.STATUS_SOLD,
-            isactive=True,
-        )
-        delivery = DeliveryRecord.objects.create(customer_name="IT Department")
-        delivery.items.create(product=product, product_unit=unit)
-        self.client.force_login(user)
-
-        response = self.client.get("/")
-        delivery_panel = response.context["initial_data"]["recentDeliveries"][0]
-
-        self.assertEqual(delivery_panel["reference"], delivery.delivery_number)
-        self.assertEqual(delivery_panel["title"], "IT Department")
-        self.assertEqual(delivery_panel["detail"], "1 Canon laser printer")
-        self.assertEqual(
-            delivery_panel["href"],
-            f"/operations/deliveries/{delivery.pk}/",
-        )
-        self.assertEqual(delivery_panel["status"], "Delivered")
-        self.assertEqual(delivery_panel["status_class"], "delivered")
 
     def test_command_center_quick_actions_are_current_workflows_only(self):
         user = User.objects.create_user(username="operator", password="test-pass")

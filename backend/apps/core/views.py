@@ -16,14 +16,14 @@ from apps.stock.selectors import (
     delivery_record_count,
     low_stock_alerts,
     low_stock_counts,
+    out_of_stock_products,
     pending_issue_count,
     pending_repair_count,
     pending_reservation_count,
-    recent_deliveries,
-    recent_receiving,
     recent_receiving_count,
     recent_stock_activity,
     reserved_unit_count,
+    stock_status_breakdown,
     supplier_count,
     user_can_use_stock_operations,
     user_can_view_stock,
@@ -99,6 +99,23 @@ def _pending_actions_detail(reservations, issues, repairs):
     return ", ".join(parts) if parts else "Nothing awaiting action"
 
 
+def _kpi_names_preview(items, total_count, show=2):
+    """A compact "Product A, Product B +N more" string for a KPI card --
+    used by Low Stock Alerts / Out of Stock Products so the card names the
+    actual products instead of just a count. `total_count` (already computed
+    separately) drives the "+N more" tally rather than len(items), since
+    `items` is capped at a small limit for card display."""
+    if not isinstance(total_count, int) or total_count <= 0:
+        return ""
+
+    names = [item["productName"] for item in items[:show]]
+    remaining = total_count - len(names)
+    preview = ", ".join(names)
+    if remaining > 0:
+        preview = f"{preview} +{remaining} more" if preview else f"+{remaining} more"
+    return preview
+
+
 def _user_display_name(user):
     full_name = user.get_full_name().strip()
     return full_name or user.get_username()
@@ -112,8 +129,8 @@ def _command_center_initial_data(
     modules,
     recent_activity,
     low_stock_alerts,
-    recent_deliveries_panel,
-    recent_receiving_panel,
+    out_of_stock_products,
+    stock_status_chart,
     pending_reservations,
     pending_issues,
     pending_repairs,
@@ -126,8 +143,6 @@ def _command_center_initial_data(
     can_access_admin = user.is_staff or user.is_superuser
     current_path = current_path or request.path
     total_products = metrics[0]["value"]
-    available_stock = metrics[1]["value"]
-    reserved_stock = metrics[2]["value"]
     low_stock = metrics[3]["value"]
     out_of_stock = metrics[4]["value"]
     recent_deliveries = metrics[5]["value"]
@@ -222,6 +237,7 @@ def _command_center_initial_data(
         },
         "api": {
             "commandCenter": reverse("command_center_data"),
+            "recentActivity": "/api/stock/recent-activity/",
             "search": "/api/stock/search/",
             "summary": "/api/stock/summary/",
             "products": "/api/stock/products/",
@@ -316,33 +332,19 @@ def _command_center_initial_data(
                 **ui_item("total_products"),
             },
             {
-                "value": _format_count(available_stock),
-                "detail": "Ready to allocate",
-                "trend": "",
-                "href": f"{reverse('inventory')}?status={ProductUnit.STATUS_AVAILABLE}",
-                **ui_item("available_stock"),
-            },
-            {
-                "value": _format_count(reserved_stock),
-                "detail": "On hold, awaiting pickup or delivery",
-                "trend": "",
-                "href": f"{reverse('inventory')}?status={ProductUnit.STATUS_RESERVED}",
-                **ui_item("reserved_stock"),
-            },
-            {
                 "value": _format_count(low_stock),
                 "detail": "Review items" if isinstance(low_stock, int) and low_stock > 0 else "None right now",
+                "namesPreview": _kpi_names_preview(low_stock_alerts, low_stock),
                 "trend": "",
                 "href": f"{reverse('inventory')}?stock=low",
-                "todo": "Replace with backend low-stock filter when product stock filters move server-side.",
                 **ui_item("low_stock", tone=low_stock_tone),
             },
             {
                 "value": _format_count(out_of_stock),
                 "detail": "Reorder needed" if isinstance(out_of_stock, int) and out_of_stock > 0 else "None right now",
+                "namesPreview": _kpi_names_preview(out_of_stock_products, out_of_stock),
                 "trend": "",
                 "href": f"{reverse('inventory')}?stock=out",
-                "todo": "Replace with backend out-of-stock filter when product stock filters move server-side.",
                 **ui_item("out_of_stock", tone=out_of_stock_tone),
             },
             {
@@ -362,6 +364,13 @@ def _command_center_initial_data(
                 **ui_item("suppliers"),
             },
             {
+                "value": _format_count(client_count()),
+                "detail": "active clients",
+                "href": reverse("clients"),
+                "enabled": True,
+                **ui_item("clients"),
+            },
+            {
                 "value": _format_count(recent_receiving),
                 "detail": "Last 30 days",
                 "href": reverse("operations_receiving"),
@@ -372,13 +381,6 @@ def _command_center_initial_data(
                 "detail": "All-time total",
                 "href": reverse("operations_deliveries"),
                 **ui_item("delivery_records"),
-            },
-            {
-                "value": _format_count(client_count()),
-                "detail": "active clients",
-                "href": reverse("clients"),
-                "enabled": True,
-                **ui_item("clients"),
             },
             disabled_ui_item(
                 "assets",
@@ -397,8 +399,7 @@ def _command_center_initial_data(
         "quickActions": quick_actions,
         "recentActivity": recent_activity,
         "lowStockAlerts": low_stock_alerts,
-        "recentDeliveries": recent_deliveries_panel,
-        "recentReceiving": recent_receiving_panel,
+        "stockStatusChart": stock_status_chart,
         "pollIntervalMs": 60000,
     }
 
@@ -602,8 +603,12 @@ def _build_command_center_initial_data(request, current_path=None):
 
     recent_activity = recent_stock_activity(user) if can_view_stock else []
     low_stock_alerts_panel = low_stock_alerts() if can_view_stock else []
-    recent_deliveries_panel = recent_deliveries() if can_view_stock else []
-    recent_receiving_panel = recent_receiving() if can_view_stock else []
+    out_of_stock_products_panel = out_of_stock_products() if can_view_stock else []
+    stock_status_chart = (
+        stock_status_breakdown()
+        if can_view_stock
+        else {"available": "-", "total": "-", "bars": []}
+    )
     initial_data = _command_center_initial_data(
         request=request,
         user=user,
@@ -612,8 +617,8 @@ def _build_command_center_initial_data(request, current_path=None):
         modules=modules,
         recent_activity=recent_activity,
         low_stock_alerts=low_stock_alerts_panel,
-        recent_deliveries_panel=recent_deliveries_panel,
-        recent_receiving_panel=recent_receiving_panel,
+        out_of_stock_products=out_of_stock_products_panel,
+        stock_status_chart=stock_status_chart,
         pending_reservations=pending_reservations,
         pending_issues=pending_issues,
         pending_repairs=pending_repairs,

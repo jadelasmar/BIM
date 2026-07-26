@@ -6,6 +6,7 @@ app_name = "bim_stock_api"
 
 urlpatterns = [
     path("search/", api_views.GlobalSearchAPIView.as_view(), name="search"),
+    path("recent-activity/", api_views.RecentActivityAPIView.as_view(), name="recent-activity"),
     path("summary/", api_views.InventorySummaryAPIView.as_view(), name="summary"),
     path("products/", api_views.ProductListCreateAPIView.as_view(), name="products"),
     path(

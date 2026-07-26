@@ -37,6 +37,7 @@ import {
   useToast
 } from "../components/ui";
 import { statusMeta } from "../constants/statusStyles";
+import { STOCK_STATUS_COLORS } from "../constants/stockStatusColors";
 import { toneClasses, workflowMeta } from "../constants/uiRegistry";
 import { DEFAULT_THEME_STORAGE_KEY, applyTheme, currentTheme } from "../hooks/useTheme";
 import { LoginPage, PasswordSetupPage } from "../pages/auth/AuthPages";
@@ -418,16 +419,12 @@ function CommandCenter({ data }) {
         <h1 className="bim-page-title">Command Center</h1>
         <p className="bim-page-description">Live snapshot of inventory levels, pending operations, and recent activity.</p>
       </header>
+      <StockStatusChart chart={dashboardData.stockStatusChart} />
       <KpiGrid items={dashboardData.kpis} />
       <Overview items={dashboardData.overview} />
 
       <section className="mt-4">
-        <RecentActivity items={dashboardData.recentActivity} />
-      </section>
-
-      <section className="mt-4 grid gap-4 xl:grid-cols-2">
-        <RecentDeliveries items={dashboardData.recentDeliveries} />
-        <RecentReceiving items={dashboardData.recentReceiving} />
+        <RecentActivity items={dashboardData.recentActivity} endpoint={dashboardData.api?.recentActivity} />
       </section>
     </Shell>
   );
@@ -5165,12 +5162,40 @@ function InventoryPage({ data }) {
   const outOfStockCount = visibleProducts.filter((product) => product.available_units === 0).length;
   const inactiveCount = visibleProducts.filter((product) => !product.isactive || product.available_units === 0).length;
   const inventoryKpis = [
+    // First 3 match Command Center's current card order (Command Center has
+    // no Total Stock/Available Stock cards of its own -- those two stayed
+    // Inventory-only -- and no Pending Actions card here, since that's an
+    // Operations concept with no Inventory equivalent).
     {
       label: "Total Products",
       value: formatCount(summary?.total_products ?? 0),
       detail: "catalogue items",
       icon: "package",
       tone: "blue",
+      href: data.routes.inventory
+    },
+    {
+      label: "Low Stock Alerts",
+      value: formatCount(summary?.low_stock_products ?? 0),
+      detail: "products at or below threshold",
+      icon: "triangle-alert",
+      tone: (summary?.low_stock_products ?? 0) > 0 ? "warning" : "neutral",
+      href: data.routes.lowStock
+    },
+    {
+      label: "Out of Stock Products",
+      value: formatCount(summary?.out_of_stock_products ?? outOfStockCount),
+      detail: "products with no available units",
+      icon: "package-x",
+      tone: (summary?.out_of_stock_products ?? outOfStockCount) > 0 ? "danger" : "neutral",
+      href: data.routes.outOfStock
+    },
+    {
+      label: "Total Stock",
+      value: formatCount(summary?.total_stock_units ?? 0),
+      detail: "available, reserved, issued & repair",
+      icon: "layers",
+      tone: "purple",
       href: data.routes.inventory
     },
     {
@@ -5190,20 +5215,20 @@ function InventoryPage({ data }) {
       href: `${data.routes.inventory}?status=reserved`
     },
     {
-      label: "Low Stock Alerts",
-      value: formatCount(summary?.low_stock_products ?? 0),
-      detail: "products at or below threshold",
-      icon: "triangle-alert",
-      tone: (summary?.low_stock_products ?? 0) > 0 ? "warning" : "neutral",
-      href: data.routes.lowStock
+      label: "Issued Stock",
+      value: formatCount(summary?.issued_units ?? 0),
+      detail: "assigned out",
+      icon: "user-check",
+      tone: "sky",
+      href: `${data.routes.inventory}?status=issued`
     },
     {
-      label: "Out of Stock Products",
-      value: formatCount(summary?.out_of_stock_products ?? outOfStockCount),
-      detail: "products with no available units",
-      icon: "package-x",
-      tone: (summary?.out_of_stock_products ?? outOfStockCount) > 0 ? "danger" : "neutral",
-      href: data.routes.outOfStock
+      label: "Repair Stock",
+      value: formatCount(summary?.repair_units ?? 0),
+      detail: "under repair",
+      icon: "wrench",
+      tone: "yellow",
+      href: `${data.routes.inventory}?status=repair`
     }
   ];
 
@@ -7459,8 +7484,11 @@ function parseCardCount(value) {
 // stay reserved for those two severity cards alone.
 const FIXED_CARD_TONES = {
   "Total Products": "blue",
+  "Total Stock": "purple",
   "Available Stock": "green",
   "Reserved Stock": "indigo",
+  "Issued Stock": "sky",
+  "Repair Stock": "yellow",
   "Pending Actions": "cyan",
   "Suppliers": "purple",
   "Receiving Records": "sky",
@@ -7477,6 +7505,78 @@ function dynamicIconTone(item) {
     return count > 0 ? "danger" : "neutral";
   }
   return FIXED_CARD_TONES[item.label] || "neutral";
+}
+
+function StockStatusChart({ chart }) {
+  const [theme, setTheme] = useState(() => currentTheme());
+
+  useEffect(() => {
+    function handleThemeChange(event) {
+      setTheme(event.detail === "light" ? "light" : "dark");
+    }
+    document.addEventListener("bim-nexus-theme-change", handleThemeChange);
+    return () => document.removeEventListener("bim-nexus-theme-change", handleThemeChange);
+  }, []);
+
+  const { available, total, bars = [] } = chart || {};
+  const hasAccess = typeof available === "number";
+  const maxCount = Math.max(1, ...bars.map((bar) => bar.count));
+
+  return (
+    <section className="mb-4 rounded-lg border border-nexus-line bg-nexus-panel p-4" aria-label="Stock status breakdown">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="bim-section-title">Stock Status Breakdown</h2>
+        {hasAccess ? (
+          <div className="flex items-center gap-4 text-sm">
+            <span className="text-zinc-400">
+              Available <span className="font-semibold text-white">{available}</span>
+            </span>
+            <span className="text-zinc-400">
+              Total <span className="font-semibold text-white">{total}</span>
+            </span>
+          </div>
+        ) : null}
+      </div>
+      {hasAccess ? (
+        <div className="space-y-3">
+          {bars.map((bar) => {
+            const color = STOCK_STATUS_COLORS[bar.status]?.[theme] || "#898781";
+            const widthPct = Math.max(2, Math.round((bar.count / maxCount) * 100));
+            return (
+              <div
+                key={bar.status}
+                className={`flex items-center gap-3 rounded-md px-2 py-1.5 -mx-2 focus:outline-none focus:ring-2 focus:ring-[var(--bim-orange-focus)] ${
+                  bar.href ? "cursor-pointer hover:bg-nexus-panel2" : ""
+                }`}
+                tabIndex={0}
+                title={`${bar.label}: ${bar.count} unit${bar.count === 1 ? "" : "s"}`}
+                onClick={() => {
+                  if (bar.href) window.location.assign(bar.href);
+                }}
+                onKeyDown={(event) => {
+                  if (bar.href && (event.key === "Enter" || event.key === " ")) {
+                    event.preventDefault();
+                    window.location.assign(bar.href);
+                  }
+                }}
+              >
+                <span className="w-28 shrink-0 text-sm text-zinc-400">{bar.label}</span>
+                <div className="h-3 flex-1 rounded-full bg-nexus-panel2">
+                  <div
+                    className="h-3 rounded-r-[4px] transition-[filter] hover:brightness-110"
+                    style={{ width: `${widthPct}%`, backgroundColor: color }}
+                  />
+                </div>
+                <span className="w-10 shrink-0 text-right text-sm font-semibold text-white">{bar.count}</span>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="text-sm text-zinc-500">Stock status data requires inventory view access.</p>
+      )}
+    </section>
+  );
 }
 
 function KpiGrid({ items }) {
@@ -7515,6 +7615,11 @@ function KpiGrid({ items }) {
               <span>{item.detail}</span>
               {item.href ? <ChevronRight className="h-4 w-4 shrink-0 text-zinc-600" /> : null}
             </div>
+            {item.namesPreview ? (
+              <p className="mt-1 truncate text-xs text-zinc-500" title={item.namesPreview}>
+                {item.namesPreview}
+              </p>
+            ) : null}
             {item.trend ? (
               <p className={`mt-2 text-xs font-semibold ${item.tone === "stock" ? "text-nexus-red" : "text-nexus-green"}`}>
                 {item.trend}
@@ -7524,7 +7629,7 @@ function KpiGrid({ items }) {
         );
 
         return item.href ? (
-          <a key={item.label} href={item.href} className={className} title={item.todo || undefined}>
+          <a key={item.label} href={item.href} className={className}>
             {content}
           </a>
         ) : (
@@ -7575,13 +7680,96 @@ function Overview({ items }) {
   );
 }
 
-function RecentActivity({ items }) {
+const RECENT_ACTIVITY_PAGE_SIZE = 8;
+// Scroll-near-bottom threshold, in pixels, that triggers fetching the next
+// (older) page -- see RecentActivity's onScroll handler below.
+const RECENT_ACTIVITY_SCROLL_THRESHOLD = 120;
+// Workflow types shown in the type filter, matching recent_stock_activity()'s
+// "type" values (apps/stock/selectors.py) -- "All" is added at render time.
+const RECENT_ACTIVITY_TYPES = [
+  "Receiving",
+  "Delivery",
+  "Reservation",
+  "Temporary Assignment",
+  "Repair",
+  "Client Return",
+  "Removal"
+];
+
+function RecentActivity({ items, endpoint }) {
+  const [rows, setRows] = useState(items);
+  const [hasMore, setHasMore] = useState(items.length >= RECENT_ACTIVITY_PAGE_SIZE);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [typeFilter, setTypeFilter] = useState("All");
+  const loadingRef = useRef(false);
+
+  useEffect(() => {
+    setRows(items);
+    setHasMore(items.length >= RECENT_ACTIVITY_PAGE_SIZE);
+  }, [items]);
+
+  const loadMore = useCallback(async () => {
+    if (!endpoint || loadingRef.current || !hasMore) return;
+    loadingRef.current = true;
+    setLoadingMore(true);
+    try {
+      const params = new URLSearchParams({
+        offset: String(rows.length),
+        limit: String(RECENT_ACTIVITY_PAGE_SIZE)
+      });
+      const response = await fetch(`${endpoint}?${params.toString()}`, {
+        headers: { Accept: "application/json" }
+      });
+      if (!response.ok) {
+        setHasMore(false);
+        return;
+      }
+      const data = await response.json();
+      setRows((current) => [...current, ...(data.results || [])]);
+      setHasMore(Boolean(data.hasMore));
+    } catch {
+      setHasMore(false);
+    } finally {
+      loadingRef.current = false;
+      setLoadingMore(false);
+    }
+  }, [endpoint, hasMore, rows.length]);
+
+  function handleScroll(event) {
+    const el = event.currentTarget;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < RECENT_ACTIVITY_SCROLL_THRESHOLD) {
+      loadMore();
+    }
+  }
+
+  // Client-side filter over whatever pages have been fetched so far -- no
+  // per-filter-change API call, per the feature's own scoping. Since a
+  // filtered view can be shorter than the scrollable area (and so never
+  // fire the onScroll handler above), the explicit "Load more" button below
+  // is the fallback way to keep fetching older rows regardless of filter.
+  const visibleRows = typeFilter === "All" ? rows : rows.filter((item) => item.type === typeFilter);
+
   return (
     <section className="overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
-      <PanelHeader title="Recent Activity" />
-      <div className="overflow-x-auto">
+      <div className="flex items-center justify-between gap-3 px-4 py-3">
+        <h2 className="bim-section-title">Recent Activity</h2>
+        <select
+          aria-label="Filter Recent Activity by workflow type"
+          className="h-9 rounded-md border border-nexus-line bg-nexus-panel2 px-3 text-xs font-semibold text-zinc-300 outline-none"
+          value={typeFilter}
+          onChange={(event) => setTypeFilter(event.target.value)}
+        >
+          <option value="All">All types</option>
+          {RECENT_ACTIVITY_TYPES.map((type) => (
+            <option key={type} value={type}>
+              {type}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="max-h-[26rem] overflow-auto" onScroll={handleScroll}>
         <table className="min-w-full text-left text-sm">
-          <thead className="bg-zinc-800/80 text-zinc-400">
+          <thead className="sticky top-0 z-10 bg-zinc-800/95 text-zinc-400">
             <tr>
               <th className="px-4 py-3 font-medium">Reference</th>
               <th className="px-4 py-3 font-medium">Activity</th>
@@ -7593,8 +7781,8 @@ function RecentActivity({ items }) {
             </tr>
           </thead>
           <tbody>
-            {items.length ? (
-              items.map((item) => {
+            {visibleRows.length ? (
+              visibleRows.map((item, index) => {
                 const rowClass = `border-t border-nexus-line ${item.href ? "cursor-pointer hover:bg-nexus-panel2" : "hover:bg-nexus-panel2/60"}`;
                 const content = (
                   <>
@@ -7615,7 +7803,7 @@ function RecentActivity({ items }) {
 
                 return (
                   <tr
-                    key={`${item.reference}-${item.type}`}
+                    key={`${item.reference}-${item.type}-${index}`}
                     className={rowClass}
                     onClick={() => {
                       if (item.href) window.location.assign(item.href);
@@ -7635,91 +7823,29 @@ function RecentActivity({ items }) {
             ) : (
               <tr className="border-t border-nexus-line">
                 <td className="px-4 py-8 text-center text-sm text-zinc-500" colSpan="7">
-                  No activity recorded yet.
+                  {rows.length
+                    ? `No ${typeFilter} activity in the rows loaded so far.`
+                    : "No activity recorded yet."}
                 </td>
               </tr>
             )}
           </tbody>
         </table>
+        {loadingMore ? (
+          <p className="border-t border-nexus-line px-4 py-3 text-center text-xs text-zinc-500">Loading more...</p>
+        ) : hasMore ? (
+          <button
+            type="button"
+            onClick={loadMore}
+            className="block w-full border-t border-nexus-line px-4 py-3 text-center text-xs font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]"
+          >
+            Load more
+          </button>
+        ) : rows.length > 0 ? (
+          <p className="border-t border-nexus-line px-4 py-3 text-center text-xs text-zinc-600">No more activity to show.</p>
+        ) : null}
       </div>
     </section>
-  );
-}
-
-function RecentDeliveries({ items = [] }) {
-  return (
-    <section className="rounded-lg border border-nexus-line bg-nexus-panel">
-      <PanelHeader title="Recent Deliveries" action="View all" actionHref="/operations/deliveries/" />
-      <RecordPanel
-        items={items}
-        emptyTitle="No delivery records yet."
-        emptyDetail="Create your first delivery once stock is available."
-      />
-    </section>
-  );
-}
-
-function RecentReceiving({ items = [] }) {
-  return (
-    <section className="rounded-lg border border-nexus-line bg-nexus-panel">
-      <PanelHeader title="Recent Receiving" action="View all" actionHref="/operations/receiving/" />
-      <RecordPanel
-        items={items}
-        emptyTitle="No receiving records yet."
-        emptyDetail="Receive stock to begin tracking inventory."
-      />
-    </section>
-  );
-}
-
-function RecordPanel({ items = [], emptyTitle, emptyDetail }) {
-  if (!items.length) {
-    return <EmptyPanel title={emptyTitle} detail={emptyDetail} />;
-  }
-
-  return (
-    <div className="border-t border-nexus-line">
-      {items.map((item) => {
-        const className = `flex items-start gap-3 border-b border-nexus-line px-4 py-3 last:border-b-0 ${
-          item.href ? "hover:bg-nexus-panel2" : ""
-        }`;
-        const content = (
-          <>
-          <StatusIcon statusClass={item.status_class} />
-          <span className="min-w-0 flex-1">
-            <span className="block font-mono text-xs text-[var(--bim-orange-text)]">{item.reference}</span>
-            <span className="mt-1 block truncate text-sm font-semibold text-white">{item.title || "-"}</span>
-            <span className="block truncate text-xs text-zinc-500">{item.detail || "-"}</span>
-          </span>
-          <span className="shrink-0 text-right text-xs text-zinc-500">{item.date ? String(item.date) : "-"}</span>
-          </>
-        );
-
-        return item.href ? (
-          <a key={item.reference} href={item.href} className={className}>
-            {content}
-          </a>
-        ) : (
-          <div key={item.reference} className={className} data-future-href={item.futureHref || undefined}>
-            {content}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function EmptyPanel({ title, detail }) {
-  return <EmptyState className="border-t border-nexus-line" title={title} description={detail} />;
-}
-
-function StatusIcon({ statusClass }) {
-  const meta = statusMeta[statusClass] || statusMeta.available;
-
-  return (
-    <span className={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-md ${meta.className}`}>
-      <Icon name={meta.icon} className="h-4 w-4" />
-    </span>
   );
 }
 

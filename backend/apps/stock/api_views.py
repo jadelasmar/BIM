@@ -25,7 +25,7 @@ from .models import (
     StockMovement,
     Supplier,
 )
-from .selectors import global_search
+from .selectors import RECENT_ACTIVITY_LIMIT, global_search, recent_activity_page
 from .serializers import (
     BrandSerializer,
     CategorySerializer,
@@ -895,6 +895,9 @@ class InventorySummaryAPIView(APIView):
         return Response(
             {
                 "total_products": Product.objects.filter(isactive=True).count(),
+                "total_stock_units": active_units.filter(
+                    status__in=ProductUnit.IN_STOCK_STATUSES,
+                ).count(),
                 "available_units": active_units.filter(
                     status=ProductUnit.STATUS_AVAILABLE,
                 ).count(),
@@ -1055,3 +1058,27 @@ class GlobalSearchAPIView(APIView):
         query = request.query_params.get("q", "")
         groups = global_search(request.user, query)
         return Response({"query": query.strip(), "groups": groups})
+
+
+class RecentActivityAPIView(APIView):
+    """Paginated backing endpoint for Command Center's "Recent Activity"
+    infinite scroll -- the initial page is still server-rendered via
+    recent_stock_activity() in apps/core/views.py; this endpoint serves
+    every subsequent (older) page as the user scrolls."""
+
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get(self, request):
+        try:
+            offset = int(request.query_params.get("offset", 0))
+        except (TypeError, ValueError):
+            offset = 0
+        try:
+            limit = int(request.query_params.get("limit", RECENT_ACTIVITY_LIMIT))
+        except (TypeError, ValueError):
+            limit = RECENT_ACTIVITY_LIMIT
+        offset = max(offset, 0)
+        limit = max(1, min(limit, 50))
+
+        results, has_more = recent_activity_page(request.user, limit=limit, offset=offset)
+        return Response({"results": results, "hasMore": has_more})
