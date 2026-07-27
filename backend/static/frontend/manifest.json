@@ -24,12 +24,12 @@
     "src": "src/assets/fonts/inter/Inter-SemiBold.woff2"
   },
   "src/main.jsx": {
-    "file": "assets/main-B8sj3FxB.js",
+    "file": "assets/main-AZ9oozbb.js",
     "name": "main",
     "src": "src/main.jsx",
     "isEntry": true,
     "css": [
-      "assets/main-B8TooIqt.css"
+      "assets/main-BggYPGfX.css"
     ],
     "assets": [
       "assets/logo-primary-lYLJjCe0.svg",

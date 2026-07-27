@@ -5295,6 +5295,7 @@ function InventoryPage({ data }) {
             onSelect={setSelectedId}
             loading={loading}
             error={error}
+            statusFilter={status}
           />
           <div className="mt-2 flex items-center justify-between text-xs text-zinc-500">
             <span>Showing {visibleProducts.length} products</span>
@@ -5355,19 +5356,19 @@ function Select({ value, onChange, options, label }) {
   );
 }
 
-function InventoryTable({ products, selectedId, onSelect, loading, error }) {
+function InventoryTable({ products, selectedId, onSelect, loading, error, statusFilter }) {
   return (
     <section className="mt-4 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
       <div className="overflow-x-auto">
-        <table className="min-w-full text-left text-sm">
+        <table className="w-full table-fixed text-left text-sm">
           <thead className="bg-zinc-800/80 text-zinc-400">
             <tr>
-              <th className="px-4 py-3 font-medium">Product</th>
-              <th className="px-4 py-3 font-medium">Category</th>
-              <th className="px-4 py-3 font-medium">Brand / Model</th>
-              <th className="px-4 py-3 font-medium">SKU</th>
-              <th className="px-4 py-3 font-medium">Stock</th>
-              <th className="px-4 py-3 font-medium">Status</th>
+              <th className="w-[30%] px-4 py-3 font-medium">Product</th>
+              <th className="w-[12%] px-4 py-3 font-medium">Category</th>
+              <th className="w-[16%] px-4 py-3 font-medium">Brand / Model</th>
+              <th className="w-[14%] px-4 py-3 font-medium">SKU</th>
+              <th className="w-[16%] px-4 py-3 font-medium">Stock</th>
+              <th className="w-[12%] px-4 py-3 font-medium">Status</th>
             </tr>
           </thead>
           <tbody>
@@ -5385,22 +5386,22 @@ function InventoryTable({ products, selectedId, onSelect, loading, error }) {
                   onClick={() => onSelect(product.id)}
                 >
                   <td className="px-4 py-4">
-                    <div className="flex items-center gap-3">
+                    <div className="flex min-w-0 items-center gap-3">
                       <Avatar product={product} />
-                      <div>
-                        <p className="font-semibold text-white">{product.display_name}</p>
-                        <p className="mt-1 font-mono text-xs text-zinc-500">{product.sku}</p>
+                      <div className="min-w-0">
+                        <p className="truncate font-semibold text-white">{product.display_name}</p>
+                        <p className="mt-1 truncate font-mono text-xs text-zinc-500">{product.sku}</p>
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-4 text-zinc-400">{product.category_name}</td>
+                  <td className="truncate px-4 py-4 text-zinc-400">{product.category_name}</td>
                   <td className="px-4 py-4">
-                    <p className="text-zinc-200">{product.brand_name}</p>
-                    <p className="mt-1 font-mono text-xs text-zinc-500">{product.model_name}</p>
+                    <p className="truncate text-zinc-200">{product.brand_name}</p>
+                    <p className="mt-1 truncate font-mono text-xs text-zinc-500">{product.model_name}</p>
                   </td>
-                  <td className="px-4 py-4 font-mono text-xs text-[var(--bim-orange-text)]">{product.sku}</td>
+                  <td className="truncate px-4 py-4 font-mono text-xs text-[var(--bim-orange-text)]">{product.sku}</td>
                   <td className="px-4 py-4">
-                    <StockBar product={product} />
+                    <StockBar product={product} statusFilter={statusFilter} />
                   </td>
                   <td className="px-4 py-4">
                     <ProductStatus product={product} />
@@ -5436,22 +5437,84 @@ function Avatar({ product }) {
   );
 }
 
-function StockBar({ product }) {
+// Which per-status unit count backs the Inventory table's Stock column when
+// a Status filter is active, and the label appended after the total. Sold
+// and Removed sit outside total_units entirely (ProductUnit.IN_STOCK_STATUSES
+// excludes them -- they've permanently left inventory), so those two show a
+// bare count with no "/total" fraction, which would otherwise wrongly imply
+// they're a slice of the current in-stock total.
+const STOCK_COLUMN_STATUS_FIELD = {
+  available: "available_units",
+  reserved: "reserved_units",
+  issued: "issued_units",
+  repair: "repair_units",
+  sold: "sold_units",
+  removed: "removed_units"
+};
+const STOCK_COLUMN_STATUS_LABEL = {
+  available: "available",
+  reserved: "reserved",
+  issued: "issued",
+  repair: "in repair",
+  sold: "sold",
+  removed: "removed"
+};
+const STOCK_COLUMN_NO_TOTAL_STATUSES = new Set(["sold", "removed"]);
+// Same tones as each status's KPI card icon/accent (Reserved Stock =
+// indigo, Issued Stock = sky, Repair Stock = yellow -- see
+// FIXED_CARD_TONES) so the Stock column's color always matches the card a
+// reader would cross-reference it against.
+const STOCK_COLUMN_STATUS_ACCENT = {
+  reserved: { text: "text-[var(--tone-indigo-text)]", bar: "bg-indigo-500" },
+  issued: { text: "text-[var(--tone-sky-text)]", bar: "bg-sky-500" },
+  repair: { text: "text-[var(--tone-yellow-text)]", bar: "bg-yellow-500" }
+};
+
+function StockBar({ product, statusFilter }) {
   const total = Math.max(product.total_units, 1);
-  const percent = Math.min(100, Math.round((product.available_units / total) * 100));
   const low = product.is_low_stock;
   const outOfStock = product.available_units === 0;
+  const field = STOCK_COLUMN_STATUS_FIELD[statusFilter];
+
+  if (field && STOCK_COLUMN_NO_TOTAL_STATUSES.has(statusFilter)) {
+    const count = product[field] ?? 0;
+    return (
+      <div className="w-full">
+        <p className="truncate text-xs font-semibold text-white">
+          {count} <span className="text-zinc-500">{STOCK_COLUMN_STATUS_LABEL[statusFilter]}</span>
+        </p>
+      </div>
+    );
+  }
+
+  const isAvailableView = !field || field === "available_units";
+  const count = isAvailableView ? product.available_units : product[field] ?? 0;
+  const percent = Math.min(100, Math.round((count / total) * 100));
+  const suffixLabel = field ? ` ${STOCK_COLUMN_STATUS_LABEL[statusFilter]}` : "";
+  const accent = !isAvailableView ? STOCK_COLUMN_STATUS_ACCENT[statusFilter] : null;
+  const countClass = isAvailableView
+    ? outOfStock
+      ? "text-nexus-red"
+      : low
+        ? "text-[var(--bim-orange-text)]"
+        : "text-white"
+    : accent?.text || "text-white";
+  const barClass = isAvailableView
+    ? outOfStock
+      ? "bg-nexus-red"
+      : low
+        ? "bg-nexus-orange"
+        : "bg-nexus-green"
+    : accent?.bar || "bg-nexus-blue";
+
   return (
-    <div className="w-28">
-      <p className="text-xs font-semibold text-white">
-        <span className={outOfStock ? "text-nexus-red" : low ? "text-[var(--bim-orange-text)]" : "text-white"}>{product.available_units}</span>
-        <span className="text-zinc-500"> / {product.total_units}</span>
+    <div className="w-full">
+      <p className="truncate text-xs font-semibold text-white">
+        <span className={countClass}>{count}</span>
+        <span className="text-zinc-500"> / {product.total_units}{suffixLabel}</span>
       </p>
       <div className="mt-2 h-1 rounded-full bg-zinc-800">
-        <div
-          className={`h-1 rounded-full ${outOfStock ? "bg-nexus-red" : low ? "bg-nexus-orange" : "bg-nexus-green"}`}
-          style={{ width: `${percent}%` }}
-        />
+        <div className={`h-1 rounded-full ${barClass}`} style={{ width: `${percent}%` }} />
       </div>
     </div>
   );
@@ -7646,7 +7709,7 @@ function Overview({ items }) {
   return (
     <section className="mt-5" aria-label="System overview">
       <SectionTitle title="System Overview" />
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+      <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-4">
         {items.map((item) => {
           const isEnabled = item.enabled !== false && item.href;
           const className = `group flex items-center gap-3 rounded-lg border border-nexus-line bg-nexus-panel p-4 ${

@@ -183,12 +183,3 @@ def ui_item(key, **overrides):
     item = UI_TOKENS[key].copy()
     item.update(overrides)
     return item
-
-
-def disabled_ui_item(key, **overrides):
-    return ui_item(
-        key,
-        enabled=False,
-        tone="neutral",
-        **overrides,
-    )

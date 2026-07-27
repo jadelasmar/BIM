@@ -6,7 +6,7 @@ from django.middleware.csrf import get_token
 from django.shortcuts import render
 from django.urls import reverse
 
-from .ui_config import disabled_ui_item, ui_item
+from .ui_config import ui_item
 from apps.stock import constants as stock_constants
 from apps.stock.models import ProductUnit
 from apps.stock.selectors import (
@@ -382,18 +382,6 @@ def _command_center_initial_data(
                 "href": reverse("operations_deliveries"),
                 **ui_item("delivery_records"),
             },
-            disabled_ui_item(
-                "assets",
-                value="-",
-                detail="Coming later",
-                href=reverse("assets"),
-            ),
-            disabled_ui_item(
-                "knowledge_base",
-                value="-",
-                detail="Coming later",
-                href=reverse("knowledge_base"),
-            ),
         ],
         "modules": modules,
         "quickActions": quick_actions,

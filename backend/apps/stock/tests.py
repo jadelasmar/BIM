@@ -1412,24 +1412,22 @@ class BIMPOSAccessTests(TestCase):
             overview_labels,
             [
                 "Suppliers",
+                "Clients",
                 "Receiving Records",
                 "Delivery Records",
-                "Clients",
-                "Total Assets",
-                "Knowledge Docs",
             ],
         )
         self.assertTrue(all(item.get("icon") for item in overview))
         overview_by_label = {item["label"]: item for item in overview}
         self.assertEqual(overview_by_label["Suppliers"]["href"], "/suppliers/")
-        self.assertEqual(overview_by_label["Receiving Records"]["tone"], "green")
+        self.assertEqual(overview_by_label["Receiving Records"]["tone"], "sky")
         self.assertEqual(overview_by_label["Receiving Records"]["href"], "/operations/receiving/")
-        self.assertEqual(overview_by_label["Delivery Records"]["tone"], "indigo")
+        self.assertEqual(overview_by_label["Delivery Records"]["tone"], "yellow")
         self.assertEqual(overview_by_label["Delivery Records"]["href"], "/operations/deliveries/")
         self.assertEqual(overview_by_label["Clients"]["href"], "/clients/")
         self.assertTrue(overview_by_label["Clients"]["enabled"])
-        self.assertFalse(overview_by_label["Total Assets"]["enabled"])
-        self.assertFalse(overview_by_label["Knowledge Docs"]["enabled"])
+        self.assertNotIn("Total Assets", overview_labels)
+        self.assertNotIn("Knowledge Docs", overview_labels)
         self.assertNotIn("Sites", overview_labels)
         self.assertNotIn("Sold Units", overview_labels)
         self.assertNotIn("Product Categories", overview_labels)
