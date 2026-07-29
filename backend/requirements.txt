@@ -7,6 +7,15 @@ Django==6.0.4
 # JSON API layer for React operational screens.
 djangorestframework==3.17.1
 
+# Loads settings (SECRET_KEY, DEBUG, ALLOWED_HOSTS, ...) from a .env file.
+django-environ==0.14.0
+
+# Serves static files directly in production, no nginx required.
+whitenoise==6.12.0
+
+# Production WSGI server, invoked by run_production.py.
+waitress==3.0.2
+
 # Required by Django ImageField for product images.
 pillow==12.2.0
 
