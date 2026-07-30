@@ -6192,7 +6192,7 @@ function AddProductPage({ data }) {
     return pending;
   }
 
-  async function saveProduct(addAnother = false) {
+  async function saveProduct(mode = "default") {
     setSaving(true);
     try {
       const payload = new FormData();
@@ -6230,10 +6230,16 @@ function AddProductPage({ data }) {
         throw new Error(firstApiError(details) || "Could not save product.");
       }
 
-      if (addAnother) {
+      if (mode === "addAnother") {
         resetForm();
         showSuccess("Product saved. Form cleared for a new entry.");
         setSaving(false);
+      } else if (mode === "addUnit") {
+        const saved = await response.json();
+        showSuccess("Product saved.");
+        navigateAfterDelay(`${data.routes.addStockUnit}?product=${saved.id}`);
+        // saving intentionally stays true here until navigateAfterDelay's
+        // redirect fires -- see SavingOverlay.
       } else {
         showSuccess("Product saved.");
         navigateAfterDelay(data.routes.inventory);
@@ -6254,8 +6260,9 @@ function AddProductPage({ data }) {
           <AddProductHeader
             saving={saving}
             onReset={resetForm}
-            onSave={() => saveProduct(false)}
-            onSaveAnother={() => saveProduct(true)}
+            onSave={() => saveProduct("default")}
+            onSaveAnother={() => saveProduct("addAnother")}
+            onSaveAddUnit={() => saveProduct("addUnit")}
           />
           {loadError ? (
             <div className="mb-4 rounded-lg border border-[rgb(var(--bim-red-rgb)/60%)] bg-red-500/10 px-4 py-3 text-sm font-semibold text-[var(--tone-red-text)]">
@@ -6433,6 +6440,14 @@ function StockEntryPage({ data, mode = "add-unit" }) {
     () => `rcv-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
     []
   );
+  // Set by "Save & Add Unit" on the Add Product page, which links here with
+  // ?product=<id> so the just-created product is preselected instead of
+  // making the user search for it again.
+  const preselectedProductId = useMemo(
+    () => new URLSearchParams(window.location.search).get("product") || "",
+    []
+  );
+  const preselectApplied = useRef(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -6458,6 +6473,15 @@ function StockEntryPage({ data, mode = "add-unit" }) {
 
     return () => controller.abort();
   }, [data.api.products, data.api.suppliers, isReceiving]);
+
+  useEffect(() => {
+    if (preselectApplied.current || !preselectedProductId || !products.length) return;
+    preselectApplied.current = true;
+    const match = products.find((product) => String(product.id) === preselectedProductId);
+    if (match) {
+      addProductLine(match);
+    }
+  }, [preselectedProductId, products]);
 
   const filteredProducts = products
     .filter((product) => {
@@ -7117,7 +7141,7 @@ function CreateDeliveryPage({ data }) {
   );
 }
 
-function AddProductHeader({ saving, onReset, onSave, onSaveAnother }) {
+function AddProductHeader({ saving, onReset, onSave, onSaveAnother, onSaveAddUnit }) {
   return (
     <header className="mb-5 border-b border-nexus-line pb-4">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -7130,9 +7154,15 @@ function AddProductHeader({ saving, onReset, onSave, onSaveAnother }) {
           <RotateCcw className="h-4 w-4" />
           Reset
         </Button>
-        <Button disabled type="button" variant="secondary" title="Save & Receive Stock coming later">
-          <Icon name={workflowMeta.receive_stock.icon} className="h-4 w-4" />
-          Save & Receive Stock
+        <Button
+          disabled={saving}
+          onClick={onSaveAddUnit}
+          type="button"
+          variant="secondary"
+          title="Save the product, then add physical stock units already on hand"
+        >
+          <Icon name={workflowMeta.add_stock_unit.icon} className="h-4 w-4" />
+          Save & Add Unit
         </Button>
         <Button disabled={saving} onClick={onSaveAnother} type="button" variant="secondary">
           <Plus className="h-4 w-4" />
