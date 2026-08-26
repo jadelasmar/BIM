@@ -244,8 +244,8 @@ class UIRegistryTests(SimpleTestCase):
         self.assertIn("onSelect(product.id)", inventory_table_source)
         self.assertNotIn("window.location.assign", inventory_table_source)
         self.assertIn('href={`/inventory/products/${product.id}/`}', inline_detail_source)
-        self.assertIn("/admin/bim_stock/productunit/?q=${encodeURIComponent(product.sku)}", inline_detail_source)
-        self.assertIn("{canAccessAdmin ? (", inline_detail_source)
+        self.assertNotIn("/admin/bim_stock/productunit/?q=", inline_detail_source)
+        self.assertIn("{canEditProduct ? (", inline_detail_source)
         self.assertIn("Panel close coming later", inline_detail_source)
         self.assertIn("Full View", inline_detail_source)
 

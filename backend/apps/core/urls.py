@@ -31,6 +31,7 @@ urlpatterns = [
     path("inventory/", views.module_launcher, name="inventory"),
     path("inventory/products/new/", views.module_launcher, name="inventory_add_product"),
     path("inventory/products/<int:pk>/", views.module_launcher, name="inventory_product_detail"),
+    path("inventory/products/<int:pk>/edit/", views.module_launcher, name="inventory_edit_product"),
     path("inventory/stock-units/new/", views.module_launcher, name="inventory_add_stock_unit"),
     path("suppliers/", views.module_launcher, name="suppliers"),
     path("suppliers/new/", views.module_launcher, name="supplier_new"),
@@ -41,4 +42,5 @@ urlpatterns = [
     path("assets/", views.module_launcher, name="assets"),
     path("knowledge-base/", views.module_launcher, name="knowledge_base"),
     path("settings/", views.module_launcher, name="settings"),
+    path("test/print-label/", views.module_launcher, name="test_print_label"),
 ]

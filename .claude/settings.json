@@ -3,14 +3,12 @@
   "model": "opusplan",
   "effortLevel": "high",
   "initialPermissionMode": "acceptEdits",
+  "allowedTools": [
+    "Bash",
+    "Edit",
+    "Write"
+  ],
   "permissions": {
-    "allow": [
-      "Edit",
-      "Write",
-      "Bash(*)",
-      "Bash(rm:*claude*scratchpad*)",
-      "Bash(rm -f:*claude*scratchpad*)"
-    ],
     "ask": [
       "Bash(python manage.py migrate:*)",
       "Bash(python manage.py makemigrations)",

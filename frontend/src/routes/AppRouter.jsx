@@ -41,6 +41,7 @@ import { STOCK_STATUS_COLORS } from "../constants/stockStatusColors";
 import { toneClasses, workflowMeta } from "../constants/uiRegistry";
 import { DEFAULT_THEME_STORAGE_KEY, applyTheme, currentTheme } from "../hooks/useTheme";
 import { LoginPage, PasswordSetupPage } from "../pages/auth/AuthPages";
+import PrintLabelTestPage from "../pages/test/PrintLabelTestPage";
 import { formatCount, formatCurrency, formatDate } from "../utils/formatters";
 import logoPrimary from "../assets/brand/logo-primary.svg";
 import logoWhite from "../assets/brand/logo-white.svg";
@@ -5303,7 +5304,10 @@ function InventoryPage({ data }) {
           </div>
         </div>
 
-        <ProductDetail product={selectedProduct} canAccessAdmin={data.user?.canAccessAdmin} />
+        <ProductDetail
+          product={selectedProduct}
+          canEditProduct={data.permissions?.canEditProduct}
+        />
       </div>
     </Shell>
   );
@@ -5429,6 +5433,58 @@ function TableMessage({ message }) {
 }
 
 function Avatar({ product }) {
+  const [enlarged, setEnlarged] = useState(false);
+
+  if (product.image) {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            setEnlarged(true);
+          }}
+          className="grid h-9 w-9 shrink-0 cursor-zoom-in place-items-center overflow-hidden rounded-lg bg-zinc-900"
+          title="View full image"
+        >
+          <img
+            src={product.image}
+            alt={product.display_name}
+            className="h-full w-full object-contain"
+          />
+        </button>
+        {enlarged ? (
+          <div
+            role="dialog"
+            aria-modal="true"
+            onClick={(event) => {
+              event.stopPropagation();
+              setEnlarged(false);
+            }}
+            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm"
+          >
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                setEnlarged(false);
+              }}
+              aria-label="Close image preview"
+              className="absolute right-5 top-5 text-zinc-300 hover:text-white"
+            >
+              <X className="h-6 w-6" />
+            </button>
+            <img
+              src={product.image}
+              alt={product.display_name}
+              onClick={(event) => event.stopPropagation()}
+              className="max-h-[85vh] max-w-[85vw] rounded-lg object-contain shadow-2xl"
+            />
+          </div>
+        ) : null}
+      </>
+    );
+  }
   const letters = (product.brand_name || product.display_name || "?").slice(0, 2).toUpperCase();
   return (
     <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-600 text-xs font-bold text-white">
@@ -5542,7 +5598,7 @@ function ProductStatus({ product }) {
   );
 }
 
-function ProductDetail({ product, canAccessAdmin = false }) {
+function ProductDetail({ product, canEditProduct = false }) {
   if (!product) {
     return (
       <aside className="rounded-lg border border-nexus-line bg-nexus-panel p-4 text-sm text-zinc-500">
@@ -5603,22 +5659,20 @@ function ProductDetail({ product, canAccessAdmin = false }) {
           <DetailRow label="Low Stock Alert" value={product.reorder_stock_level} />
         </div>
 
-        {canAccessAdmin ? (
-          <a
-            href={`/admin/bim_stock/productunit/?q=${encodeURIComponent(product.sku)}`}
-            className="flex items-center justify-between rounded-lg border border-nexus-line bg-nexus-panel2 px-4 py-3 hover:border-[rgb(var(--bim-orange-focus-rgb)/70%)]"
-          >
-            <span className="inline-flex items-center gap-3 text-sm font-semibold text-white">
-              <Package className="h-4 w-4 text-[var(--bim-orange-text)]" />
-              Stock Units
-            </span>
-            <ChevronRight className="h-4 w-4 text-zinc-500" />
-          </a>
-        ) : null}
+        <a
+          href={`/inventory/products/${product.id}/`}
+          className="flex items-center justify-between rounded-lg border border-nexus-line bg-nexus-panel2 px-4 py-3 hover:border-[rgb(var(--bim-orange-focus-rgb)/70%)]"
+        >
+          <span className="inline-flex items-center gap-3 text-sm font-semibold text-white">
+            <Package className="h-4 w-4 text-[var(--bim-orange-text)]" />
+            Stock Units
+          </span>
+          <ChevronRight className="h-4 w-4 text-zinc-500" />
+        </a>
       </div>
-      <CardFooter className={`mt-auto grid gap-2 p-4 ${canAccessAdmin ? "grid-cols-2" : "grid-cols-1"}`}>
-        {canAccessAdmin ? (
-          <Button as="a" href={`/admin/bim_stock/product/${product.id}/change/`} variant="outline">
+      <CardFooter className={`mt-auto grid gap-2 p-4 ${canEditProduct ? "grid-cols-2" : "grid-cols-1"}`}>
+        {canEditProduct ? (
+          <Button as="a" href={`/inventory/products/${product.id}/edit/`} variant="outline">
             <Edit3 className="h-4 w-4" />
             Edit
           </Button>
@@ -5755,8 +5809,8 @@ function ProductDetailsPage({ data }) {
           </div>
 
           <div className="flex flex-wrap items-center gap-3 text-sm">
-            {data.user?.canAccessAdmin ? (
-              <a href={`/admin/bim_stock/product/${product.id}/change/`} className="inline-flex h-9 items-center gap-2 rounded-md px-3 font-semibold text-zinc-200 hover:bg-nexus-panel">
+            {data.permissions?.canEditProduct ? (
+              <a href={`/inventory/products/${product.id}/edit/`} className="inline-flex h-9 items-center gap-2 rounded-md px-3 font-semibold text-zinc-200 hover:bg-nexus-panel">
                 <Edit3 className="h-4 w-4" />
                 Edit Product
               </a>
@@ -6030,7 +6084,10 @@ function ProductDetailMetric({ label, value, detail, warning = false, danger = f
   );
 }
 
-function AddProductPage({ data }) {
+function AddProductPage({ data, isNew = true }) {
+  const productId = isNew
+    ? null
+    : (data.currentPath || window.location.pathname).match(/\/inventory\/products\/(\d+)\/edit\//)?.[1];
   const emptyForm = {
     descript: "",
     category: "",
@@ -6044,12 +6101,15 @@ function AddProductPage({ data }) {
   const [form, setForm] = useState(emptyForm);
   const [refs, setRefs] = useState({ categories: [], brands: [] });
   const [refsLoading, setRefsLoading] = useState(true);
+  const [productLoading, setProductLoading] = useState(!isNew);
+  const [existingImageUrl, setExistingImageUrl] = useState("");
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState("");
   const { showSuccess, showError } = useToast();
   const imageInputRef = useRef(null);
   const cameraInputRef = useRef(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState("");
+  const originalFormRef = useRef(emptyForm);
 
   useEffect(() => {
     if (!form.imageFile) {
@@ -6088,6 +6148,47 @@ function AddProductPage({ data }) {
     return () => controller.abort();
   }, [data.api.brands, data.api.categories]);
 
+  useEffect(() => {
+    if (isNew || !productId) return undefined;
+    const controller = new AbortController();
+
+    async function loadProduct() {
+      setProductLoading(true);
+      setLoadError("");
+      try {
+        const response = await fetch(data.api.productDetail.replace("{id}", productId), {
+          signal: controller.signal
+        });
+        if (!response.ok) {
+          throw new Error("Product was not found.");
+        }
+        const record = await response.json();
+        const loaded = {
+          descript: record.descript || "",
+          category: record.category != null ? String(record.category) : "",
+          brand: record.brand_id != null ? String(record.brand_id) : "",
+          modelName: record.model_name || "",
+          barcode: record.barcode || "",
+          reorderStockLevel: record.reorder_stock_level != null ? String(record.reorder_stock_level) : "",
+          imageFile: null,
+          isactive: record.isactive !== false
+        };
+        originalFormRef.current = loaded;
+        setForm(loaded);
+        setExistingImageUrl(record.image || "");
+      } catch (loadFailure) {
+        if (loadFailure.name !== "AbortError") {
+          setLoadError(loadFailure.message);
+        }
+      } finally {
+        setProductLoading(false);
+      }
+    }
+
+    loadProduct();
+    return () => controller.abort();
+  }, [isNew, productId, data.api.productDetail]);
+
   const selectedCategory = refs.categories.find((category) => String(category.id) === String(form.category));
   const selectedBrand = refs.brands.find((brand) => String(brand.id) === String(form.brand));
   const requiredDone = [form.descript, form.category, form.brand, form.modelName].filter(Boolean).length;
@@ -6103,7 +6204,7 @@ function AddProductPage({ data }) {
   }
 
   function resetForm() {
-    setForm(emptyForm);
+    setForm(originalFormRef.current);
     if (imageInputRef.current) {
       imageInputRef.current.value = "";
     }
@@ -6211,29 +6312,45 @@ function AddProductPage({ data }) {
       payload.append("barcode", form.barcode);
       if (form.reorderStockLevel.trim()) {
         payload.append("reorder_stock_level", form.reorderStockLevel);
+      } else if (!isNew) {
+        payload.append("reorder_stock_level", "0");
       }
       payload.append("isactive", form.isactive ? "true" : "false");
       if (form.imageFile) {
         payload.append("image", form.imageFile);
       }
 
-      const response = await fetch(data.api.products, {
-        method: "POST",
-        headers: {
-          "X-CSRFToken": data.csrfToken
-        },
-        body: payload
-      });
+      const response = await fetch(
+        isNew ? data.api.products : data.api.productDetail.replace("{id}", productId),
+        {
+          method: isNew ? "POST" : "PATCH",
+          headers: {
+            "X-CSRFToken": data.csrfToken
+          },
+          body: payload
+        }
+      );
 
       if (!response.ok) {
         const details = await response.json().catch(() => ({}));
         throw new Error(firstApiError(details) || "Could not save product.");
       }
 
-      if (mode === "addAnother") {
-        resetForm();
+      if (!isNew) {
+        showSuccess("Product updated.");
+        navigateAfterDelay(`/inventory/products/${productId}/`);
+        // saving intentionally stays true here until navigateAfterDelay's
+        // redirect fires -- see SavingOverlay.
+      } else if (mode === "addAnother") {
         showSuccess("Product saved. Form cleared for a new entry.");
-        setSaving(false);
+        setTimeout(() => {
+          resetForm();
+          setSaving(false);
+        }, SUCCESS_NAVIGATE_DELAY_MS);
+        // saving intentionally stays true here until the timeout above fires
+        // -- see SavingOverlay -- so the toast gets the same display window
+        // as the other save actions instead of the page going interactive
+        // (and the form resetting) instantly underneath it.
       } else if (mode === "addUnit") {
         const saved = await response.json();
         showSuccess("Product saved.");
@@ -6258,7 +6375,9 @@ function AddProductPage({ data }) {
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
         <div className="min-w-0">
           <AddProductHeader
-            saving={saving}
+            isNew={isNew}
+            productId={productId}
+            saving={saving || productLoading}
             onReset={resetForm}
             onSave={() => saveProduct("default")}
             onSaveAnother={() => saveProduct("addAnother")}
@@ -6270,6 +6389,11 @@ function AddProductPage({ data }) {
             </div>
           ) : null}
 
+          {productLoading ? (
+            <div className="rounded-lg border border-nexus-line bg-nexus-panel p-6 text-sm text-zinc-500">
+              Loading product...
+            </div>
+          ) : (
           <FormSection icon="box" title="Product Information" subtitle="Core catalogue fields that define this product.">
             <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_260px]">
               <div className="grid gap-5">
@@ -6330,7 +6454,7 @@ function AddProductPage({ data }) {
                   onDrop={handleImageDrop}
                   onDragOver={handleImageDragOver}
                 >
-                  {form.imageFile ? (
+                  {form.imageFile || existingImageUrl ? (
                     <>
                       <button
                         type="button"
@@ -6338,16 +6462,18 @@ function AddProductPage({ data }) {
                         className="block h-full w-full"
                         aria-label="Replace image"
                       >
-                        <img src={imagePreviewUrl} alt="Product preview" className="h-full w-full object-cover" />
+                        <img src={imagePreviewUrl || existingImageUrl} alt="Product preview" className="h-full w-full object-contain" />
                       </button>
-                      <button
-                        type="button"
-                        onClick={clearImageFile}
-                        className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-black/70 text-white hover:bg-black/90"
-                        aria-label="Remove image"
-                      >
-                        <X className="h-4 w-4" />
-                      </button>
+                      {form.imageFile ? (
+                        <button
+                          type="button"
+                          onClick={clearImageFile}
+                          className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-black/70 text-white hover:bg-black/90"
+                          aria-label="Remove image"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      ) : null}
                     </>
                   ) : (
                     <button
@@ -6397,18 +6523,21 @@ function AddProductPage({ data }) {
               </div>
             </div>
           </FormSection>
+          )}
         </div>
 
-        <AddProductPreview
-          form={form}
-          selectedCategory={selectedCategory}
-          selectedBrand={selectedBrand}
-          skuPreview={skuPreview}
-          requiredDone={requiredDone}
-          requiredTotal={requiredTotal}
-          requiredProgress={requiredProgress}
-          imagePreviewUrl={imagePreviewUrl}
-        />
+        {productLoading ? null : (
+          <AddProductPreview
+            form={form}
+            selectedCategory={selectedCategory}
+            selectedBrand={selectedBrand}
+            skuPreview={skuPreview}
+            requiredDone={requiredDone}
+            requiredTotal={requiredTotal}
+            requiredProgress={requiredProgress}
+            imagePreviewUrl={imagePreviewUrl || existingImageUrl}
+          />
+        )}
       </div>
     </Shell>
   );
@@ -7141,36 +7270,47 @@ function CreateDeliveryPage({ data }) {
   );
 }
 
-function AddProductHeader({ saving, onReset, onSave, onSaveAnother, onSaveAddUnit }) {
+function AddProductHeader({ isNew = true, productId, saving, onReset, onSave, onSaveAnother, onSaveAddUnit }) {
   return (
     <header className="mb-5 border-b border-nexus-line pb-4">
       <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
       <div>
-        <h1 className="bim-page-title">Add Product</h1>
-        <p className="bim-page-description">Create a new product definition for the catalogue.</p>
+        <h1 className="bim-page-title">{isNew ? "Add Product" : "Edit Product"}</h1>
+        <p className="bim-page-description">
+          {isNew ? "Create a new product definition for the catalogue." : "Update the catalogue details for this product."}
+        </p>
       </div>
       <div className="flex flex-wrap items-center gap-3 text-sm">
+        {!isNew ? (
+          <Button as="a" href={`/inventory/products/${productId}/`} variant="secondary">
+            Cancel
+          </Button>
+        ) : null}
         <Button onClick={onReset} type="button" variant="secondary">
           <RotateCcw className="h-4 w-4" />
           Reset
         </Button>
-        <Button
-          disabled={saving}
-          onClick={onSaveAddUnit}
-          type="button"
-          variant="secondary"
-          title="Save the product, then add physical stock units already on hand"
-        >
-          <Icon name={workflowMeta.add_stock_unit.icon} className="h-4 w-4" />
-          Save & Add Unit
-        </Button>
-        <Button disabled={saving} onClick={onSaveAnother} type="button" variant="secondary">
-          <Plus className="h-4 w-4" />
-          Save & Add Another
-        </Button>
+        {isNew ? (
+          <Button
+            disabled={saving}
+            onClick={onSaveAddUnit}
+            type="button"
+            variant="secondary"
+            title="Save the product, then add physical stock units already on hand"
+          >
+            <Icon name={workflowMeta.add_stock_unit.icon} className="h-4 w-4" />
+            Save & Add Unit
+          </Button>
+        ) : null}
+        {isNew ? (
+          <Button disabled={saving} onClick={onSaveAnother} type="button" variant="secondary">
+            <Plus className="h-4 w-4" />
+            Save & Add Another
+          </Button>
+        ) : null}
         <Button disabled={saving} onClick={onSave} type="button" variant="primary">
           <Save className="h-4 w-4" />
-          Save Product
+          {isNew ? "Save Product" : "Save Changes"}
         </Button>
       </div>
       </div>
@@ -7407,7 +7547,7 @@ function AddProductPreview({
         <div className="flex gap-3">
           <span className="grid h-11 w-11 shrink-0 place-items-center overflow-hidden rounded-lg bg-zinc-800 text-zinc-500">
             {imagePreviewUrl ? (
-              <img src={imagePreviewUrl} alt="Product preview" className="h-full w-full object-cover" />
+              <img src={imagePreviewUrl} alt="Product preview" className="h-full w-full object-contain" />
             ) : (
               <Package className="h-5 w-5" />
             )}
@@ -7969,6 +8109,10 @@ function SectionTitle({ title }) {
 
 const appRoutes = [
   {
+    match: (path) => path.startsWith("/test/print-label"),
+    render: () => <PrintLabelTestPage />
+  },
+  {
     match: (path) => path.startsWith("/settings"),
     render: (data) => <SettingsPage data={data} />
   },
@@ -8095,6 +8239,10 @@ const appRoutes = [
   {
     match: (path) => path.startsWith("/inventory/products/new"),
     render: (data) => <AddProductPage data={data} />
+  },
+  {
+    match: (path) => /^\/inventory\/products\/\d+\/edit\/?$/.test(path),
+    render: (data) => <AddProductPage data={data} isNew={false} />
   },
   {
     match: (path) => /^\/inventory\/products\/\d+\//.test(path),

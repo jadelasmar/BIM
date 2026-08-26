@@ -32,6 +32,7 @@ from apps.stock.selectors import (
 
 WRITE_PAGE_PERMISSIONS = {
     "inventory_add_product": (stock_constants.ADD_PRODUCT,),
+    "inventory_edit_product": (stock_constants.CHANGE_PRODUCT,),
     "inventory_add_stock_unit": (stock_constants.ADD_PRODUCT_UNIT,),
     "operations_receive_stock": (
         stock_constants.ADD_RECEIVING_RECORD,
