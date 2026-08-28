@@ -207,6 +207,7 @@ def _command_center_initial_data(
             "canCancelDelivery": user.has_perm(stock_constants.CHANGE_DELIVERY_RECORD)
             and can_change_product_unit,
             "canCreateReservation": can_create_reservation,
+            "canEditReservation": user.has_perm(stock_constants.CHANGE_RESERVATION_RECORD),
             "canReleaseReservation": user.has_perm(
                 stock_constants.CHANGE_RESERVATION_RECORD
             )
@@ -216,13 +217,20 @@ def _command_center_initial_data(
             )
             and can_change_product_unit,
             "canCreateIssue": can_create_issue,
+            "canEditIssue": user.has_perm(stock_constants.CHANGE_ISSUE_RECORD),
             "canReturnIssue": user.has_perm(stock_constants.CHANGE_ISSUE_RECORD)
             and can_change_product_unit,
             "canCreateRepair": can_create_repair,
+            "canEditRepair": user.has_perm(stock_constants.CHANGE_REPAIR_RECORD),
             "canResolveRepair": user.has_perm(stock_constants.CHANGE_REPAIR_RECORD)
             and can_change_product_unit,
             "canCreateRemoval": can_create_removal,
             "canCreateClientReturn": can_create_client_return,
+            "canEditClientReturn": user.has_perm(stock_constants.CHANGE_CLIENT_RETURN_RECORD),
+            "canCancelClientReturn": user.has_perm(
+                stock_constants.CHANGE_CLIENT_RETURN_RECORD
+            )
+            and can_change_product_unit,
             "canCreateSupplier": user.has_perm(stock_constants.ADD_SUPPLIER),
             "canEditSupplier": user.has_perm(stock_constants.CHANGE_SUPPLIER),
             "canCreateClient": user.has_perm(stock_constants.ADD_CLIENT),

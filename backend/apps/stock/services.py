@@ -418,6 +418,17 @@ def create_client_return_record(
         if resolution == ProductUnit.STATUS_AVAILABLE
         else StockMovement.TYPE_CLIENT_RETURNED_REPAIR
     )
+
+    repair_record = None
+    if resolution == ProductUnit.STATUS_REPAIR:
+        repair_record = RepairRecord.objects.create(
+            client_return=client_return,
+            repair_reason=(client_return.reason or "Client return - repair needed").strip(),
+            repair_date=client_return.return_date,
+            notes=notes,
+            sent_by=received_by,
+        )
+
     for unit in units:
         item = delivery_items_by_unit_id[unit.pk]
         ClientReturnItem.objects.create(
@@ -431,6 +442,12 @@ def create_client_return_record(
         unit.status = resolution
         unit.sold_date = None
         unit.save(update_fields=("status", "sold_date"))
+        if repair_record is not None:
+            RepairItem.objects.create(
+                repair=repair_record,
+                product_unit=unit,
+                product=unit.product,
+            )
         create_stock_movement(
             product_unit=unit,
             movement_type=movement_type,
@@ -441,9 +458,145 @@ def create_client_return_record(
             performed_by=received_by,
             movement_date=client_return.return_date,
             delivery_record=item.delivery,
+            repair_record=repair_record,
             client_return_record=client_return,
             reference=client_return.return_number,
         )
+
+    return client_return
+
+
+def _client_return_item_can_be_cancelled(item):
+    unit = item.product_unit
+    if not item.isactive or not unit or not unit.isactive:
+        return False
+
+    client_return = item.client_return
+    active_item = _active_client_return_item_for_unit(unit)
+    if not active_item or active_item.pk != item.pk:
+        return False
+    if unit.status != client_return.resolution:
+        return False
+
+    if client_return.resolution == ProductUnit.STATUS_REPAIR:
+        active_repair_item = _active_repair_item_for_unit(unit)
+        if not active_repair_item or active_repair_item.repair.client_return_id != client_return.pk:
+            return False
+        if active_repair_item.repair.status != RepairRecord.STATUS_ACTIVE:
+            return False
+
+    return True
+
+
+@transaction.atomic
+def cancel_client_return_record(client_return, *, cancelled_by=None, cancel_reason=""):
+    client_return = ClientReturnRecord.objects.select_for_update().get(pk=client_return.pk)
+    if client_return.status == ClientReturnRecord.STATUS_CANCELLED:
+        return client_return
+
+    items = list(
+        client_return.items.select_for_update()
+        .select_related("product_unit", "delivery_item", "delivery_item__delivery")
+        .filter(isactive=True)
+    )
+    blocked_units = [
+        item.product_unit.serial_number
+        for item in items
+        if not _client_return_item_can_be_cancelled(item)
+    ]
+    if blocked_units:
+        raise ValidationError(
+            "Cannot cancel client return because these stock units are no longer untouched: "
+            + ", ".join(sorted(blocked_units))
+        )
+
+    linked_repair = (
+        RepairRecord.objects.select_for_update()
+        .filter(client_return=client_return, status=RepairRecord.STATUS_ACTIVE)
+        .first()
+    )
+
+    client_return.status = ClientReturnRecord.STATUS_CANCELLED
+    client_return.cancel_reason = (cancel_reason or "").strip()
+    client_return.cancelled_at = timezone.now()
+    client_return.cancelled_by = cancelled_by
+    client_return.save(
+        update_fields=("status", "cancel_reason", "cancelled_at", "cancelled_by")
+    )
+
+    for item in items:
+        item.isactive = False
+        item.save(update_fields=("isactive",))
+
+    if linked_repair is not None:
+        linked_repair.status = RepairRecord.STATUS_CANCELLED
+        linked_repair.save(update_fields=("status",))
+        linked_repair.items.filter(isactive=True).update(isactive=False)
+
+    for item in items:
+        unit = item.product_unit
+        from_status = unit.status
+        delivery = item.delivery_item.delivery if item.delivery_item else None
+        unit.status = ProductUnit.STATUS_SOLD
+        unit.sold_date = delivery.delivery_date if delivery else timezone.localdate()
+        unit.save(update_fields=("status", "sold_date"))
+        create_stock_movement(
+            product_unit=unit,
+            movement_type=StockMovement.TYPE_CLIENT_RETURN_CANCELLED,
+            from_status=from_status,
+            to_status=ProductUnit.STATUS_SOLD,
+            reason=client_return.cancel_reason,
+            notes=client_return.cancel_reason,
+            performed_by=cancelled_by,
+            movement_date=timezone.localdate(),
+            delivery_record=delivery,
+            client_return_record=client_return,
+            reference=client_return.return_number,
+        )
+
+    return client_return
+
+
+def update_client_return_record_header(
+    client_return,
+    *,
+    return_date=None,
+    client=None,
+    client_name_input=None,
+    customer_name=None,
+    received_from=None,
+    reason=None,
+    notes=None,
+):
+    if client_return.status == ClientReturnRecord.STATUS_CANCELLED:
+        raise ValidationError("Cancelled client return records cannot be edited.")
+
+    if client is not None:
+        client_return.client = client
+    elif client_name_input is not None and client_name_input.strip():
+        client_return.client, _created = Client.objects.get_or_create(
+            name=client_name_input.strip()
+        )
+    if customer_name is not None:
+        client_return.customer_name = customer_name.strip()
+    if received_from is not None:
+        client_return.received_from = received_from.strip()
+    if return_date is not None:
+        client_return.return_date = return_date
+    if reason is not None:
+        client_return.reason = reason.strip()
+    if notes is not None:
+        client_return.notes = notes
+    client_return.save(
+        update_fields=(
+            "client",
+            "customer_name",
+            "received_from",
+            "return_date",
+            "reason",
+            "notes",
+        )
+    )
 
     return client_return
 
@@ -515,6 +668,27 @@ def create_reservation_record(
             reservation_record=reservation,
             reference=reservation.reservation_number,
         )
+
+    return reservation
+
+
+def update_reservation_record_header(
+    reservation,
+    *,
+    reserved_for=None,
+    reason=None,
+    notes=None,
+):
+    if reservation.status != ReservationRecord.STATUS_ACTIVE:
+        raise ValidationError("Only active reservation records can be edited.")
+
+    if reserved_for is not None:
+        reservation.reserved_for = reserved_for.strip()
+    if reason is not None:
+        reservation.reason = reason.strip()
+    if notes is not None:
+        reservation.notes = notes
+    reservation.save(update_fields=("reserved_for", "reason", "notes"))
 
     return reservation
 
@@ -675,6 +849,30 @@ def create_issue_record(
     return issue
 
 
+def update_issue_record_header(
+    issue,
+    *,
+    issued_to=None,
+    reason=None,
+    issue_date=None,
+    notes=None,
+):
+    if issue.status != IssueRecord.STATUS_ACTIVE:
+        raise ValidationError("Only active issue records can be edited.")
+
+    if issued_to is not None:
+        issue.issued_to = issued_to.strip()
+    if reason is not None:
+        issue.reason = reason.strip()
+    if issue_date is not None:
+        issue.issue_date = issue_date
+    if notes is not None:
+        issue.notes = notes
+    issue.save(update_fields=("issued_to", "reason", "issue_date", "notes"))
+
+    return issue
+
+
 def _issue_item_can_be_returned(item):
     unit = item.product_unit
     if not item.isactive or not unit:
@@ -831,6 +1029,30 @@ def create_repair_record(
     return repair
 
 
+def update_repair_record_header(
+    repair,
+    *,
+    repair_reason=None,
+    technician=None,
+    repair_date=None,
+    notes=None,
+):
+    if repair.status != RepairRecord.STATUS_ACTIVE:
+        raise ValidationError("Only active repair records can be edited.")
+
+    if repair_reason is not None:
+        repair.repair_reason = repair_reason.strip()
+    if technician is not None:
+        repair.technician = technician.strip()
+    if repair_date is not None:
+        repair.repair_date = repair_date
+    if notes is not None:
+        repair.notes = notes
+    repair.save(update_fields=("repair_reason", "technician", "repair_date", "notes"))
+
+    return repair
+
+
 def _repair_item_can_be_resolved(item):
     unit = item.product_unit
     if not item.isactive or not unit:
@@ -859,8 +1081,16 @@ def resolve_repair_record(
     if resolution not in (
         ProductUnit.STATUS_AVAILABLE,
         ProductUnit.STATUS_INACTIVE,
+        ProductUnit.STATUS_SOLD,
     ):
-        raise ValidationError("Repair resolution must be available or inactive.")
+        raise ValidationError("Repair resolution must be available, inactive, or returned to client.")
+    if resolution == ProductUnit.STATUS_SOLD and (
+        not repair.client_return_id
+        or repair.client_return.status == ClientReturnRecord.STATUS_CANCELLED
+    ):
+        raise ValidationError(
+            "Returned to Client is only available for repairs created from a client return."
+        )
 
     items = list(
         repair.items.select_for_update()
@@ -902,17 +1132,27 @@ def resolve_repair_record(
             item.resolution_notes = repair.resolution_notes
             item.save(update_fields=("isactive", "resolution_notes"))
 
-    movement_type = (
-        StockMovement.TYPE_REPAIR_RESOLVED
-        if resolution == ProductUnit.STATUS_AVAILABLE
-        else StockMovement.TYPE_REPAIR_DEACTIVATED
-    )
+    if resolution == ProductUnit.STATUS_AVAILABLE:
+        movement_type = StockMovement.TYPE_REPAIR_RESOLVED
+    elif resolution == ProductUnit.STATUS_SOLD:
+        movement_type = StockMovement.TYPE_REPAIR_RETURNED_TO_CLIENT
+    else:
+        movement_type = StockMovement.TYPE_REPAIR_DEACTIVATED
+
     for item in items:
         unit = item.product_unit
         from_status = unit.status
         unit.status = resolution
         if resolution == ProductUnit.STATUS_INACTIVE:
             unit.isactive = False
+        elif resolution == ProductUnit.STATUS_SOLD:
+            return_item = (
+                repair.client_return.items.filter(product_unit=unit)
+                .select_related("delivery_item__delivery")
+                .first()
+            )
+            delivery = return_item.delivery_item.delivery if return_item and return_item.delivery_item else None
+            unit.sold_date = delivery.delivery_date if delivery else repair.resolved_date
         unit.save(update_fields=("status", "isactive", "sold_date"))
         create_stock_movement(
             product_unit=unit,

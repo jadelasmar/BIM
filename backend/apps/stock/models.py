@@ -698,12 +698,21 @@ class RepairRecord(models.Model):
 
     RESOLUTION_AVAILABLE = ProductUnit.STATUS_AVAILABLE
     RESOLUTION_INACTIVE = ProductUnit.STATUS_INACTIVE
+    RESOLUTION_SOLD = ProductUnit.STATUS_SOLD
 
     RESOLUTION_CHOICES = [
         (RESOLUTION_AVAILABLE, "Available"),
         (RESOLUTION_INACTIVE, "Inactive"),
+        (RESOLUTION_SOLD, "Returned to Client"),
     ]
 
+    client_return = models.ForeignKey(
+        "ClientReturnRecord",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="repair_records",
+    )
     repair_number = models.CharField(
         max_length=32,
         unique=True,
@@ -803,6 +812,14 @@ class RepairItem(models.Model):
 
 
 class ClientReturnRecord(models.Model):
+    STATUS_RECORDED = "recorded"
+    STATUS_CANCELLED = "cancelled"
+
+    STATUS_CHOICES = [
+        (STATUS_RECORDED, "Recorded"),
+        (STATUS_CANCELLED, "Cancelled"),
+    ]
+
     RESOLUTION_AVAILABLE = ProductUnit.STATUS_AVAILABLE
     RESOLUTION_REPAIR = ProductUnit.STATUS_REPAIR
 
@@ -843,6 +860,20 @@ class ClientReturnRecord(models.Model):
         blank=True,
         null=True,
         related_name="stock_client_return_records",
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_RECORDED,
+    )
+    cancel_reason = models.TextField(blank=True)
+    cancelled_at = models.DateTimeField(blank=True, null=True)
+    cancelled_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="cancelled_client_return_records",
     )
     crdate = models.DateTimeField(auto_now_add=True)
     isactive = models.BooleanField(default=True)
@@ -1024,6 +1055,8 @@ class StockMovement(models.Model):
     TYPE_REPAIR_DEACTIVATED = "repair_deactivated"
     TYPE_CLIENT_RETURNED_AVAILABLE = "client_returned_available"
     TYPE_CLIENT_RETURNED_REPAIR = "client_returned_repair"
+    TYPE_CLIENT_RETURN_CANCELLED = "client_return_cancelled"
+    TYPE_REPAIR_RETURNED_TO_CLIENT = "repair_returned_to_client"
     TYPE_REMOVED = "removed"
 
     MOVEMENT_TYPE_CHOICES = [
@@ -1042,6 +1075,8 @@ class StockMovement(models.Model):
         (TYPE_REPAIR_DEACTIVATED, "Repair Deactivated"),
         (TYPE_CLIENT_RETURNED_AVAILABLE, "Client Returned Available"),
         (TYPE_CLIENT_RETURNED_REPAIR, "Client Returned Repair"),
+        (TYPE_CLIENT_RETURN_CANCELLED, "Client Return Cancelled"),
+        (TYPE_REPAIR_RETURNED_TO_CLIENT, "Repair Returned To Client"),
         (TYPE_REMOVED, "Removed"),
     ]
 

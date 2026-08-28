@@ -110,6 +110,11 @@ urlpatterns = [
         name="client-returns",
     ),
     path(
+        "client-returns/<int:pk>/cancel/",
+        api_views.ClientReturnRecordCancelAPIView.as_view(),
+        name="client-return-cancel",
+    ),
+    path(
         "client-returns/<int:pk>/",
         api_views.ClientReturnRecordDetailAPIView.as_view(),
         name="client-return-detail",

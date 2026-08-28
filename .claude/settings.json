@@ -5,30 +5,23 @@
   "initialPermissionMode": "acceptEdits",
   "allowedTools": [
     "Bash",
+    "PowerShell",
     "Edit",
-    "Write"
+    "Write",
+    "Read",
+    "Glob",
+    "Grep"
   ],
   "permissions": {
     "ask": [
-      "Bash(python manage.py migrate:*)",
-      "Bash(python manage.py makemigrations)",
       "Bash(python manage.py flush:*)",
-      "Bash(python manage.py loaddata:*)",
+      "Bash(python manage.py migrate * zero)",
       "Bash(python manage.py dbshell:*)",
-      "Bash(python manage.py sqlmigrate:*)",
-      "Bash(python manage.py dumpdata:*)",
+      "Bash(python manage.py shell:*)",
+      "Bash(dropdb:*)",
       "Bash(rm -rf:*)",
-      "Bash(git push:*)",
-      "Bash(git reset:*)",
-      "Bash(git commit:*)"
-    ],
-    "deny": [
-      "Edit(backend/static/frontend/**)",
-      "Write(backend/static/frontend/**)",
-      "Read(.env)",
-      "Read(.env.*)",
-      "Read(**/*.pem)",
-      "Read(**/db.sqlite3)"
+      "PowerShell(Remove-Item*-Recurse*)",
+      "PowerShell(Remove-Item*-Force*)"
     ]
   }
 }

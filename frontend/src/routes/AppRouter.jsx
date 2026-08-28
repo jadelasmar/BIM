@@ -1799,8 +1799,13 @@ function ReservationRecordDetailPage({ data }) {
   const [releaseReason, setReleaseReason] = useState("");
   const [releasing, setReleasing] = useState(false);
   const [message, setMessage] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [savingCorrection, setSavingCorrection] = useState(false);
+  const [correctionError, setCorrectionError] = useState("");
+  const [correctionForm, setCorrectionForm] = useState({ reservedFor: "", reason: "", notes: "" });
   const { showError } = useToast();
   const canReleaseReservation = Boolean(data.permissions?.canReleaseReservation);
+  const canEditReservation = Boolean(data.permissions?.canEditReservation);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1827,6 +1832,51 @@ function ReservationRecordDetailPage({ data }) {
     loadReservation();
     return () => controller.abort();
   }, [data.api.reservationDetail, reservationId, reloadKey]);
+
+  useEffect(() => {
+    if (!record) return;
+    setCorrectionForm({
+      reservedFor: record.reserved_for || "",
+      reason: record.reason || "",
+      notes: record.notes || ""
+    });
+  }, [record]);
+
+  function updateCorrectionField(field, value) {
+    setCorrectionForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function saveReservationCorrection() {
+    if (!canEditReservation) return;
+    setSavingCorrection(true);
+    setCorrectionError("");
+    try {
+      const endpoint = data.api.reservationDetail.replace("{id}", reservationId);
+      const response = await fetch(endpoint, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": data.csrfToken
+        },
+        body: JSON.stringify({
+          reserved_for: correctionForm.reservedFor,
+          reason: correctionForm.reason,
+          notes: correctionForm.notes
+        })
+      });
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        throw new Error(firstApiError(details) || "Could not update reservation record.");
+      }
+      setEditing(false);
+      setMessage("Reservation details updated.");
+      setReloadKey((current) => current + 1);
+    } catch (saveError) {
+      setCorrectionError(saveError.message);
+    } finally {
+      setSavingCorrection(false);
+    }
+  }
 
   async function releaseReservation() {
     if (!canReleaseReservation) return;
@@ -1894,6 +1944,14 @@ function ReservationRecordDetailPage({ data }) {
           </div>
           <p className="bim-page-description">Reserved stock must be released before delivery.</p>
         </div>
+        {isActive && canEditReservation ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="button" variant="outline" onClick={() => setEditing((current) => !current)}>
+              <Edit3 className="h-4 w-4" />
+              Edit Details
+            </Button>
+          </div>
+        ) : null}
       </header>
 
       {message ? (
@@ -1904,6 +1962,20 @@ function ReservationRecordDetailPage({ data }) {
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-5">
+          {editing && canEditReservation ? (
+            <ReservationCorrectionPanel
+              form={correctionForm}
+              saving={savingCorrection}
+              error={correctionError}
+              onFieldChange={updateCorrectionField}
+              onCancel={() => {
+                setEditing(false);
+                setCorrectionError("");
+              }}
+              onSave={saveReservationCorrection}
+            />
+          ) : null}
+
           <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
             <SectionTitle title="Reservation Details" />
             <dl className="mt-4 divide-y divide-nexus-line">
@@ -1955,6 +2027,48 @@ function ReservationRecordDetailPage({ data }) {
         </aside>
       </div>
     </Shell>
+  );
+}
+
+function ReservationCorrectionPanel({ form, saving, error, onFieldChange, onCancel, onSave }) {
+  return (
+    <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h2 className="text-sm font-bold text-white">Edit reservation details</h2>
+          <p className="bim-page-description">
+            Safe edits are limited to reserved for, reason, and notes.
+          </p>
+        </div>
+        <Button type="button" variant="ghost" onClick={onCancel}>
+          <X className="h-4 w-4" />
+          Close
+        </Button>
+      </div>
+
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
+        <Field label="Reserved For" required>
+          <TextInput value={form.reservedFor} onChange={(value) => onFieldChange("reservedFor", value)} />
+        </Field>
+        <Field label="Reason">
+          <TextInput value={form.reason} onChange={(value) => onFieldChange("reason", value)} />
+        </Field>
+        <Field label="Notes">
+          <TextInput value={form.notes} onChange={(value) => onFieldChange("notes", value)} />
+        </Field>
+      </div>
+
+      {error ? <p className="mt-3 text-sm font-semibold text-[var(--tone-red-text)]">{error}</p> : null}
+      <div className="mt-5 flex flex-wrap gap-3">
+        <Button type="button" variant="primary" loading={saving} onClick={onSave}>
+          <Save className="h-4 w-4" />
+          Save Details
+        </Button>
+        <Button type="button" variant="secondary" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </section>
   );
 }
 
@@ -2386,8 +2500,13 @@ function IssueRecordDetailPage({ data }) {
   const [returnReason, setReturnReason] = useState("");
   const [returning, setReturning] = useState(false);
   const [message, setMessage] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [savingCorrection, setSavingCorrection] = useState(false);
+  const [correctionError, setCorrectionError] = useState("");
+  const [correctionForm, setCorrectionForm] = useState({ issuedTo: "", reason: "", issueDate: "", notes: "" });
   const { showError } = useToast();
   const canReturnIssue = Boolean(data.permissions?.canReturnIssue);
+  const canEditIssue = Boolean(data.permissions?.canEditIssue);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -2414,6 +2533,53 @@ function IssueRecordDetailPage({ data }) {
     loadIssue();
     return () => controller.abort();
   }, [data.api.issueDetail, issueId, reloadKey]);
+
+  useEffect(() => {
+    if (!record) return;
+    setCorrectionForm({
+      issuedTo: record.issued_to || "",
+      reason: record.reason || "",
+      issueDate: record.issue_date || "",
+      notes: record.notes || ""
+    });
+  }, [record]);
+
+  function updateCorrectionField(field, value) {
+    setCorrectionForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function saveIssueCorrection() {
+    if (!canEditIssue) return;
+    setSavingCorrection(true);
+    setCorrectionError("");
+    try {
+      const endpoint = data.api.issueDetail.replace("{id}", issueId);
+      const response = await fetch(endpoint, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": data.csrfToken
+        },
+        body: JSON.stringify({
+          issued_to: correctionForm.issuedTo,
+          reason: correctionForm.reason,
+          issue_date: correctionForm.issueDate,
+          notes: correctionForm.notes
+        })
+      });
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        throw new Error(firstApiError(details) || "Could not update temporary assignment record.");
+      }
+      setEditing(false);
+      setMessage("Temporary assignment details updated.");
+      setReloadKey((current) => current + 1);
+    } catch (saveError) {
+      setCorrectionError(saveError.message);
+    } finally {
+      setSavingCorrection(false);
+    }
+  }
 
   async function returnIssue() {
     if (!canReturnIssue) return;
@@ -2481,6 +2647,14 @@ function IssueRecordDetailPage({ data }) {
           </div>
           <p className="bim-page-description">Assigned units must be returned before delivery.</p>
         </div>
+        {isActive && canEditIssue ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="button" variant="outline" onClick={() => setEditing((current) => !current)}>
+              <Edit3 className="h-4 w-4" />
+              Edit Details
+            </Button>
+          </div>
+        ) : null}
       </header>
 
       {message ? (
@@ -2491,12 +2665,26 @@ function IssueRecordDetailPage({ data }) {
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-5">
+          {editing && canEditIssue ? (
+            <IssueCorrectionPanel
+              form={correctionForm}
+              saving={savingCorrection}
+              error={correctionError}
+              onFieldChange={updateCorrectionField}
+              onCancel={() => {
+                setEditing(false);
+                setCorrectionError("");
+              }}
+              onSave={saveIssueCorrection}
+            />
+          ) : null}
+
           <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
             <SectionTitle title="Assignment Details" />
             <dl className="mt-4 divide-y divide-nexus-line">
+              <DetailRow label="Assignment Date" value={formatDate(record.issue_date)} />
               <DetailRow label="Assigned To" value={record.issued_to || "-"} />
               <DetailRow label="Reason" value={record.reason || "-"} />
-              <DetailRow label="Assignment Date" value={formatDate(record.issue_date)} />
               <DetailRow label="Assigned By" value={record.issued_by_name || "-"} />
               <DetailRow label="Notes" value={record.notes || "-"} />
               {record.returned_date ? <DetailRow label="Returned Date" value={formatDate(record.returned_date)} /> : null}
@@ -2542,6 +2730,51 @@ function IssueRecordDetailPage({ data }) {
         </aside>
       </div>
     </Shell>
+  );
+}
+
+function IssueCorrectionPanel({ form, saving, error, onFieldChange, onCancel, onSave }) {
+  return (
+    <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h2 className="text-sm font-bold text-white">Edit temporary assignment details</h2>
+          <p className="bim-page-description">
+            Safe edits are limited to assigned to, reason, assignment date, and notes.
+          </p>
+        </div>
+        <Button type="button" variant="ghost" onClick={onCancel}>
+          <X className="h-4 w-4" />
+          Close
+        </Button>
+      </div>
+
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
+        <Field label="Assignment Date" required>
+          <TextInput type="date" value={form.issueDate} onChange={(value) => onFieldChange("issueDate", value)} />
+        </Field>
+        <Field label="Assigned To" required>
+          <TextInput value={form.issuedTo} onChange={(value) => onFieldChange("issuedTo", value)} />
+        </Field>
+        <Field label="Reason">
+          <TextInput value={form.reason} onChange={(value) => onFieldChange("reason", value)} />
+        </Field>
+        <Field label="Notes">
+          <TextInput value={form.notes} onChange={(value) => onFieldChange("notes", value)} />
+        </Field>
+      </div>
+
+      {error ? <p className="mt-3 text-sm font-semibold text-[var(--tone-red-text)]">{error}</p> : null}
+      <div className="mt-5 flex flex-wrap gap-3">
+        <Button type="button" variant="primary" loading={saving} onClick={onSave}>
+          <Save className="h-4 w-4" />
+          Save Details
+        </Button>
+        <Button type="button" variant="secondary" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </section>
   );
 }
 
@@ -2942,8 +3175,18 @@ function RepairRecordDetailPage({ data }) {
   const [resolutionNotes, setResolutionNotes] = useState("");
   const [resolving, setResolving] = useState(false);
   const [message, setMessage] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [savingCorrection, setSavingCorrection] = useState(false);
+  const [correctionError, setCorrectionError] = useState("");
+  const [correctionForm, setCorrectionForm] = useState({
+    repairDate: "",
+    technician: "",
+    repairReason: "",
+    notes: ""
+  });
   const { showError } = useToast();
   const canResolveRepair = Boolean(data.permissions?.canResolveRepair);
+  const canEditRepair = Boolean(data.permissions?.canEditRepair);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -2970,6 +3213,53 @@ function RepairRecordDetailPage({ data }) {
     loadRepair();
     return () => controller.abort();
   }, [data.api.repairDetail, repairId, reloadKey]);
+
+  useEffect(() => {
+    if (!record) return;
+    setCorrectionForm({
+      repairDate: record.repair_date || "",
+      technician: record.technician || "",
+      repairReason: record.repair_reason || "",
+      notes: record.notes || ""
+    });
+  }, [record]);
+
+  function updateCorrectionField(field, value) {
+    setCorrectionForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function saveRepairCorrection() {
+    if (!canEditRepair) return;
+    setSavingCorrection(true);
+    setCorrectionError("");
+    try {
+      const endpoint = data.api.repairDetail.replace("{id}", repairId);
+      const response = await fetch(endpoint, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": data.csrfToken
+        },
+        body: JSON.stringify({
+          repair_date: correctionForm.repairDate,
+          technician: correctionForm.technician,
+          repair_reason: correctionForm.repairReason,
+          notes: correctionForm.notes
+        })
+      });
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        throw new Error(firstApiError(details) || "Could not update repair record.");
+      }
+      setEditing(false);
+      setMessage("Repair details updated.");
+      setReloadKey((current) => current + 1);
+    } catch (saveError) {
+      setCorrectionError(saveError.message);
+    } finally {
+      setSavingCorrection(false);
+    }
+  }
 
   async function resolveRepair() {
     if (!canResolveRepair) return;
@@ -2999,6 +3289,8 @@ function RepairRecordDetailPage({ data }) {
       setMessage(
         resolution === "available"
           ? "Repair resolved. Linked repair units were moved back to available stock."
+          : resolution === "sold"
+          ? "Repair resolved. Linked units were returned to the client."
           : "Repair resolved. Linked repair units were made inactive."
       );
       setReloadKey((current) => current + 1);
@@ -3044,6 +3336,14 @@ function RepairRecordDetailPage({ data }) {
           </div>
           <p className="bim-page-description">Reserved, issued, and sold units must use their own workflows before repair.</p>
         </div>
+        {isActive && canEditRepair ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="button" variant="outline" onClick={() => setEditing((current) => !current)}>
+              <Edit3 className="h-4 w-4" />
+              Edit Details
+            </Button>
+          </div>
+        ) : null}
       </header>
 
       {message ? (
@@ -3054,14 +3354,41 @@ function RepairRecordDetailPage({ data }) {
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-5">
+          {editing && canEditRepair ? (
+            <RepairCorrectionPanel
+              form={correctionForm}
+              saving={savingCorrection}
+              error={correctionError}
+              onFieldChange={updateCorrectionField}
+              onCancel={() => {
+                setEditing(false);
+                setCorrectionError("");
+              }}
+              onSave={saveRepairCorrection}
+            />
+          ) : null}
+
           <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
             <SectionTitle title="Repair Details" />
             <dl className="mt-4 divide-y divide-nexus-line">
+              <DetailRow label="Repair Date" value={formatDate(record.repair_date)} />
               <DetailRow label="Reason" value={record.repair_reason || "-"} />
               <DetailRow label="Technician" value={record.technician || "-"} />
-              <DetailRow label="Repair Date" value={formatDate(record.repair_date)} />
               <DetailRow label="Sent By" value={record.sent_by_name || "-"} />
               <DetailRow label="Notes" value={record.notes || "-"} />
+              {record.client_return_number ? (
+                <DetailRow
+                  label="Originated From"
+                  value={
+                    <a
+                      href={`/operations/client-returns/${record.client_return}/`}
+                      className="font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]"
+                    >
+                      {record.client_return_number}
+                    </a>
+                  }
+                />
+              ) : null}
               {record.resolved_date ? <DetailRow label="Resolved Date" value={formatDate(record.resolved_date)} /> : null}
               {record.resolution ? <DetailRow label="Resolution" value={record.resolution} /> : null}
               {record.resolution_notes ? <DetailRow label="Resolution Notes" value={record.resolution_notes} /> : null}
@@ -3094,7 +3421,8 @@ function RepairRecordDetailPage({ data }) {
                   onChange={setResolution}
                   options={[
                     ["available", "Return to available"],
-                    ["inactive", "Deactivate unit"]
+                    ["inactive", "Deactivate unit"],
+                    ...(record.client_return_number ? [["sold", "Returned to Client"]] : [])
                   ]}
                   disabled={!isActive}
                 />
@@ -3117,6 +3445,51 @@ function RepairRecordDetailPage({ data }) {
         </aside>
       </div>
     </Shell>
+  );
+}
+
+function RepairCorrectionPanel({ form, saving, error, onFieldChange, onCancel, onSave }) {
+  return (
+    <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h2 className="text-sm font-bold text-white">Edit repair details</h2>
+          <p className="bim-page-description">
+            Safe edits are limited to repair date, technician, reason, and notes.
+          </p>
+        </div>
+        <Button type="button" variant="ghost" onClick={onCancel}>
+          <X className="h-4 w-4" />
+          Close
+        </Button>
+      </div>
+
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
+        <Field label="Repair Date" required>
+          <TextInput type="date" value={form.repairDate} onChange={(value) => onFieldChange("repairDate", value)} />
+        </Field>
+        <Field label="Technician">
+          <TextInput value={form.technician} onChange={(value) => onFieldChange("technician", value)} />
+        </Field>
+        <Field label="Reason" required>
+          <TextInput value={form.repairReason} onChange={(value) => onFieldChange("repairReason", value)} />
+        </Field>
+        <Field label="Notes">
+          <TextInput value={form.notes} onChange={(value) => onFieldChange("notes", value)} />
+        </Field>
+      </div>
+
+      {error ? <p className="mt-3 text-sm font-semibold text-[var(--tone-red-text)]">{error}</p> : null}
+      <div className="mt-5 flex flex-wrap gap-3">
+        <Button type="button" variant="primary" loading={saving} onClick={onSave}>
+          <Save className="h-4 w-4" />
+          Save Details
+        </Button>
+        <Button type="button" variant="secondary" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </section>
   );
 }
 
@@ -3974,6 +4347,7 @@ function ClientReturnRecordsTable({ records, loading, error }) {
               <th className="px-4 py-3 font-medium">Return Date</th>
               <th className="px-4 py-3 font-medium">Units</th>
               <th className="px-4 py-3 font-medium">Resolution</th>
+              <th className="px-4 py-3 font-medium">Status</th>
             </tr>
           </thead>
           <tbody>
@@ -4000,11 +4374,14 @@ function ClientReturnRecordsTable({ records, loading, error }) {
                   <td className="px-4 py-4">
                     <Status status={clientReturnResolutionLabel(record.resolution)} statusClass={record.resolution} />
                   </td>
+                  <td className="px-4 py-4">
+                    <Status status={clientReturnStatusLabel(record)} statusClass={clientReturnStatusClass(record)} />
+                  </td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan="6">
+                <td colSpan="7">
                   <EmptyState
                     className="border-t border-nexus-line"
                     title="No client returns yet."
@@ -4020,11 +4397,40 @@ function ClientReturnRecordsTable({ records, loading, error }) {
   );
 }
 
+function clientReturnStatusLabel(record) {
+  return record.status === "cancelled" || record.isactive === false ? "Cancelled" : "Recorded";
+}
+
+function clientReturnStatusClass(record) {
+  return record.status === "cancelled" || record.isactive === false ? "inactive" : "received";
+}
+
 function ClientReturnRecordDetailPage({ data }) {
   const returnId = (data.currentPath || window.location.pathname).match(/\/operations\/client-returns\/(\d+)\//)?.[1];
   const [record, setRecord] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [notFound, setNotFound] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [editing, setEditing] = useState(false);
+  const [savingCorrection, setSavingCorrection] = useState(false);
+  const [correctionError, setCorrectionError] = useState("");
+  const [correctionMessage, setCorrectionMessage] = useState("");
+  const [correctionForm, setCorrectionForm] = useState({
+    returnDate: "",
+    customerName: "",
+    receivedFrom: "",
+    reason: "",
+    notes: ""
+  });
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelling, setCancelling] = useState(false);
+  const { showError } = useToast();
+
+  const isCancelled = record?.status === "cancelled" || record?.isactive === false;
+  const canEditClientReturn = Boolean(data.permissions?.canEditClientReturn);
+  const canCancelClientReturn = Boolean(data.permissions?.canCancelClientReturn);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -4032,11 +4438,17 @@ function ClientReturnRecordDetailPage({ data }) {
     async function loadClientReturn() {
       setLoading(true);
       setError("");
+      setNotFound(false);
       try {
         const endpoint = data.api.clientReturnDetail.replace("{id}", returnId);
         const response = await fetch(endpoint, { signal: controller.signal });
+        if (response.status === 404) {
+          setNotFound(true);
+          setRecord(null);
+          return;
+        }
         if (!response.ok) {
-          throw new Error(response.status === 404 ? "Client return record was not found." : "Could not load client return record.");
+          throw new Error("Could not load client return record.");
         }
         setRecord(await response.json());
       } catch (loadError) {
@@ -4050,26 +4462,88 @@ function ClientReturnRecordDetailPage({ data }) {
 
     loadClientReturn();
     return () => controller.abort();
-  }, [data.api.clientReturnDetail, returnId]);
+  }, [data.api.clientReturnDetail, returnId, reloadKey]);
 
-  if (loading) {
-    return (
-      <Shell data={data}>
-        <div className="rounded-lg border border-nexus-line bg-nexus-panel p-6 text-zinc-400">
-          Loading client return record...
-        </div>
-      </Shell>
-    );
+  useEffect(() => {
+    if (!record) return;
+    setCorrectionForm({
+      returnDate: record.return_date || "",
+      customerName: record.customer_name || "",
+      receivedFrom: record.received_from || "",
+      reason: record.reason || "",
+      notes: record.notes || ""
+    });
+  }, [record]);
+
+  function updateCorrectionField(field, value) {
+    setCorrectionForm((current) => ({ ...current, [field]: value }));
   }
 
-  if (error || !record) {
-    return (
-      <Shell data={data}>
-        <div className="rounded-lg border border-[rgb(var(--bim-red-rgb)/60%)] bg-red-500/10 p-6 text-[var(--tone-red-text)]">
-          {error || "Client return record was not found."}
-        </div>
-      </Shell>
-    );
+  async function saveClientReturnCorrection() {
+    if (!canEditClientReturn) return;
+    setSavingCorrection(true);
+    setCorrectionError("");
+    setCorrectionMessage("");
+    try {
+      const endpoint = data.api.clientReturnDetail.replace("{id}", returnId);
+      const response = await fetch(endpoint, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": data.csrfToken
+        },
+        body: JSON.stringify({
+          return_date: correctionForm.returnDate,
+          customer_name: correctionForm.customerName,
+          received_from: correctionForm.receivedFrom,
+          reason: correctionForm.reason,
+          notes: correctionForm.notes
+        })
+      });
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        throw new Error(firstApiError(details) || "Could not update client return record.");
+      }
+      setEditing(false);
+      setCorrectionMessage("Client return details updated.");
+      setReloadKey((current) => current + 1);
+    } catch (saveError) {
+      setCorrectionError(saveError.message);
+    } finally {
+      setSavingCorrection(false);
+    }
+  }
+
+  async function cancelClientReturnRecord() {
+    if (!canCancelClientReturn) return;
+    setCancelling(true);
+    setCorrectionMessage("");
+    try {
+      if (!cancelReason.trim()) {
+        throw new Error("Enter a cancellation reason.");
+      }
+      const endpoint = data.api.clientReturnDetail.replace("{id}", returnId).replace(/\/$/, "/cancel/");
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": data.csrfToken
+        },
+        body: JSON.stringify({ cancel_reason: cancelReason })
+      });
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        throw new Error(firstApiError(details) || "Could not cancel client return record.");
+      }
+      setCancelOpen(false);
+      setCancelReason("");
+      setCorrectionMessage("Client return cancelled. Linked units were moved back to sold, and any linked repair record was cancelled too.");
+      setReloadKey((current) => current + 1);
+    } catch (cancelSaveError) {
+      showError(cancelSaveError.message);
+    } finally {
+      setCancelling(false);
+    }
   }
 
   return (
@@ -4079,47 +4553,206 @@ function ClientReturnRecordDetailPage({ data }) {
           <a href={data.routes.clientReturnRecords} className="mb-2 inline-flex text-sm font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
             Back to client returns
           </a>
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="bim-page-title">{record.return_number}</h1>
-            <Status status={clientReturnResolutionLabel(record.resolution)} statusClass={record.resolution} />
-          </div>
+          {record ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="bim-page-title">{record.return_number}</h1>
+              <Status status={clientReturnStatusLabel(record)} statusClass={clientReturnStatusClass(record)} />
+              <Status status={clientReturnResolutionLabel(record.resolution)} statusClass={record.resolution} />
+            </div>
+          ) : (
+            <h1 className="bim-page-title">Client Return Record</h1>
+          )}
           <p className="bim-page-description">
             Client return is not a delivery cancellation and not a financial refund or credit.
           </p>
         </div>
+        {record && !isCancelled && (canEditClientReturn || canCancelClientReturn) ? (
+          <div className="flex flex-wrap items-center gap-3">
+            {canEditClientReturn ? (
+              <Button type="button" variant="outline" onClick={() => setEditing((current) => !current)}>
+                <Edit3 className="h-4 w-4" />
+                Edit Details
+              </Button>
+            ) : null}
+            {canCancelClientReturn ? (
+              <Button type="button" variant="secondary" onClick={() => setCancelOpen((current) => !current)}>
+                <RotateCcw className="h-4 w-4" />
+                Cancel Record
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
       </header>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="space-y-5">
-          <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
-            <SectionTitle title="Return Details" />
-            <dl className="mt-4 divide-y divide-nexus-line">
-              <DetailRow label="Original Delivery" value={record.delivery_number || "-"} />
-              <DetailRow label="Client" value={record.client_name || record.customer_name || "-"} />
-              <DetailRow label="Received From" value={record.received_from || "-"} />
-              <DetailRow label="Return Date" value={formatDate(record.return_date)} />
-              <DetailRow label="Reason" value={record.reason || "-"} />
-              <DetailRow label="Resolution" value={clientReturnResolutionLabel(record.resolution)} />
-              <DetailRow label="Received By" value={record.received_by_name || "-"} />
-              <DetailRow label="Notes" value={record.notes || "-"} />
-            </dl>
-          </section>
+      {correctionMessage ? (
+        <section className="mb-4 rounded-lg border border-[rgb(var(--bim-green-rgb)/50%)] bg-green-500/10 px-4 py-3 text-sm font-semibold text-green-200">
+          {correctionMessage}
+        </section>
+      ) : null}
 
-          <ClientReturnItemsTable items={record.items || []} />
+      {loading ? (
+        <div className="rounded-lg border border-nexus-line bg-nexus-panel p-6 text-zinc-400">
+          Loading client return record...
         </div>
+      ) : error ? (
+        <div className="rounded-lg border border-[rgb(var(--bim-red-rgb)/60%)] bg-red-500/10 p-6 text-[var(--tone-red-text)]">
+          {error}
+        </div>
+      ) : notFound ? (
+        <EmptyState
+          className="rounded-lg border border-nexus-line bg-nexus-panel"
+          title="Client return record not found."
+          description="The record may have been removed or you may not have access."
+        />
+      ) : record ? (
+        <>
+          {editing && canEditClientReturn ? (
+            <ClientReturnCorrectionPanel
+              form={correctionForm}
+              saving={savingCorrection}
+              error={correctionError}
+              onFieldChange={updateCorrectionField}
+              onCancel={() => {
+                setEditing(false);
+                setCorrectionError("");
+              }}
+              onSave={saveClientReturnCorrection}
+            />
+          ) : null}
 
-        <aside className="space-y-4">
-          <section className="rounded-lg border border-nexus-line bg-nexus-panel">
-            <PanelHeader title="Return Summary" />
-            <dl className="divide-y divide-nexus-line p-4">
-              <DetailRow label="Reference" value={record.return_number} />
-              <DetailRow label="Resolution" value={clientReturnResolutionLabel(record.resolution)} />
-              <DetailRow label="Units" value={record.total_units || 0} strong />
-            </dl>
-          </section>
-        </aside>
-      </div>
+          {cancelOpen && canCancelClientReturn ? (
+            <section className="mb-5 rounded-lg border border-[rgb(var(--bim-red-rgb)/60%)] bg-red-500/10 p-5">
+              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <h2 className="text-sm font-bold text-[var(--tone-red-text)]">Cancel client return record</h2>
+                  <p className="mt-1 text-sm text-[rgb(var(--bim-red-rgb)/80%)]">
+                    Cancellation is only allowed while the returned units are still untouched. If the return sent a unit to repair, the linked repair record is cancelled too.
+                  </p>
+                </div>
+                <Button type="button" variant="ghost" onClick={() => setCancelOpen(false)}>
+                  <X className="h-4 w-4" />
+                  Close
+                </Button>
+              </div>
+              <div className="mt-4">
+                <Field label="Cancellation reason" required>
+                  <TextInput value={cancelReason} onChange={setCancelReason} placeholder="Explain the client return mistake" />
+                </Field>
+              </div>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <Button type="button" variant="danger" loading={cancelling} onClick={cancelClientReturnRecord}>
+                  <RotateCcw className="h-4 w-4" />
+                  Confirm Cancel
+                </Button>
+                <Button type="button" variant="secondary" onClick={() => setCancelOpen(false)}>
+                  Keep Record
+                </Button>
+              </div>
+            </section>
+          ) : null}
+
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="space-y-5">
+              <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
+                <SectionTitle title="Return Details" />
+                <dl className="mt-4 divide-y divide-nexus-line">
+                  <DetailRow label="Return Date" value={formatDate(record.return_date)} />
+                  <DetailRow label="Original Delivery" value={record.delivery_number || "-"} />
+                  <DetailRow label="Client" value={record.client_name || record.customer_name || "-"} />
+                  <DetailRow label="Received From" value={record.received_from || "-"} />
+                  <DetailRow label="Reason" value={record.reason || "-"} />
+                  <DetailRow label="Resolution" value={clientReturnResolutionLabel(record.resolution)} />
+                  <DetailRow label="Received By" value={record.received_by_name || "-"} />
+                  <DetailRow label="Notes" value={record.notes || "-"} />
+                  {record.resolution === "repair" && record.repair_record_number ? (
+                    <DetailRow
+                      label="Repair Record"
+                      value={
+                        <a
+                          href={`/operations/repairs/${record.repair_record_id}/`}
+                          className="font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]"
+                        >
+                          {record.repair_record_number}
+                        </a>
+                      }
+                    />
+                  ) : null}
+                  {isCancelled ? (
+                    <>
+                      <DetailRow label="Cancelled" value={formatDate(record.cancelled_at)} />
+                      <DetailRow label="Cancel Reason" value={record.cancel_reason || "-"} />
+                    </>
+                  ) : null}
+                </dl>
+              </section>
+
+              <ClientReturnItemsTable items={record.items || []} />
+            </div>
+
+            <aside className="space-y-4">
+              <section className="rounded-lg border border-nexus-line bg-nexus-panel">
+                <PanelHeader title="Return Summary" />
+                <dl className="divide-y divide-nexus-line p-4">
+                  <DetailRow label="Return Date" value={formatDate(record.return_date)} />
+                  <DetailRow label="Reference" value={record.return_number} />
+                  <DetailRow label="Resolution" value={clientReturnResolutionLabel(record.resolution)} />
+                  <DetailRow label="Status" value={clientReturnStatusLabel(record)} />
+                  <DetailRow label="Units" value={record.total_units || 0} strong />
+                </dl>
+              </section>
+            </aside>
+          </div>
+        </>
+      ) : null}
     </Shell>
+  );
+}
+
+function ClientReturnCorrectionPanel({ form, saving, error, onFieldChange, onCancel, onSave }) {
+  return (
+    <section className="mb-5 rounded-lg border border-nexus-line bg-nexus-panel p-5">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h2 className="text-sm font-bold text-white">Edit client return details</h2>
+          <p className="bim-page-description">
+            Safe edits are limited to return date, client name, received from, reason, and notes.
+          </p>
+        </div>
+        <Button type="button" variant="ghost" onClick={onCancel}>
+          <X className="h-4 w-4" />
+          Close
+        </Button>
+      </div>
+
+      <div className="mt-5 grid gap-4 md:grid-cols-2">
+        <Field label="Return Date" required>
+          <TextInput type="date" value={form.returnDate} onChange={(value) => onFieldChange("returnDate", value)} />
+        </Field>
+        <Field label="Client">
+          <TextInput value={form.customerName} onChange={(value) => onFieldChange("customerName", value)} />
+        </Field>
+        <Field label="Received From">
+          <TextInput value={form.receivedFrom} onChange={(value) => onFieldChange("receivedFrom", value)} />
+        </Field>
+        <Field label="Reason">
+          <TextInput value={form.reason} onChange={(value) => onFieldChange("reason", value)} />
+        </Field>
+        <Field label="Notes">
+          <TextInput value={form.notes} onChange={(value) => onFieldChange("notes", value)} />
+        </Field>
+      </div>
+
+      {error ? <p className="mt-3 text-sm font-semibold text-[var(--tone-red-text)]">{error}</p> : null}
+      <div className="mt-5 flex flex-wrap gap-3">
+        <Button type="button" variant="primary" loading={saving} onClick={onSave}>
+          <Save className="h-4 w-4" />
+          Save Details
+        </Button>
+        <Button type="button" variant="secondary" onClick={onCancel}>
+          Cancel
+        </Button>
+      </div>
+    </section>
   );
 }
 
@@ -5659,16 +6292,6 @@ function ProductDetail({ product, canEditProduct = false }) {
           <DetailRow label="Low Stock Alert" value={product.reorder_stock_level} />
         </div>
 
-        <a
-          href={`/inventory/products/${product.id}/`}
-          className="flex items-center justify-between rounded-lg border border-nexus-line bg-nexus-panel2 px-4 py-3 hover:border-[rgb(var(--bim-orange-focus-rgb)/70%)]"
-        >
-          <span className="inline-flex items-center gap-3 text-sm font-semibold text-white">
-            <Package className="h-4 w-4 text-[var(--bim-orange-text)]" />
-            Stock Units
-          </span>
-          <ChevronRight className="h-4 w-4 text-zinc-500" />
-        </a>
       </div>
       <CardFooter className={`mt-auto grid gap-2 p-4 ${canEditProduct ? "grid-cols-2" : "grid-cols-1"}`}>
         {canEditProduct ? (
@@ -5712,6 +6335,7 @@ function ProductDetailsPage({ data }) {
   const [movementsAccessDenied, setMovementsAccessDenied] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [activeTab, setActiveTab] = useState("Overview");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -5847,104 +6471,130 @@ function ProductDetailsPage({ data }) {
           ["Receiving", 0],
           ["Deliveries", 0],
           ["Documents", 0]
-        ].map(([label, count], index) => (
+        ].map(([label, count]) => (
           <button
             key={label}
-            className={`border-b-2 px-4 py-3 ${index === 0 ? "border-[var(--bim-orange-focus)] text-[var(--bim-orange-text)]" : "border-transparent text-zinc-400"}`}
+            onClick={() => setActiveTab(label)}
+            className={`border-b-2 px-4 py-3 ${activeTab === label ? "border-[var(--bim-orange-focus)] text-[var(--bim-orange-text)]" : "border-transparent text-zinc-400 hover:text-zinc-200"}`}
           >
             {label} {count !== "" ? <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">{count}</span> : null}
           </button>
         ))}
       </nav>
 
-      <div className="mt-4 grid gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
-        <div className="space-y-5">
-          <div className="grid gap-5 xl:grid-cols-2">
-            <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
-                <SectionTitle title="Product Information" />
-                <dl className="mt-4 divide-y divide-nexus-line">
-                  <DetailRow label="Product Name" value={product.descript} />
-                  <DetailRow label="SKU" value={product.sku} />
-                <DetailRow label="Barcode" value={product.barcode || "-"} />
-                <DetailRow label="Category" value={product.category_name} />
-                <DetailRow label="Brand" value={product.brand_name} />
-                <DetailRow label="Model" value={product.model_name} />
-                <DetailRow label="Unit of Measure" value="Each" />
-              </dl>
-            </section>
-
-            <div className="space-y-5">
+      {activeTab === "Overview" ? (
+        <div className="mt-4 grid gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
+          <div className="space-y-5">
+            <div className="grid gap-5 xl:grid-cols-2">
               <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
-                <SectionTitle title="Supplier Information" />
-                <dl className="mt-4 divide-y divide-nexus-line">
-                  <DetailRow label="Default Supplier" value={supplierUnit?.supplier_name || "-"} />
-                  <DetailRow label="Last Purchase" value={formatDate(supplierUnit?.purchase_date || supplierUnit?.crdate)} />
-                  <DetailRow label="Last Cost" value={formatCurrency(lastCostUnit?.cost)} />
+                  <SectionTitle title="Product Information" />
+                  <dl className="mt-4 divide-y divide-nexus-line">
+                    <DetailRow label="Product Name" value={product.descript} />
+                    <DetailRow label="SKU" value={product.sku} />
+                  <DetailRow label="Barcode" value={product.barcode || "-"} />
+                  <DetailRow label="Category" value={product.category_name} />
+                  <DetailRow label="Brand" value={product.brand_name} />
+                  <DetailRow label="Model" value={product.model_name} />
+                  <DetailRow label="Unit of Measure" value="Each" />
                 </dl>
               </section>
 
-              <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
-                <SectionTitle title="Stock Availability" />
-                <div className="mt-4">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-zinc-400">In-stock rate</span>
-                    <span className="font-bold text-[var(--bim-orange-text)]">{stockPercent}%</span>
+              <div className="space-y-5">
+                <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
+                  <SectionTitle title="Supplier Information" />
+                  <dl className="mt-4 divide-y divide-nexus-line">
+                    <DetailRow label="Default Supplier" value={supplierUnit?.supplier_name || "-"} />
+                    <DetailRow label="Last Purchase" value={formatDate(supplierUnit?.purchase_date || supplierUnit?.crdate)} />
+                    <DetailRow label="Last Cost" value={formatCurrency(lastCostUnit?.cost)} />
+                  </dl>
+                </section>
+
+                <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
+                  <SectionTitle title="Stock Availability" />
+                  <div className="mt-4">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-zinc-400">In-stock rate</span>
+                      <span className="font-bold text-[var(--bim-orange-text)]">{stockPercent}%</span>
+                    </div>
+                    <div className="mt-2 h-1.5 rounded-full bg-zinc-800">
+                      <div className="h-1.5 rounded-full bg-nexus-orange" style={{ width: `${stockPercent}%` }} />
+                    </div>
                   </div>
-                  <div className="mt-2 h-1.5 rounded-full bg-zinc-800">
-                    <div className="h-1.5 rounded-full bg-nexus-orange" style={{ width: `${stockPercent}%` }} />
-                  </div>
-                </div>
-                <dl className="mt-4 divide-y divide-nexus-line">
-                  <DetailRow label="Available" value={product.available_units} highlight />
-                  <DetailRow label="Reserved" value={product.reserved_units} />
-                  <DetailRow label="Total" value={product.total_units} strong />
-                  <DetailRow label="Low Stock Alert" value={product.reorder_stock_level} />
-                </dl>
-              </section>
+                  <dl className="mt-4 divide-y divide-nexus-line">
+                    <DetailRow label="Available" value={product.available_units} highlight />
+                    <DetailRow label="Reserved" value={product.reserved_units} />
+                    <DetailRow label="Total" value={product.total_units} strong />
+                    <DetailRow label="Low Stock Alert" value={product.reorder_stock_level} />
+                  </dl>
+                </section>
+              </div>
             </div>
           </div>
 
+          <aside className="rounded-lg border border-nexus-line bg-nexus-panel">
+            <PanelHeader title="Recent Activity" />
+            {recentActivity.length ? (
+              recentActivity.map((movement) => (
+                <div key={movement.id} className="border-t border-nexus-line px-4 py-4">
+                  <p className="text-sm font-bold text-white">{movement.movement_type_label || movement.movement_type}</p>
+                  <p className="mt-1 text-xs text-zinc-500">{movement.reference || movement.serial_number || "-"}</p>
+                  <p className="mt-1 text-xs text-zinc-600">{formatDate(movement.movement_date || movement.crdate)}</p>
+                </div>
+              ))
+            ) : movementsAccessDenied ? (
+              <p className="border-t border-nexus-line px-4 py-5 text-sm text-zinc-500">
+                Movement history requires stock movement access.
+              </p>
+            ) : (
+              <p className="border-t border-nexus-line px-4 py-5 text-sm text-zinc-500">
+                No stock movements recorded yet.
+              </p>
+            )}
+            <button
+              onClick={() => setActiveTab("Movements")}
+              className="block w-full border-t border-nexus-line px-4 py-4 text-center text-sm font-semibold text-[var(--bim-orange-text)] hover:bg-nexus-panel2"
+            >
+              View all movements
+            </button>
+          </aside>
+        </div>
+      ) : null}
+
+      {activeTab === "Stock Units" ? (
+        <div className="mt-4">
           <ProductUnitRegister
             units={units}
             accessDenied={unitsAccessDenied}
             canAccessAdmin={data.user?.canAccessAdmin}
           />
+        </div>
+      ) : null}
+
+      {activeTab === "Movements" ? (
+        <div className="mt-4">
           <ProductMovementHistory
             movements={movements}
             accessDenied={movementsAccessDenied}
+            limit={movements.length}
           />
         </div>
+      ) : null}
 
-        <aside className="rounded-lg border border-nexus-line bg-nexus-panel">
-          <PanelHeader title="Recent Activity" />
-          {recentActivity.length ? (
-            recentActivity.map((movement) => (
-              <div key={movement.id} className="border-t border-nexus-line px-4 py-4">
-                <p className="text-sm font-bold text-white">{movement.movement_type_label || movement.movement_type}</p>
-                <p className="mt-1 text-xs text-zinc-500">{movement.reference || movement.serial_number || "-"}</p>
-                <p className="mt-1 text-xs text-zinc-600">{formatDate(movement.movement_date || movement.crdate)}</p>
-              </div>
-            ))
-          ) : movementsAccessDenied ? (
-            <p className="border-t border-nexus-line px-4 py-5 text-sm text-zinc-500">
-              Movement history requires stock movement access.
-            </p>
-          ) : (
-            <p className="border-t border-nexus-line px-4 py-5 text-sm text-zinc-500">
-              No stock movements recorded yet.
-            </p>
-          )}
-          <a href={`/inventory/products/${product.id}/`} className="block border-t border-nexus-line px-4 py-4 text-center text-sm font-semibold text-[var(--bim-orange-text)] hover:bg-nexus-panel2">
-            View product detail
-          </a>
-        </aside>
-      </div>
+      {["Receiving", "Deliveries", "Documents"].includes(activeTab) ? (
+        <div className="mt-4 rounded-lg border border-nexus-line bg-nexus-panel">
+          <EmptyState
+            icon="clock-3"
+            title={`${activeTab} - Coming later`}
+            description={`Per-product ${activeTab.toLowerCase()} history isn't available yet.`}
+          />
+        </div>
+      ) : null}
     </Shell>
   );
 }
 
-function ProductMovementHistory({ movements, accessDenied }) {
-  const visibleMovements = movements.slice(0, 10);
+function ProductMovementHistory({ movements, accessDenied, limit = 10 }) {
+  const visibleMovements = movements.slice(0, limit);
 
   return (
     <section className="overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel" aria-label="Movement History">
@@ -8107,6 +8757,31 @@ function SectionTitle({ title }) {
   return <h2 className="mb-3 bim-section-title">{title}</h2>;
 }
 
+function NotFoundPage({ data }) {
+  return (
+    <Shell data={data}>
+      <header className="mb-5 border-b border-nexus-line pb-4">
+        <h1 className="bim-page-title">Page Not Found</h1>
+      </header>
+
+      <EmptyState
+        className="rounded-lg border border-nexus-line bg-nexus-panel"
+        icon="package-x"
+        title="This page doesn't exist."
+        description="The link may be out of date, or the page may have been moved."
+        action={
+          <a
+            href="/"
+            className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]"
+          >
+            Back to Command Center
+          </a>
+        }
+      />
+    </Shell>
+  );
+}
+
 const appRoutes = [
   {
     match: (path) => path.startsWith("/test/print-label"),
@@ -8280,6 +8955,10 @@ export default function AppRouter({ initialData }) {
 
   if (route) {
     return route.render(initialData);
+  }
+
+  if (currentPath && currentPath !== "/") {
+    return <NotFoundPage data={initialData} />;
   }
 
   return <CommandCenter data={initialData} />;

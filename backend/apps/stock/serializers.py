@@ -27,6 +27,7 @@ from .models import (
     Supplier,
 )
 from .services import (
+    cancel_client_return_record,
     cancel_delivery_record,
     cancel_receiving_record,
     create_client_return_record,
@@ -39,8 +40,12 @@ from .services import (
     release_reservation_record,
     resolve_repair_record,
     return_issue_record,
+    update_client_return_record_header,
     update_delivery_record_header,
+    update_issue_record_header,
     update_receiving_record_header,
+    update_repair_record_header,
+    update_reservation_record_header,
 )
 
 
@@ -638,6 +643,30 @@ class ReservationReleaseSerializer(serializers.Serializer):
             raise serializers.ValidationError(exc.messages) from exc
 
 
+class ReservationRecordCorrectionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ReservationRecord
+        fields = (
+            "reserved_for",
+            "reason",
+            "notes",
+        )
+        extra_kwargs = {
+            "reserved_for": {"required": False, "allow_blank": False},
+            "reason": {"required": False, "allow_blank": True},
+            "notes": {"required": False, "allow_blank": True},
+        }
+
+    def update(self, instance, validated_data):
+        try:
+            return update_reservation_record_header(instance, **validated_data)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc
+
+    def to_representation(self, instance):
+        return ReservationRecordSerializer(instance, context=self.context).data
+
+
 class IssueItemSerializer(serializers.ModelSerializer):
     product_name = serializers.SerializerMethodField()
     product_sku = serializers.CharField(source="product.sku", read_only=True)
@@ -766,6 +795,32 @@ class IssueReturnSerializer(serializers.Serializer):
             raise serializers.ValidationError(exc.messages) from exc
 
 
+class IssueRecordCorrectionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = IssueRecord
+        fields = (
+            "issued_to",
+            "reason",
+            "issue_date",
+            "notes",
+        )
+        extra_kwargs = {
+            "issued_to": {"required": False, "allow_blank": False},
+            "reason": {"required": False, "allow_blank": True},
+            "issue_date": {"required": False},
+            "notes": {"required": False, "allow_blank": True},
+        }
+
+    def update(self, instance, validated_data):
+        try:
+            return update_issue_record_header(instance, **validated_data)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc
+
+    def to_representation(self, instance):
+        return IssueRecordSerializer(instance, context=self.context).data
+
+
 class RepairItemSerializer(serializers.ModelSerializer):
     product_name = serializers.SerializerMethodField()
     product_sku = serializers.CharField(source="product.sku", read_only=True)
@@ -822,6 +877,11 @@ class RepairRecordSerializer(serializers.ModelSerializer):
         read_only=True,
         default="",
     )
+    client_return_number = serializers.CharField(
+        source="client_return.return_number",
+        read_only=True,
+        default="",
+    )
 
     class Meta:
         model = RepairRecord
@@ -841,6 +901,8 @@ class RepairRecordSerializer(serializers.ModelSerializer):
             "resolved_by",
             "resolved_by_name",
             "resolved_at",
+            "client_return",
+            "client_return_number",
             "total_units",
             "unit_ids",
             "items",
@@ -858,6 +920,8 @@ class RepairRecordSerializer(serializers.ModelSerializer):
             "resolved_by",
             "resolved_by_name",
             "resolved_at",
+            "client_return",
+            "client_return_number",
             "total_units",
             "items",
             "crdate",
@@ -879,11 +943,38 @@ class RepairRecordSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(exc.messages) from exc
 
 
+class RepairRecordCorrectionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RepairRecord
+        fields = (
+            "repair_reason",
+            "technician",
+            "repair_date",
+            "notes",
+        )
+        extra_kwargs = {
+            "repair_reason": {"required": False, "allow_blank": False},
+            "technician": {"required": False, "allow_blank": True},
+            "repair_date": {"required": False},
+            "notes": {"required": False, "allow_blank": True},
+        }
+
+    def update(self, instance, validated_data):
+        try:
+            return update_repair_record_header(instance, **validated_data)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc
+
+    def to_representation(self, instance):
+        return RepairRecordSerializer(instance, context=self.context).data
+
+
 class RepairResolveSerializer(serializers.Serializer):
     resolution = serializers.ChoiceField(
         choices=(
             ProductUnit.STATUS_AVAILABLE,
             ProductUnit.STATUS_INACTIVE,
+            ProductUnit.STATUS_SOLD,
         )
     )
     resolution_notes = serializers.CharField(required=True, allow_blank=False)
@@ -1075,6 +1166,13 @@ class ClientReturnRecordSerializer(serializers.ModelSerializer):
         read_only=True,
         default="",
     )
+    cancelled_by_name = serializers.CharField(
+        source="cancelled_by.get_username",
+        read_only=True,
+        default="",
+    )
+    repair_record_id = serializers.SerializerMethodField()
+    repair_record_number = serializers.SerializerMethodField()
 
     class Meta:
         model = ClientReturnRecord
@@ -1092,8 +1190,15 @@ class ClientReturnRecordSerializer(serializers.ModelSerializer):
             "reason",
             "resolution",
             "notes",
+            "status",
+            "cancel_reason",
+            "cancelled_at",
+            "cancelled_by",
+            "cancelled_by_name",
             "received_by",
             "received_by_name",
+            "repair_record_id",
+            "repair_record_number",
             "total_units",
             "unit_ids",
             "items",
@@ -1104,8 +1209,15 @@ class ClientReturnRecordSerializer(serializers.ModelSerializer):
             "return_number",
             "delivery_number",
             "client_name",
+            "status",
+            "cancel_reason",
+            "cancelled_at",
+            "cancelled_by",
+            "cancelled_by_name",
             "received_by",
             "received_by_name",
+            "repair_record_id",
+            "repair_record_number",
             "total_units",
             "items",
             "crdate",
@@ -1117,6 +1229,17 @@ class ClientReturnRecordSerializer(serializers.ModelSerializer):
     def get_total_units(self, obj):
         return obj.total_units
 
+    def _latest_repair(self, obj):
+        return obj.repair_records.order_by("-crdate").first()
+
+    def get_repair_record_id(self, obj):
+        repair = self._latest_repair(obj)
+        return repair.id if repair else None
+
+    def get_repair_record_number(self, obj):
+        repair = self._latest_repair(obj)
+        return repair.repair_number if repair else ""
+
     def create(self, validated_data):
         unit_ids = validated_data.pop("unit_ids")
         request = self.context.get("request")
@@ -1125,6 +1248,63 @@ class ClientReturnRecordSerializer(serializers.ModelSerializer):
                 unit_ids=unit_ids,
                 received_by=request.user if request else None,
                 **validated_data,
+            )
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc
+
+
+class ClientReturnRecordCorrectionSerializer(serializers.ModelSerializer):
+    client = serializers.PrimaryKeyRelatedField(
+        queryset=Client.objects.filter(isactive=True),
+        required=False,
+        allow_null=True,
+    )
+    client_name_input = serializers.CharField(
+        required=False,
+        write_only=True,
+        allow_blank=True,
+    )
+
+    class Meta:
+        model = ClientReturnRecord
+        fields = (
+            "client",
+            "client_name_input",
+            "customer_name",
+            "received_from",
+            "return_date",
+            "reason",
+            "notes",
+        )
+        extra_kwargs = {
+            "customer_name": {"required": False, "allow_blank": True},
+            "received_from": {"required": False, "allow_blank": True},
+            "return_date": {"required": False},
+            "reason": {"required": False, "allow_blank": True},
+            "notes": {"required": False, "allow_blank": True},
+        }
+
+    def update(self, instance, validated_data):
+        try:
+            return update_client_return_record_header(instance, **validated_data)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc
+
+    def to_representation(self, instance):
+        return ClientReturnRecordSerializer(instance, context=self.context).data
+
+
+class ClientReturnRecordCancelSerializer(serializers.Serializer):
+    cancel_reason = serializers.CharField(required=True, allow_blank=False)
+
+    def save(self, **kwargs):
+        client_return = self.context["client_return"]
+        request = self.context.get("request")
+        try:
+            return cancel_client_return_record(
+                client_return,
+                cancelled_by=request.user if request else None,
+                cancel_reason=self.validated_data["cancel_reason"],
             )
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.messages) from exc

@@ -1,6 +1,6 @@
 import { TONE_COLORS } from "./toneColors";
 
-export const statusStyles = {
+const statusStyles = {
   available: TONE_COLORS.greenSoft15,
   cancelled: TONE_COLORS.redSoft15,
   delivered: TONE_COLORS.blueSoft15,

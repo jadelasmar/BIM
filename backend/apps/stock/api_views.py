@@ -30,10 +30,13 @@ from .serializers import (
     BrandSerializer,
     CategorySerializer,
     ClientSerializer,
+    ClientReturnRecordCancelSerializer,
+    ClientReturnRecordCorrectionSerializer,
     ClientReturnRecordSerializer,
     DeliveryRecordCancelSerializer,
     DeliveryRecordCorrectionSerializer,
     DeliveryRecordSerializer,
+    IssueRecordCorrectionSerializer,
     IssueRecordSerializer,
     IssueReturnSerializer,
     ProductModelSerializer,
@@ -43,8 +46,10 @@ from .serializers import (
     ReceivingRecordCorrectionSerializer,
     ReceivingRecordSerializer,
     RemovalRecordSerializer,
+    RepairRecordCorrectionSerializer,
     RepairRecordSerializer,
     RepairResolveSerializer,
+    ReservationRecordCorrectionSerializer,
     ReservationRecordSerializer,
     ReservationReleaseSerializer,
     StockMovementSerializer,
@@ -345,9 +350,18 @@ class ClientReturnRecordListCreateAPIView(WritePermissionRequiredMixin, generics
         serializer.save()
 
 
-class ClientReturnRecordDetailAPIView(generics.RetrieveAPIView):
+class ClientReturnRecordDetailAPIView(WritePermissionRequiredMixin, generics.RetrieveUpdateAPIView):
     serializer_class = ClientReturnRecordSerializer
     permission_classes = (permissions.IsAuthenticated,)
+    write_permissions = {
+        "PUT": (stock_constants.CHANGE_CLIENT_RETURN_RECORD,),
+        "PATCH": (stock_constants.CHANGE_CLIENT_RETURN_RECORD,),
+    }
+
+    def get_serializer_class(self):
+        if self.request.method in ("PUT", "PATCH"):
+            return ClientReturnRecordCorrectionSerializer
+        return ClientReturnRecordSerializer
 
     def get_queryset(self):
         _require_perm(self.request.user, stock_constants.VIEW_CLIENT_RETURN_RECORD)
@@ -360,8 +374,39 @@ class ClientReturnRecordDetailAPIView(generics.RetrieveAPIView):
                 "items__delivery_item__delivery",
                 "items__product",
                 "items__product_unit",
+                "repair_records",
             )
         )
+
+    def perform_update(self, serializer):
+        _require_perm(self.request.user, stock_constants.CHANGE_CLIENT_RETURN_RECORD)
+        serializer.save()
+
+
+class ClientReturnRecordCancelAPIView(APIView):
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def post(self, request, pk):
+        _require_perm(request.user, stock_constants.CHANGE_CLIENT_RETURN_RECORD)
+        _require_perm(request.user, stock_constants.CHANGE_PRODUCT_UNIT)
+        client_return = get_object_or_404(
+            ClientReturnRecord.objects.select_related("client", "delivery", "received_by").prefetch_related(
+                "items",
+                "items__delivery_item",
+                "items__delivery_item__delivery",
+                "items__product",
+                "items__product_unit",
+            ),
+            pk=pk,
+        )
+
+        serializer = ClientReturnRecordCancelSerializer(
+            data=request.data,
+            context={"request": request, "client_return": client_return},
+        )
+        serializer.is_valid(raise_exception=True)
+        client_return = serializer.save()
+        return Response(ClientReturnRecordSerializer(client_return).data)
 
 
 class DeliveryRecordListCreateAPIView(WritePermissionRequiredMixin, generics.ListCreateAPIView):
@@ -504,9 +549,18 @@ class ReservationRecordListCreateAPIView(WritePermissionRequiredMixin, generics.
         serializer.save()
 
 
-class ReservationRecordDetailAPIView(generics.RetrieveAPIView):
+class ReservationRecordDetailAPIView(WritePermissionRequiredMixin, generics.RetrieveUpdateAPIView):
     serializer_class = ReservationRecordSerializer
     permission_classes = (permissions.IsAuthenticated,)
+    write_permissions = {
+        "PUT": (stock_constants.CHANGE_RESERVATION_RECORD,),
+        "PATCH": (stock_constants.CHANGE_RESERVATION_RECORD,),
+    }
+
+    def get_serializer_class(self):
+        if self.request.method in ("PUT", "PATCH"):
+            return ReservationRecordCorrectionSerializer
+        return ReservationRecordSerializer
 
     def get_queryset(self):
         _require_perm(self.request.user, stock_constants.VIEW_RESERVATION_RECORD)
@@ -519,6 +573,10 @@ class ReservationRecordDetailAPIView(generics.RetrieveAPIView):
                 "items__product_unit",
             )
         )
+
+    def perform_update(self, serializer):
+        _require_perm(self.request.user, stock_constants.CHANGE_RESERVATION_RECORD)
+        serializer.save()
 
 
 class ReservationRecordReleaseAPIView(APIView):
@@ -598,9 +656,18 @@ class IssueRecordListCreateAPIView(WritePermissionRequiredMixin, generics.ListCr
         serializer.save()
 
 
-class IssueRecordDetailAPIView(generics.RetrieveAPIView):
+class IssueRecordDetailAPIView(WritePermissionRequiredMixin, generics.RetrieveUpdateAPIView):
     serializer_class = IssueRecordSerializer
     permission_classes = (permissions.IsAuthenticated,)
+    write_permissions = {
+        "PUT": (stock_constants.CHANGE_ISSUE_RECORD,),
+        "PATCH": (stock_constants.CHANGE_ISSUE_RECORD,),
+    }
+
+    def get_serializer_class(self):
+        if self.request.method in ("PUT", "PATCH"):
+            return IssueRecordCorrectionSerializer
+        return IssueRecordSerializer
 
     def get_queryset(self):
         _require_perm(self.request.user, stock_constants.VIEW_ISSUE_RECORD)
@@ -613,6 +680,10 @@ class IssueRecordDetailAPIView(generics.RetrieveAPIView):
                 "items__product_unit",
             )
         )
+
+    def perform_update(self, serializer):
+        _require_perm(self.request.user, stock_constants.CHANGE_ISSUE_RECORD)
+        serializer.save()
 
 
 class IssueRecordReturnAPIView(APIView):
@@ -683,21 +754,34 @@ class RepairRecordListCreateAPIView(WritePermissionRequiredMixin, generics.ListC
         serializer.save()
 
 
-class RepairRecordDetailAPIView(generics.RetrieveAPIView):
+class RepairRecordDetailAPIView(WritePermissionRequiredMixin, generics.RetrieveUpdateAPIView):
     serializer_class = RepairRecordSerializer
     permission_classes = (permissions.IsAuthenticated,)
+    write_permissions = {
+        "PUT": (stock_constants.CHANGE_REPAIR_RECORD,),
+        "PATCH": (stock_constants.CHANGE_REPAIR_RECORD,),
+    }
+
+    def get_serializer_class(self):
+        if self.request.method in ("PUT", "PATCH"):
+            return RepairRecordCorrectionSerializer
+        return RepairRecordSerializer
 
     def get_queryset(self):
         _require_perm(self.request.user, stock_constants.VIEW_REPAIR_RECORD)
         return (
             RepairRecord.objects.all()
-            .select_related("sent_by", "resolved_by")
+            .select_related("sent_by", "resolved_by", "client_return")
             .prefetch_related(
                 "items",
                 "items__product",
                 "items__product_unit",
             )
         )
+
+    def perform_update(self, serializer):
+        _require_perm(self.request.user, stock_constants.CHANGE_REPAIR_RECORD)
+        serializer.save()
 
 
 class RepairRecordResolveAPIView(APIView):
@@ -710,6 +794,7 @@ class RepairRecordResolveAPIView(APIView):
             RepairRecord.objects.select_related(
                 "sent_by",
                 "resolved_by",
+                "client_return",
             ).prefetch_related(
                 "items",
                 "items__product",
