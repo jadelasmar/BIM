@@ -141,10 +141,12 @@ The hook only applies migration files already committed to the repository. It ne
 
 ## Environment Variables
 
-Use `.env.example` as a reference for office setup. Django currently reads these values from the OS environment, service runner, or deployment script; it does not auto-load `.env` files.
+Django reads these values from the OS environment, or from `backend/.env` if present (loaded automatically via `django-environ`; real deployments should set actual OS env vars instead of shipping a `.env` file).
 
 - `DJANGO_SECRET_KEY`
 - `DJANGO_DEBUG`
+- `DJANGO_ALLOWED_HOSTS`: comma-separated, e.g. `localhost,127.0.0.1,192.168.1.101`.
+- `DJANGO_DB_NAME`: SQLite filename, lives at repo root; defaults to `db.sqlite3`.
 - `BIM_EMAIL_BACKEND`
 - `BIM_EMAIL_HOST`
 - `BIM_EMAIL_PORT`

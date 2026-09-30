@@ -41,7 +41,6 @@ import { STOCK_STATUS_COLORS } from "../constants/stockStatusColors";
 import { toneClasses, workflowMeta } from "../constants/uiRegistry";
 import { DEFAULT_THEME_STORAGE_KEY, applyTheme, currentTheme } from "../hooks/useTheme";
 import { LoginPage, PasswordSetupPage } from "../pages/auth/AuthPages";
-import PrintLabelTestPage from "../pages/test/PrintLabelTestPage";
 import { formatCount, formatCurrency, formatDate } from "../utils/formatters";
 import logoPrimary from "../assets/brand/logo-primary.svg";
 import logoWhite from "../assets/brand/logo-white.svg";
@@ -8783,10 +8782,6 @@ function NotFoundPage({ data }) {
 }
 
 const appRoutes = [
-  {
-    match: (path) => path.startsWith("/test/print-label"),
-    render: () => <PrintLabelTestPage />
-  },
   {
     match: (path) => path.startsWith("/settings"),
     render: (data) => <SettingsPage data={data} />
