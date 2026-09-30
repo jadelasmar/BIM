@@ -27,5 +27,8 @@ urlpatterns = [
     path('api/stock/', include('apps.stock.api_urls')),
 ]
 
-if settings.DEBUG:
-    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+# Served unconditionally, not just under DEBUG: this app runs on an internal
+# LAN with no nginx/reverse proxy in front of it (same reasoning as whitenoise
+# serving STATIC_ROOT directly in bim/settings.py), so Django has to be the
+# one serving uploaded product images in production too.
+urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
