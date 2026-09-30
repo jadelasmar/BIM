@@ -16,8 +16,8 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.conf import settings
-from django.conf.urls.static import static
-from django.urls import include, path
+from django.urls import include, path, re_path
+from django.views.static import serve as serve_static
 
 urlpatterns = [
     path('', include('apps.core.urls')),
@@ -30,5 +30,14 @@ urlpatterns = [
 # Served unconditionally, not just under DEBUG: this app runs on an internal
 # LAN with no nginx/reverse proxy in front of it (same reasoning as whitenoise
 # serving STATIC_ROOT directly in bim/settings.py), so Django has to be the
-# one serving uploaded product images in production too.
-urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+# one serving uploaded product images in production too. Note this uses
+# django.views.static.serve directly, not the django.conf.urls.static.static()
+# shortcut - that shortcut silently no-ops whenever DEBUG=False, which is
+# exactly why the previous version of this file never worked in production.
+urlpatterns += [
+    re_path(
+        r'^%s(?P<path>.*)$' % settings.MEDIA_URL.lstrip('/'),
+        serve_static,
+        {'document_root': settings.MEDIA_ROOT},
+    ),
+]
