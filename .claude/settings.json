@@ -13,6 +13,9 @@
     "Grep"
   ],
   "permissions": {
+    "allow": [
+      "PowerShell(Start-Process -FilePath \"C:\\nssm-2.24\\win64\\nssm.exe\" *)"
+    ],
     "ask": [
       "Bash(python manage.py flush:*)",
       "Bash(python manage.py migrate * zero)",
@@ -23,5 +26,6 @@
       "PowerShell(Remove-Item*-Recurse*)",
       "PowerShell(Remove-Item*-Force*)"
     ]
+    
   }
 }
