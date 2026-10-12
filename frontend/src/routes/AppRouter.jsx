@@ -31,6 +31,7 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
+  DateInput,
   EmptyState,
   Input,
   SearchBar,
@@ -41,7 +42,7 @@ import { STOCK_STATUS_COLORS } from "../constants/stockStatusColors";
 import { toneClasses, workflowMeta } from "../constants/uiRegistry";
 import { DEFAULT_THEME_STORAGE_KEY, applyTheme, currentTheme } from "../hooks/useTheme";
 import { LoginPage, PasswordSetupPage } from "../pages/auth/AuthPages";
-import { formatCount, formatCurrency, formatDate } from "../utils/formatters";
+import { formatCount, formatCurrency, formatDate, todayLocal } from "../utils/formatters";
 import logoPrimary from "../assets/brand/logo-primary.svg";
 import logoWhite from "../assets/brand/logo-white.svg";
 
@@ -1523,7 +1524,7 @@ function ReceivingCorrectionPanel({
           />
         </Field>
         <Field label="Received Date">
-          <TextInput type="date" value={form.receivedDate} onChange={(value) => onFieldChange("receivedDate", value)} />
+          <DateInput value={form.receivedDate} onChange={(value) => onFieldChange("receivedDate", value)} />
         </Field>
         <Field label="PO Number">
           <TextInput value={form.poNumber} onChange={(value) => onFieldChange("poNumber", value)} placeholder="Purchase order number" />
@@ -1741,6 +1742,7 @@ function ReservationRecordsTable({ records, loading, error }) {
             <tr>
               <th className="px-4 py-3 font-medium">Reservation</th>
               <th className="px-4 py-3 font-medium">Reserved For</th>
+              <th className="px-4 py-3 font-medium">Reserved Date</th>
               <th className="px-4 py-3 font-medium">Reason</th>
               <th className="px-4 py-3 font-medium">Units</th>
               <th className="px-4 py-3 font-medium">Status</th>
@@ -1760,7 +1762,10 @@ function ReservationRecordsTable({ records, loading, error }) {
                     </a>
                     <p className="mt-1 text-xs text-zinc-500">Reserved by {record.reserved_by_name || "-"}</p>
                   </td>
-                  <td className="px-4 py-4 font-semibold text-white">{record.reserved_for || "-"}</td>
+                  <td className="px-4 py-4 font-semibold text-white">
+                    <PartyLink party={record.reserved_for_party} />
+                  </td>
+                  <td className="px-4 py-4 text-zinc-300">{formatDate(record.reserved_at)}</td>
                   <td className="px-4 py-4 text-zinc-300">{record.reason || "-"}</td>
                   <td className="px-4 py-4">
                     <p className="font-bold text-white">{formatCount(record.total_units || 0)}</p>
@@ -1773,7 +1778,7 @@ function ReservationRecordsTable({ records, loading, error }) {
               ))
             ) : (
               <tr>
-                <td colSpan="5">
+                <td colSpan="6">
                   <EmptyState
                     className="border-t border-nexus-line"
                     title="No reservation records yet."
@@ -1801,10 +1806,21 @@ function ReservationRecordDetailPage({ data }) {
   const [editing, setEditing] = useState(false);
   const [savingCorrection, setSavingCorrection] = useState(false);
   const [correctionError, setCorrectionError] = useState("");
-  const [correctionForm, setCorrectionForm] = useState({ reservedFor: "", reason: "", notes: "" });
+  const [correctionForm, setCorrectionForm] = useState({
+    reservedForType: "client",
+    reservedForValue: "",
+    reason: "",
+    notes: ""
+  });
   const { showError } = useToast();
   const canReleaseReservation = Boolean(data.permissions?.canReleaseReservation);
   const canEditReservation = Boolean(data.permissions?.canEditReservation);
+  const partyLookups = usePartyLookups(data, {
+    clients: true,
+    suppliers: true,
+    internalParties: true,
+    enabled: editing
+  });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1835,7 +1851,10 @@ function ReservationRecordDetailPage({ data }) {
   useEffect(() => {
     if (!record) return;
     setCorrectionForm({
-      reservedFor: record.reserved_for || "",
+      reservedForType: record.reserved_for_type || "client",
+      reservedForValue: String(
+        record.reserved_for_client || record.reserved_for_supplier || record.reserved_for_internal || ""
+      ),
       reason: record.reason || "",
       notes: record.notes || ""
     });
@@ -1858,7 +1877,11 @@ function ReservationRecordDetailPage({ data }) {
           "X-CSRFToken": data.csrfToken
         },
         body: JSON.stringify({
-          reserved_for: correctionForm.reservedFor,
+          ...reservedForPayload(
+            correctionForm.reservedForType,
+            correctionForm.reservedForValue,
+            partyLookups.internalParties
+          ),
           reason: correctionForm.reason,
           notes: correctionForm.notes
         })
@@ -1964,6 +1987,7 @@ function ReservationRecordDetailPage({ data }) {
           {editing && canEditReservation ? (
             <ReservationCorrectionPanel
               form={correctionForm}
+              lookups={partyLookups}
               saving={savingCorrection}
               error={correctionError}
               onFieldChange={updateCorrectionField}
@@ -1978,12 +2002,12 @@ function ReservationRecordDetailPage({ data }) {
           <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
             <SectionTitle title="Reservation Details" />
             <dl className="mt-4 divide-y divide-nexus-line">
-              <DetailRow label="Reserved For" value={record.reserved_for || "-"} />
+              <DetailRow label="Reserved Date" value={formatDate(record.reserved_at)} />
+              <DetailRow label="Reserved For" value={<PartyLink party={record.reserved_for_party} />} />
               <DetailRow label="Reason" value={record.reason || "-"} />
               <DetailRow label="Reserved By" value={record.reserved_by_name || "-"} />
-              <DetailRow label="Reserved At" value={formatDate(record.reserved_at)} />
               <DetailRow label="Notes" value={record.notes || "-"} />
-              {record.released_at ? <DetailRow label="Released At" value={formatDate(record.released_at)} /> : null}
+              {record.released_at ? <DetailRow label="Released Date" value={formatDate(record.released_at)} /> : null}
               {record.release_reason ? <DetailRow label="Release Reason" value={record.release_reason} /> : null}
             </dl>
           </section>
@@ -2029,14 +2053,14 @@ function ReservationRecordDetailPage({ data }) {
   );
 }
 
-function ReservationCorrectionPanel({ form, saving, error, onFieldChange, onCancel, onSave }) {
+function ReservationCorrectionPanel({ form, lookups, saving, error, onFieldChange, onCancel, onSave }) {
   return (
     <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <h2 className="text-sm font-bold text-white">Edit reservation details</h2>
           <p className="bim-page-description">
-            Safe edits are limited to reserved for, reason, and notes.
+            Safe edits are limited to who it is reserved for, reason, and notes.
           </p>
         </div>
         <Button type="button" variant="ghost" onClick={onCancel}>
@@ -2046,9 +2070,16 @@ function ReservationCorrectionPanel({ form, saving, error, onFieldChange, onCanc
       </div>
 
       <div className="mt-5 grid gap-4 md:grid-cols-2">
-        <Field label="Reserved For" required>
-          <TextInput value={form.reservedFor} onChange={(value) => onFieldChange("reservedFor", value)} />
-        </Field>
+        <ReservedForPicker
+          type={form.reservedForType}
+          onTypeChange={(value) => onFieldChange("reservedForType", value)}
+          value={form.reservedForValue}
+          onValueChange={(value) => onFieldChange("reservedForValue", value)}
+          clients={lookups.clients}
+          suppliers={lookups.suppliers}
+          internalParties={lookups.internalParties}
+          setInternalParties={lookups.setInternalParties}
+        />
         <Field label="Reason">
           <TextInput value={form.reason} onChange={(value) => onFieldChange("reason", value)} />
         </Field>
@@ -2115,10 +2146,12 @@ function ReservationItemsTable({ items }) {
 
 function CreateReservationPage({ data }) {
   const [form, setForm] = useState({
-    reservedFor: "",
+    reservedForType: "client",
+    reservedForValue: "",
     reason: "",
     notes: ""
   });
+  const partyLookups = usePartyLookups(data, { clients: true, suppliers: true, internalParties: true });
   const [units, setUnits] = useState([]);
   const [query, setQuery] = useState("");
   const [selectedUnits, setSelectedUnits] = useState([]);
@@ -2170,8 +2203,8 @@ function CreateReservationPage({ data }) {
   async function saveReservation() {
     setSaving(true);
     try {
-      if (!form.reservedFor.trim() || !selectedUnits.length) {
-        throw new Error("Reserved for and at least one available stock unit are required.");
+      if (!form.reservedForValue || !selectedUnits.length) {
+        throw new Error("Who the stock is reserved for and at least one available stock unit are required.");
       }
 
       const response = await fetch(data.api.reservations, {
@@ -2181,7 +2214,7 @@ function CreateReservationPage({ data }) {
           "X-CSRFToken": data.csrfToken
         },
         body: JSON.stringify({
-          reserved_for: form.reservedFor,
+          ...reservedForPayload(form.reservedForType, form.reservedForValue, partyLookups.internalParties),
           reason: form.reason,
           notes: form.notes,
           unit_ids: selectedUnits.map((unit) => unit.id)
@@ -2233,9 +2266,16 @@ function CreateReservationPage({ data }) {
           <div className="grid gap-5 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] xl:items-start">
             <FormSection icon="clock-3" title="Reservation Information" subtitle="Operational hold details for selected stock units.">
               <div className="grid gap-5">
-                <Field label="Reserved For" required>
-                  <TextInput value={form.reservedFor} onChange={(value) => updateField("reservedFor", value)} placeholder="Client, person, department, or job" />
-                </Field>
+                <ReservedForPicker
+                  type={form.reservedForType}
+                  onTypeChange={(value) => updateField("reservedForType", value)}
+                  value={form.reservedForValue}
+                  onValueChange={(value) => updateField("reservedForValue", value)}
+                  clients={partyLookups.clients}
+                  suppliers={partyLookups.suppliers}
+                  internalParties={partyLookups.internalParties}
+                  setInternalParties={partyLookups.setInternalParties}
+                />
                 <Field label="Reason">
                   <TextInput value={form.reason} onChange={(value) => updateField("reason", value)} placeholder="Why this stock is being held" />
                 </Field>
@@ -2279,8 +2319,12 @@ function CreateReservationPage({ data }) {
           <section className="rounded-lg border border-nexus-line bg-nexus-panel">
             <PanelHeader title="Reservation Summary" />
             <dl className="divide-y divide-nexus-line p-4">
-              <DetailRow label="Reserved For" value={form.reservedFor || "-"} />
-              <DetailRow label="Selected Units" value={selectedUnits.length} strong />            </dl>
+              <DetailRow
+                label="Reserved For"
+                value={reservedForSummary(form.reservedForType, form.reservedForValue, partyLookups) || "-"}
+              />
+              <DetailRow label="Selected Units" value={selectedUnits.length} strong />
+            </dl>
           </section>
         </aside>
       </div>
@@ -2444,6 +2488,8 @@ function IssueRecordsTable({ records, loading, error }) {
             <tr>
               <th className="px-4 py-3 font-medium">Assignment</th>
               <th className="px-4 py-3 font-medium">Assigned To</th>
+              <th className="px-4 py-3 font-medium">Assignment Date</th>
+              <th className="px-4 py-3 font-medium">Expected Return</th>
               <th className="px-4 py-3 font-medium">Units</th>
               <th className="px-4 py-3 font-medium">Status</th>
             </tr>
@@ -2462,19 +2508,26 @@ function IssueRecordsTable({ records, loading, error }) {
                     </a>
                     <p className="mt-1 text-xs text-zinc-500">Assigned by {record.issued_by_name || "-"}</p>
                   </td>
-                  <td className="px-4 py-4 font-semibold text-white">{record.issued_to || "-"}</td>
+                  <td className="px-4 py-4 font-semibold text-white">
+                    <PartyLink party={record.assigned_to_party} />
+                  </td>
+                  <td className="px-4 py-4 text-zinc-300">{formatDate(record.issue_date)}</td>
+                  <td className="px-4 py-4 text-zinc-300">{formatDate(record.expected_return_date)}</td>
                   <td className="px-4 py-4">
                     <p className="font-bold text-white">{formatCount(record.total_units || 0)}</p>
                     <p className="mt-1 text-xs text-zinc-500">{formatCount(record.items?.length || 0)} lines</p>
                   </td>
                   <td className="px-4 py-4">
-                    <Status status={issueStatusLabel(record)} statusClass={record.status} />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Status status={issueStatusLabel(record)} statusClass={record.status} />
+                      {record.is_overdue ? <Status status="Overdue" statusClass="overdue" /> : null}
+                    </div>
                   </td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan="4">
+                <td colSpan="6">
                   <EmptyState
                     className="border-t border-nexus-line"
                     title="No temporary assignment records yet."
@@ -2502,10 +2555,17 @@ function IssueRecordDetailPage({ data }) {
   const [editing, setEditing] = useState(false);
   const [savingCorrection, setSavingCorrection] = useState(false);
   const [correctionError, setCorrectionError] = useState("");
-  const [correctionForm, setCorrectionForm] = useState({ issuedTo: "", reason: "", issueDate: "", notes: "" });
+  const [correctionForm, setCorrectionForm] = useState({
+    assignedToValue: "",
+    reason: "",
+    issueDate: "",
+    expectedReturnDate: "",
+    notes: ""
+  });
   const { showError } = useToast();
   const canReturnIssue = Boolean(data.permissions?.canReturnIssue);
   const canEditIssue = Boolean(data.permissions?.canEditIssue);
+  const partyLookups = usePartyLookups(data, { internalParties: true, enabled: editing });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -2536,9 +2596,10 @@ function IssueRecordDetailPage({ data }) {
   useEffect(() => {
     if (!record) return;
     setCorrectionForm({
-      issuedTo: record.issued_to || "",
+      assignedToValue: String(record.assigned_to || ""),
       reason: record.reason || "",
       issueDate: record.issue_date || "",
+      expectedReturnDate: record.expected_return_date || "",
       notes: record.notes || ""
     });
   }, [record]);
@@ -2560,9 +2621,14 @@ function IssueRecordDetailPage({ data }) {
           "X-CSRFToken": data.csrfToken
         },
         body: JSON.stringify({
-          issued_to: correctionForm.issuedTo,
+          ...internalPartyPayload(correctionForm.assignedToValue, partyLookups.internalParties, {
+            idKey: "assigned_to",
+            nameKey: "assigned_to_name_input",
+            kindKey: "assigned_to_kind_input"
+          }),
           reason: correctionForm.reason,
           issue_date: correctionForm.issueDate,
+          expected_return_date: correctionForm.expectedReturnDate || null,
           notes: correctionForm.notes
         })
       });
@@ -2643,6 +2709,7 @@ function IssueRecordDetailPage({ data }) {
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="bim-page-title">{record.issue_number}</h1>
             <Status status={issueStatusLabel(record)} statusClass={record.status} />
+            {record.is_overdue ? <Status status="Overdue" statusClass="overdue" /> : null}
           </div>
           <p className="bim-page-description">Assigned units must be returned before delivery.</p>
         </div>
@@ -2667,6 +2734,7 @@ function IssueRecordDetailPage({ data }) {
           {editing && canEditIssue ? (
             <IssueCorrectionPanel
               form={correctionForm}
+              lookups={partyLookups}
               saving={savingCorrection}
               error={correctionError}
               onFieldChange={updateCorrectionField}
@@ -2682,7 +2750,8 @@ function IssueRecordDetailPage({ data }) {
             <SectionTitle title="Assignment Details" />
             <dl className="mt-4 divide-y divide-nexus-line">
               <DetailRow label="Assignment Date" value={formatDate(record.issue_date)} />
-              <DetailRow label="Assigned To" value={record.issued_to || "-"} />
+              <DetailRow label="Expected Return Date" value={formatDate(record.expected_return_date)} />
+              <DetailRow label="Assigned To" value={<PartyLink party={record.assigned_to_party} />} />
               <DetailRow label="Reason" value={record.reason || "-"} />
               <DetailRow label="Assigned By" value={record.issued_by_name || "-"} />
               <DetailRow label="Notes" value={record.notes || "-"} />
@@ -2732,14 +2801,14 @@ function IssueRecordDetailPage({ data }) {
   );
 }
 
-function IssueCorrectionPanel({ form, saving, error, onFieldChange, onCancel, onSave }) {
+function IssueCorrectionPanel({ form, lookups, saving, error, onFieldChange, onCancel, onSave }) {
   return (
     <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <h2 className="text-sm font-bold text-white">Edit temporary assignment details</h2>
           <p className="bim-page-description">
-            Safe edits are limited to assigned to, reason, assignment date, and notes.
+            Safe edits are limited to assigned to, reason, dates, and notes.
           </p>
         </div>
         <Button type="button" variant="ghost" onClick={onCancel}>
@@ -2750,11 +2819,23 @@ function IssueCorrectionPanel({ form, saving, error, onFieldChange, onCancel, on
 
       <div className="mt-5 grid gap-4 md:grid-cols-2">
         <Field label="Assignment Date" required>
-          <TextInput type="date" value={form.issueDate} onChange={(value) => onFieldChange("issueDate", value)} />
+          <DateInput value={form.issueDate} onChange={(value) => onFieldChange("issueDate", value)} />
         </Field>
-        <Field label="Assigned To" required>
-          <TextInput value={form.issuedTo} onChange={(value) => onFieldChange("issuedTo", value)} />
+        <Field label="Expected Return Date">
+          <DateInput
+            value={form.expectedReturnDate}
+            min={form.issueDate}
+            onChange={(value) => onFieldChange("expectedReturnDate", value)}
+          />
         </Field>
+        <InternalPartyPicker
+          label="Assigned To"
+          required
+          value={form.assignedToValue}
+          onChange={(value) => onFieldChange("assignedToValue", value)}
+          parties={lookups.internalParties}
+          setParties={lookups.setInternalParties}
+        />
         <Field label="Reason">
           <TextInput value={form.reason} onChange={(value) => onFieldChange("reason", value)} />
         </Field>
@@ -2820,13 +2901,15 @@ function IssueItemsTable({ items }) {
 }
 
 function CreateIssuePage({ data }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocal();
   const [form, setForm] = useState({
-    issuedTo: "",
+    assignedToValue: "",
     reason: "",
     issueDate: today,
+    expectedReturnDate: "",
     notes: ""
   });
+  const partyLookups = usePartyLookups(data, { internalParties: true });
   const [units, setUnits] = useState([]);
   const [query, setQuery] = useState("");
   const [selectedUnits, setSelectedUnits] = useState([]);
@@ -2878,7 +2961,7 @@ function CreateIssuePage({ data }) {
   async function saveIssue() {
     setSaving(true);
     try {
-      if (!form.issuedTo.trim() || !selectedUnits.length) {
+      if (!form.assignedToValue || !selectedUnits.length) {
         throw new Error("Assigned to and at least one available stock unit are required.");
       }
 
@@ -2889,9 +2972,14 @@ function CreateIssuePage({ data }) {
           "X-CSRFToken": data.csrfToken
         },
         body: JSON.stringify({
-          issued_to: form.issuedTo,
+          ...internalPartyPayload(form.assignedToValue, partyLookups.internalParties, {
+            idKey: "assigned_to",
+            nameKey: "assigned_to_name_input",
+            kindKey: "assigned_to_kind_input"
+          }),
           reason: form.reason,
           issue_date: form.issueDate || null,
+          expected_return_date: form.expectedReturnDate || null,
           notes: form.notes,
           unit_ids: selectedUnits.map((unit) => unit.id)
         })
@@ -2943,11 +3031,23 @@ function CreateIssuePage({ data }) {
             <FormSection icon="user-check" title="Assignment Information" subtitle="Operational handoff details for selected stock units.">
               <div className="grid gap-5">
                 <Field label="Assignment Date">
-                  <TextInput type="date" value={form.issueDate} onChange={(value) => updateField("issueDate", value)} />
+                  <DateInput value={form.issueDate} onChange={(value) => updateField("issueDate", value)} />
                 </Field>
-                <Field label="Assigned To" required>
-                  <TextInput value={form.issuedTo} onChange={(value) => updateField("issuedTo", value)} placeholder="Person, team, branch, or site" />
+                <Field label="Expected Return Date">
+                  <DateInput
+                    value={form.expectedReturnDate}
+                    min={form.issueDate}
+                    onChange={(value) => updateField("expectedReturnDate", value)}
+                  />
                 </Field>
+                <InternalPartyPicker
+                  label="Assigned To"
+                  required
+                  value={form.assignedToValue}
+                  onChange={(value) => updateField("assignedToValue", value)}
+                  parties={partyLookups.internalParties}
+                  setParties={partyLookups.setInternalParties}
+                />
                 <Field label="Reason">
                   <TextInput value={form.reason} onChange={(value) => updateField("reason", value)} placeholder="Why this stock is being assigned" />
                 </Field>
@@ -2992,8 +3092,20 @@ function CreateIssuePage({ data }) {
             <PanelHeader title="Assignment Summary" />
             <dl className="divide-y divide-nexus-line p-4">
               <DetailRow label="Assignment Date" value={formatDate(form.issueDate)} />
-              <DetailRow label="Assigned To" value={form.issuedTo || "-"} />
-              <DetailRow label="Selected Units" value={selectedUnits.length} strong />            </dl>
+              <DetailRow label="Expected Return Date" value={formatDate(form.expectedReturnDate)} />
+              <DetailRow
+                label="Assigned To"
+                value={
+                  (() => {
+                    const selected = partyLookups.internalParties.find(
+                      (party) => String(party.id) === String(form.assignedToValue)
+                    );
+                    return selected ? internalPartyLabel(selected) : "-";
+                  })()
+                }
+              />
+              <DetailRow label="Selected Units" value={selectedUnits.length} strong />
+            </dl>
           </section>
         </aside>
       </div>
@@ -3096,7 +3208,7 @@ function RepairRecordsPage({ data }) {
             inputClassName="placeholder:text-zinc-500"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search repair number, reason, reporter, location, technician, product, or serial..."
+            placeholder="Search repair number, reason, vendor, product, or serial..."
           />
           <span className="text-xs text-zinc-500">{records.length} records</span>
         </div>
@@ -3115,8 +3227,10 @@ function RepairRecordsTable({ records, loading, error }) {
           <thead className="bg-zinc-800/80 text-zinc-400">
             <tr>
               <th className="px-4 py-3 font-medium">Repair</th>
+              <th className="px-4 py-3 font-medium">Vendor</th>
+              <th className="px-4 py-3 font-medium">Repair Date</th>
+              <th className="px-4 py-3 font-medium">Source</th>
               <th className="px-4 py-3 font-medium">Reason</th>
-              <th className="px-4 py-3 font-medium">Technician</th>
               <th className="px-4 py-3 font-medium">Units</th>
               <th className="px-4 py-3 font-medium">Status</th>
             </tr>
@@ -3135,8 +3249,23 @@ function RepairRecordsTable({ records, loading, error }) {
                     </a>
                     <p className="mt-1 text-xs text-zinc-500">Sent by {record.sent_by_name || "-"}</p>
                   </td>
-                  <td className="px-4 py-4 font-semibold text-white">{record.repair_reason || "-"}</td>
-                  <td className="px-4 py-4 text-zinc-300">{record.technician || "-"}</td>
+                  <td className="px-4 py-4 font-semibold text-white">
+                    {record.vendor ? (
+                      <a href={`/suppliers/${record.vendor}/`} className="text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
+                        {record.vendor_name}
+                      </a>
+                    ) : record.status === "active" ? (
+                      <Status status="No vendor assigned" statusClass="no_vendor" />
+                    ) : (
+                      "-"
+                    )}
+                  </td>
+                  <td className="px-4 py-4 text-zinc-300">{formatDate(record.repair_date)}</td>
+                  <td className="px-4 py-4 text-zinc-300">
+                    <p>{record.source_label || "-"}</p>
+                    {record.source_party ? <p className="mt-1 text-xs text-zinc-500">{record.source_party.name}</p> : null}
+                  </td>
+                  <td className="px-4 py-4 text-zinc-300">{record.repair_reason || "-"}</td>
                   <td className="px-4 py-4">
                     <p className="font-bold text-white">{formatCount(record.total_units || 0)}</p>
                     <p className="mt-1 text-xs text-zinc-500">{formatCount(record.items?.length || 0)} lines</p>
@@ -3148,7 +3277,7 @@ function RepairRecordsTable({ records, loading, error }) {
               ))
             ) : (
               <tr>
-                <td colSpan="5">
+                <td colSpan="7">
                   <EmptyState
                     className="border-t border-nexus-line"
                     title="No repair records yet."
@@ -3179,13 +3308,14 @@ function RepairRecordDetailPage({ data }) {
   const [correctionError, setCorrectionError] = useState("");
   const [correctionForm, setCorrectionForm] = useState({
     repairDate: "",
-    technician: "",
+    vendorValue: "",
     repairReason: "",
     notes: ""
   });
   const { showError } = useToast();
   const canResolveRepair = Boolean(data.permissions?.canResolveRepair);
   const canEditRepair = Boolean(data.permissions?.canEditRepair);
+  const partyLookups = usePartyLookups(data, { suppliers: true, enabled: editing });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -3217,7 +3347,7 @@ function RepairRecordDetailPage({ data }) {
     if (!record) return;
     setCorrectionForm({
       repairDate: record.repair_date || "",
-      technician: record.technician || "",
+      vendorValue: String(record.vendor || ""),
       repairReason: record.repair_reason || "",
       notes: record.notes || ""
     });
@@ -3241,7 +3371,7 @@ function RepairRecordDetailPage({ data }) {
         },
         body: JSON.stringify({
           repair_date: correctionForm.repairDate,
-          technician: correctionForm.technician,
+          ...(correctionForm.vendorValue ? { vendor: Number(correctionForm.vendorValue) } : {}),
           repair_reason: correctionForm.repairReason,
           notes: correctionForm.notes
         })
@@ -3289,7 +3419,7 @@ function RepairRecordDetailPage({ data }) {
         resolution === "available"
           ? "Repair resolved. Linked repair units were moved back to available stock."
           : resolution === "sold"
-          ? "Repair resolved. Linked units were returned to the client."
+          ? "Repair resolved. Linked units were returned to the original client and a warranty return delivery was recorded."
           : "Repair resolved. Linked repair units were made inactive."
       );
       setReloadKey((current) => current + 1);
@@ -3332,6 +3462,7 @@ function RepairRecordDetailPage({ data }) {
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="bim-page-title">{record.repair_number}</h1>
             <Status status={repairStatusLabel(record)} statusClass={record.status === "resolved" ? record.resolution || "available" : "repair"} />
+            {isActive && !record.vendor ? <Status status="No vendor assigned" statusClass="no_vendor" /> : null}
           </div>
           <p className="bim-page-description">Reserved, issued, and sold units must use their own workflows before repair.</p>
         </div>
@@ -3351,11 +3482,26 @@ function RepairRecordDetailPage({ data }) {
         </div>
       ) : null}
 
+      {record.client_return && record.source_party ? (
+        <div className="mb-4 rounded-lg border border-nexus-line bg-nexus-panel px-4 py-3 text-sm text-zinc-300">
+          Warranty repair for{" "}
+          <a href={`/clients/${record.source_party.id}/`} className="font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
+            {record.source_party.name}
+          </a>
+          , returned under{" "}
+          <a href={`/operations/client-returns/${record.client_return}/`} className="font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
+            {record.client_return_number}
+          </a>
+          .
+        </div>
+      ) : null}
+
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
         <div className="space-y-5">
           {editing && canEditRepair ? (
             <RepairCorrectionPanel
               form={correctionForm}
+              lookups={partyLookups}
               saving={savingCorrection}
               error={correctionError}
               onFieldChange={updateCorrectionField}
@@ -3371,8 +3517,28 @@ function RepairRecordDetailPage({ data }) {
             <SectionTitle title="Repair Details" />
             <dl className="mt-4 divide-y divide-nexus-line">
               <DetailRow label="Repair Date" value={formatDate(record.repair_date)} />
+              <DetailRow
+                label="Repair Vendor"
+                value={<PartyLink party={repairVendorParty(record)} fallback="Not assigned" />}
+              />
+              <DetailRow label="Source" value={record.source_label || "-"} />
+              {record.source_party ? (
+                <DetailRow label="Came From" value={<PartyLink party={record.source_party} />} />
+              ) : null}
+              {record.return_delivery_number ? (
+                <DetailRow
+                  label="Returned To Client Under"
+                  value={
+                    <a
+                      href={`/operations/deliveries/${record.return_delivery_id}/`}
+                      className="font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]"
+                    >
+                      {record.return_delivery_number}
+                    </a>
+                  }
+                />
+              ) : null}
               <DetailRow label="Reason" value={record.repair_reason || "-"} />
-              <DetailRow label="Technician" value={record.technician || "-"} />
               <DetailRow label="Sent By" value={record.sent_by_name || "-"} />
               <DetailRow label="Notes" value={record.notes || "-"} />
               {record.client_return_number ? (
@@ -3419,9 +3585,9 @@ function RepairRecordDetailPage({ data }) {
                   value={resolution}
                   onChange={setResolution}
                   options={[
-                    ["available", "Return to available"],
+                    ["available", record.client_return_number ? "Return to stock" : "Return to available"],
                     ["inactive", "Deactivate unit"],
-                    ...(record.client_return_number ? [["sold", "Returned to Client"]] : [])
+                    ...(record.client_return_number ? [["sold", "Return to original client"]] : [])
                   ]}
                   disabled={!isActive}
                 />
@@ -3447,14 +3613,14 @@ function RepairRecordDetailPage({ data }) {
   );
 }
 
-function RepairCorrectionPanel({ form, saving, error, onFieldChange, onCancel, onSave }) {
+function RepairCorrectionPanel({ form, lookups, saving, error, onFieldChange, onCancel, onSave }) {
   return (
     <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
         <div>
           <h2 className="text-sm font-bold text-white">Edit repair details</h2>
           <p className="bim-page-description">
-            Safe edits are limited to repair date, technician, reason, and notes.
+            Safe edits are limited to repair date, vendor, reason, and notes.
           </p>
         </div>
         <Button type="button" variant="ghost" onClick={onCancel}>
@@ -3465,11 +3631,16 @@ function RepairCorrectionPanel({ form, saving, error, onFieldChange, onCancel, o
 
       <div className="mt-5 grid gap-4 md:grid-cols-2">
         <Field label="Repair Date" required>
-          <TextInput type="date" value={form.repairDate} onChange={(value) => onFieldChange("repairDate", value)} />
+          <DateInput value={form.repairDate} onChange={(value) => onFieldChange("repairDate", value)} />
         </Field>
-        <Field label="Technician">
-          <TextInput value={form.technician} onChange={(value) => onFieldChange("technician", value)} />
-        </Field>
+        <SearchableCreatableSelect
+          label="Repair Vendor"
+          required
+          value={form.vendorValue}
+          onChange={(value) => onFieldChange("vendorValue", value)}
+          options={lookups.suppliers}
+          placeholder="Search suppliers"
+        />
         <Field label="Reason" required>
           <TextInput value={form.repairReason} onChange={(value) => onFieldChange("repairReason", value)} />
         </Field>
@@ -3535,13 +3706,17 @@ function RepairItemsTable({ items }) {
 }
 
 function CreateRepairPage({ data }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocal();
   const [form, setForm] = useState({
     repairReason: "",
-    technician: "",
+    vendorValue: "",
+    source: "internal_stock",
+    sourceClientValue: "",
+    sourceInternalValue: "",
     repairDate: today,
     notes: ""
   });
+  const partyLookups = usePartyLookups(data, { clients: true, suppliers: true, internalParties: true });
   const [units, setUnits] = useState([]);
   const [query, setQuery] = useState("");
   const [selectedUnits, setSelectedUnits] = useState([]);
@@ -3593,8 +3768,14 @@ function CreateRepairPage({ data }) {
   async function saveRepair() {
     setSaving(true);
     try {
-      if (!form.repairReason.trim() || !selectedUnits.length) {
-        throw new Error("Repair reason and at least one available stock unit are required.");
+      if (!form.vendorValue || !form.repairReason.trim() || !selectedUnits.length) {
+        throw new Error("Repair vendor, repair reason, and at least one available stock unit are required.");
+      }
+      if (form.source === "client_return" && !form.sourceClientValue) {
+        throw new Error("Choose the client this repair came from.");
+      }
+      if (form.source === "internal_party" && !form.sourceInternalValue) {
+        throw new Error("Choose the employee or department this repair came from.");
       }
 
       const response = await fetch(data.api.repairs, {
@@ -3605,7 +3786,13 @@ function CreateRepairPage({ data }) {
         },
         body: JSON.stringify({
           repair_reason: form.repairReason,
-          technician: form.technician,
+          vendor: Number(form.vendorValue),
+          ...repairSourcePayload(
+            form.source,
+            form.sourceClientValue,
+            form.sourceInternalValue,
+            partyLookups.internalParties
+          ),
           repair_date: form.repairDate || null,
           notes: form.notes,
           unit_ids: selectedUnits.map((unit) => unit.id)
@@ -3658,13 +3845,27 @@ function CreateRepairPage({ data }) {
             <FormSection icon="wrench" title="Repair Information" subtitle="Operational repair or testing details for selected stock units.">
               <div className="grid gap-5">
                 <Field label="Repair Date">
-                  <TextInput type="date" value={form.repairDate} onChange={(value) => updateField("repairDate", value)} />
+                  <DateInput value={form.repairDate} onChange={(value) => updateField("repairDate", value)} />
                 </Field>
+                <SearchableCreatableSelect
+                  label="Repair Vendor"
+                  required
+                  value={form.vendorValue}
+                  onChange={(value) => updateField("vendorValue", value)}
+                  options={partyLookups.suppliers}
+                  placeholder="Search suppliers"
+                />
+                <RepairSourcePicker
+                  source={form.source}
+                  onSourceChange={(value) => updateField("source", value)}
+                  clientValue={form.sourceClientValue}
+                  onClientChange={(value) => updateField("sourceClientValue", value)}
+                  internalValue={form.sourceInternalValue}
+                  onInternalChange={(value) => updateField("sourceInternalValue", value)}
+                  lookups={partyLookups}
+                />
                 <Field label="Repair Reason" required>
                   <TextInput value={form.repairReason} onChange={(value) => updateField("repairReason", value)} placeholder="Why this stock is going to repair" />
-                </Field>
-                <Field label="Technician">
-                  <TextInput value={form.technician} onChange={(value) => updateField("technician", value)} placeholder="Responsible person or vendor" />
                 </Field>
                 <Field label="Notes">
                   <TextInput value={form.notes} onChange={(value) => updateField("notes", value)} placeholder="Operational notes" />
@@ -3707,8 +3908,17 @@ function CreateRepairPage({ data }) {
             <PanelHeader title="Repair Summary" />
             <dl className="divide-y divide-nexus-line p-4">
               <DetailRow label="Repair Date" value={formatDate(form.repairDate)} />
+              <DetailRow
+                label="Repair Vendor"
+                value={partyLookups.suppliers.find((supplier) => String(supplier.id) === String(form.vendorValue))?.name || "-"}
+              />
+              <DetailRow
+                label="Source"
+                value={REPAIR_SOURCE_OPTIONS.find(([source]) => source === form.source)?.[1] || "-"}
+              />
               <DetailRow label="Reason" value={form.repairReason || "-"} />
-              <DetailRow label="Selected Units" value={selectedUnits.length} strong />            </dl>
+              <DetailRow label="Selected Units" value={selectedUnits.length} strong />
+            </dl>
           </section>
         </aside>
       </div>
@@ -3780,7 +3990,7 @@ function RemovalRecordsPage({ data }) {
   }, [data.api.removals, query]);
 
   const totalUnits = records.reduce((sum, record) => sum + Number(record.total_units || 0), 0);
-  const currentMonth = new Date().toISOString().slice(0, 7);
+  const currentMonth = todayLocal().slice(0, 7);
   const thisMonthCount = records.filter(
     (record) => (record.removal_date || "").slice(0, 7) === currentMonth
   ).length;
@@ -4043,7 +4253,7 @@ function RemovalItemsTable({ items }) {
 }
 
 function CreateRemovalPage({ data }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocal();
   const [form, setForm] = useState({
     removalDate: today,
     reason: "",
@@ -4164,7 +4374,7 @@ function CreateRemovalPage({ data }) {
             <FormSection icon="package-x" title="Removal Information" subtitle="Permanent removal details for selected stock units.">
               <div className="grid gap-5">
                 <Field label="Removal Date">
-                  <TextInput type="date" value={form.removalDate} onChange={(value) => updateField("removalDate", value)} />
+                  <DateInput value={form.removalDate} onChange={(value) => updateField("removalDate", value)} />
                 </Field>
                 <Field label="Reason" required>
                   <SelectInput
@@ -4417,7 +4627,6 @@ function ClientReturnRecordDetailPage({ data }) {
   const [correctionMessage, setCorrectionMessage] = useState("");
   const [correctionForm, setCorrectionForm] = useState({
     returnDate: "",
-    customerName: "",
     receivedFrom: "",
     reason: "",
     notes: ""
@@ -4467,7 +4676,6 @@ function ClientReturnRecordDetailPage({ data }) {
     if (!record) return;
     setCorrectionForm({
       returnDate: record.return_date || "",
-      customerName: record.customer_name || "",
       receivedFrom: record.received_from || "",
       reason: record.reason || "",
       notes: record.notes || ""
@@ -4493,7 +4701,6 @@ function ClientReturnRecordDetailPage({ data }) {
         },
         body: JSON.stringify({
           return_date: correctionForm.returnDate,
-          customer_name: correctionForm.customerName,
           received_from: correctionForm.receivedFrom,
           reason: correctionForm.reason,
           notes: correctionForm.notes
@@ -4657,7 +4864,18 @@ function ClientReturnRecordDetailPage({ data }) {
                 <dl className="mt-4 divide-y divide-nexus-line">
                   <DetailRow label="Return Date" value={formatDate(record.return_date)} />
                   <DetailRow label="Original Delivery" value={record.delivery_number || "-"} />
-                  <DetailRow label="Client" value={record.client_name || record.customer_name || "-"} />
+                  <DetailRow
+                    label="Client"
+                    value={
+                      record.client_id ? (
+                        <a href={`/clients/${record.client_id}/`} className="font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
+                          {record.client_name}
+                        </a>
+                      ) : (
+                        record.client_name || record.customer_name || "-"
+                      )
+                    }
+                  />
                   <DetailRow label="Received From" value={record.received_from || "-"} />
                   <DetailRow label="Reason" value={record.reason || "-"} />
                   <DetailRow label="Resolution" value={clientReturnResolutionLabel(record.resolution)} />
@@ -4674,6 +4892,12 @@ function ClientReturnRecordDetailPage({ data }) {
                           {record.repair_record_number}
                         </a>
                       }
+                    />
+                  ) : null}
+                  {record.resolution === "repair" && record.repair_record_number ? (
+                    <DetailRow
+                      label="Repair Vendor"
+                      value={record.repair_vendor_name || <Status status="No vendor assigned" statusClass="no_vendor" />}
                     />
                   ) : null}
                   {isCancelled ? (
@@ -4714,7 +4938,7 @@ function ClientReturnCorrectionPanel({ form, saving, error, onFieldChange, onCan
         <div>
           <h2 className="text-sm font-bold text-white">Edit client return details</h2>
           <p className="bim-page-description">
-            Safe edits are limited to return date, client name, received from, reason, and notes.
+            Safe edits are limited to return date, received from, reason, and notes. The client comes from the unit's delivery and cannot be changed here.
           </p>
         </div>
         <Button type="button" variant="ghost" onClick={onCancel}>
@@ -4725,10 +4949,7 @@ function ClientReturnCorrectionPanel({ form, saving, error, onFieldChange, onCan
 
       <div className="mt-5 grid gap-4 md:grid-cols-2">
         <Field label="Return Date" required>
-          <TextInput type="date" value={form.returnDate} onChange={(value) => onFieldChange("returnDate", value)} />
-        </Field>
-        <Field label="Client">
-          <TextInput value={form.customerName} onChange={(value) => onFieldChange("customerName", value)} />
+          <DateInput value={form.returnDate} onChange={(value) => onFieldChange("returnDate", value)} />
         </Field>
         <Field label="Received From">
           <TextInput value={form.receivedFrom} onChange={(value) => onFieldChange("receivedFrom", value)} />
@@ -4798,20 +5019,19 @@ function ClientReturnItemsTable({ items }) {
 }
 
 function CreateClientReturnPage({ data }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocal();
   const deliveryId = new URLSearchParams(window.location.search).get("delivery") || "";
   const [form, setForm] = useState({
-    client: "",
-    customerName: "",
     receivedFrom: "",
     returnDate: today,
     reason: "",
     resolution: "available",
+    repairVendor: "",
     notes: ""
   });
   const [units, setUnits] = useState([]);
-  const [clients, setClients] = useState([]);
   const [query, setQuery] = useState("");
+  const partyLookups = usePartyLookups(data, { suppliers: true });
   const [selectedUnits, setSelectedUnits] = useState([]);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -4819,60 +5039,40 @@ function CreateClientReturnPage({ data }) {
 
   useEffect(() => {
     const controller = new AbortController();
-
-    async function loadUnits() {
-      const [response, clientsResponse] = await Promise.all([
-        fetch(`${data.api.productUnits}?status=sold`, { signal: controller.signal }),
-        fetch(data.api.clients, { signal: controller.signal })
-      ]);
-      setUnits(response.ok ? await response.json() : []);
-      setClients(clientsResponse.ok ? await clientsResponse.json() : []);
-    }
-
-    loadUnits().catch((loadFailure) => {
-      if (loadFailure.name !== "AbortError") {
-        setLoadError("Could not load sold stock units.");
+    const timer = window.setTimeout(async () => {
+      try {
+        const params = new URLSearchParams();
+        if (query.trim()) params.set("q", query.trim());
+        if (deliveryId) params.set("delivery", deliveryId);
+        const response = await fetch(`${data.api.clientReturns}returnable-units/?${params.toString()}`, {
+          signal: controller.signal
+        });
+        setUnits(response.ok ? await response.json() : []);
+        setLoadError("");
+      } catch (loadFailure) {
+        if (loadFailure.name !== "AbortError") {
+          setLoadError("Could not load sold stock units.");
+        }
       }
-    });
+    }, 200);
 
-    return () => controller.abort();
-  }, [data.api.clients, data.api.productUnits]);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [data.api.clientReturns, query, deliveryId]);
 
+  // The client is never chosen: it is the client of the selected units' latest
+  // delivery. Once the first unit is picked, only that client's units are offered.
+  const returnClient = selectedUnits[0]?.client || null;
   const selectedIds = new Set(selectedUnits.map((unit) => unit.id));
   const filteredUnits = units
     .filter((unit) => !selectedIds.has(unit.id))
-    .filter((unit) => {
-      const text = `${unit.product_name} ${unit.product_sku} ${unit.product_barcode || ""} ${unit.serial_number}`.toLowerCase();
-      return query && text.includes(query.toLowerCase());
-    })
+    .filter((unit) => !returnClient || unit.blocked_reason || unit.client?.id === returnClient.id)
     .slice(0, 8);
 
   function updateField(name, value) {
     setForm((current) => ({ ...current, [name]: value }));
-  }
-
-  function addClientItem(item) {
-    setClients((current) =>
-      current.some((client) => client.id === item.id)
-        ? current
-        : [...current, item].sort((a, b) => a.name.localeCompare(b.name))
-    );
-  }
-
-  function createClientOption(name) {
-    // New Client values are held locally (not saved to the server) until the
-    // client return itself saves successfully -- see createLookupOption in
-    // AddProductPage for the identical pattern used for Category/Brand.
-    const trimmedName = name.trim();
-    if (!trimmedName) {
-      throw new Error("Enter a client name before creating it.");
-    }
-    const pendingId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const pending = { id: pendingId, name: trimmedName, __pending: true };
-    addClientItem(pending);
-    updateField("client", pendingId);
-    updateField("customerName", pending.name);
-    return pending;
   }
 
   function addUnit(unit) {
@@ -4887,20 +5087,19 @@ function CreateClientReturnPage({ data }) {
   async function saveClientReturn() {
     setSaving(true);
     try {
-      const selectedClient = clients.find((client) => String(client.id) === String(form.client));
-      if (!selectedClient || !selectedUnits.length) {
-        throw new Error("Client name and at least one sold stock unit are required.");
+      if (!selectedUnits.length) {
+        throw new Error("Select at least one sold stock unit.");
+      }
+      if (form.resolution === "repair" && !form.repairVendor) {
+        throw new Error("Choose the repair vendor for units going to repair.");
       }
 
       const payload = {
-        ...(selectedClient.__pending
-          ? { client_name_input: selectedClient.name }
-          : { client: selectedClient.id }),
-        customer_name: selectedClient.name,
         received_from: form.receivedFrom,
         return_date: form.returnDate || null,
         reason: form.reason,
         resolution: form.resolution,
+        ...(form.resolution === "repair" ? { repair_vendor: Number(form.repairVendor) } : {}),
         notes: form.notes,
         unit_ids: selectedUnits.map((unit) => unit.id)
       };
@@ -4965,34 +5164,40 @@ function CreateClientReturnPage({ data }) {
             <FormSection icon="reset" title="Client Return Information" subtitle="Original delivery remains completed; this creates a separate operational return record.">
               <div className="grid gap-5">
                 <Field label="Return Date">
-                  <TextInput type="date" value={form.returnDate} onChange={(value) => updateField("returnDate", value)} />
+                  <DateInput value={form.returnDate} onChange={(value) => updateField("returnDate", value)} />
                 </Field>
-                <SearchableCreatableSelect
-                  label="Client"
-                  required
-                  value={form.client}
-                  onChange={(value) => {
-                    const selected = clients.find((client) => String(client.id) === String(value));
-                    updateField("client", value);
-                    updateField("customerName", selected?.name || "");
-                  }}
-                  options={clients}
-                  onCreate={createClientOption}
-                  placeholder="Search or create client..."
-                />
+                <Field label="Client">
+                  <div className="flex h-10 items-center rounded-md border border-nexus-line bg-zinc-800/60 px-3 text-sm text-zinc-300">
+                    {returnClient ? returnClient.name : "Taken from the selected units' latest delivery"}
+                  </div>
+                </Field>
                 <Field label="Received From">
                   <TextInput value={form.receivedFrom} onChange={(value) => updateField("receivedFrom", value)} placeholder="Person who returned the unit" />
                 </Field>
                 <Field label="Resolution" required>
                   <SelectInput
                     value={form.resolution}
-                    onChange={(value) => updateField("resolution", value)}
+                    onChange={(value) => {
+                      updateField("resolution", value);
+                      if (value !== "repair") updateField("repairVendor", "");
+                    }}
                     options={[
                       ["available", "Return to available"],
                       ["repair", "Send to repair"]
                     ]}
                   />
                 </Field>
+                {form.resolution === "repair" ? (
+                  <SearchableCreatableSelect
+                    label="Repair Vendor"
+                    required
+                    value={form.repairVendor}
+                    onChange={(value) => updateField("repairVendor", value)}
+                    options={partyLookups.suppliers}
+                    placeholder="Search suppliers"
+                    helperText="All units in this return share this vendor. Split into separate returns for different vendors."
+                  />
+                ) : null}
                 <Field label="Reason">
                   <TextInput value={form.reason} onChange={(value) => updateField("reason", value)} placeholder="Reason for the return" />
                 </Field>
@@ -5002,24 +5207,31 @@ function CreateClientReturnPage({ data }) {
               </div>
             </FormSection>
 
-            <FormSection icon="box" title="Sold Units" subtitle="Only active sold units linked to completed delivery items can be returned. Reserved, issued, repair, inactive, or available units are blocked.">
+            <FormSection icon="box" title="Sold Units" subtitle="Only Sold units can be returned. All units in one return must come from the same client.">
               <SearchBar
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search product, SKU, barcode, or serial..."
+                placeholder="Search by serial number, product, or SKU..."
               />
+              {returnClient ? (
+                <p className="mt-2 text-xs text-zinc-500">Only units delivered to {returnClient.name} are offered.</p>
+              ) : null}
               {filteredUnits.length ? (
                 <div className="mt-2 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
                   {filteredUnits.map((unit) => (
                     <button
                       key={unit.id}
                       onClick={() => addUnit(unit)}
+                      disabled={Boolean(unit.blocked_reason)}
                       type="button"
-                      className="flex w-full items-center justify-between border-b border-nexus-line px-4 py-3 text-left last:border-b-0 hover:bg-nexus-panel2"
+                      className="flex w-full items-center justify-between border-b border-nexus-line px-4 py-3 text-left last:border-b-0 hover:bg-nexus-panel2 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <span>
                         <span className="block text-sm font-bold text-white">{unit.product_name}</span>
                         <span className="font-mono text-xs text-[var(--bim-orange-text)]">{unit.serial_number}</span>
+                        <span className="mt-1 block text-xs text-zinc-500">
+                          {unit.blocked_reason || `${unit.client?.name || ""} - ${unit.delivery_number}`}
+                        </span>
                       </span>
                       <Plus className="h-4 w-4 text-zinc-500" />
                     </button>
@@ -5037,8 +5249,14 @@ function CreateClientReturnPage({ data }) {
             <PanelHeader title="Return Summary" />
             <dl className="divide-y divide-nexus-line p-4">
               <DetailRow label="Return Date" value={formatDate(form.returnDate)} />
-              <DetailRow label="Client" value={clients.find((client) => String(client.id) === String(form.client))?.name || "-"} />
+              <DetailRow label="Client" value={returnClient?.name || "-"} />
               <DetailRow label="Resolution" value={clientReturnResolutionLabel(form.resolution)} />
+              {form.resolution === "repair" ? (
+                <DetailRow
+                  label="Repair Vendor"
+                  value={partyLookups.suppliers.find((supplier) => String(supplier.id) === String(form.repairVendor))?.name || "-"}
+                />
+              ) : null}
               <DetailRow label="Selected Units" value={selectedUnits.length} strong />
             </dl>
           </section>
@@ -5093,13 +5311,16 @@ function DeliveryRecordsPage({ data }) {
     return () => controller.abort();
   }, [data.api.deliveries, query]);
 
-  const totalUnits = records.reduce((sum, record) => sum + Number(record.total_units || 0), 0);
-  const recentRecord = records[0];
-  const completedCount = records.filter((record) => record.status === "completed").length;
+  // Warranty returns are zero-value hand-backs of repaired units, not sales, so
+  // they stay out of these totals (they still show in the table below).
+  const saleRecords = records.filter((record) => !record.is_warranty_return);
+  const totalUnits = saleRecords.reduce((sum, record) => sum + Number(record.total_units || 0), 0);
+  const recentRecord = saleRecords[0];
+  const completedCount = saleRecords.filter((record) => record.status === "completed").length;
   const deliveryKpis = [
     {
       label: "Delivery Records",
-      value: formatCount(records.length),
+      value: formatCount(saleRecords.length),
       detail: "stock exit records",
       icon: "delivery",
       tone: "indigo"
@@ -5194,7 +5415,13 @@ function DeliveryRecordsTable({ records, loading, error }) {
                   </td>
                   <td className="px-4 py-4">
                     <p className="font-semibold text-white">{record.client_name || record.customer_name || "-"}</p>
-                    <p className="mt-1 text-xs text-zinc-500">Stock exit</p>
+                    {record.is_warranty_return ? (
+                      <div className="mt-1">
+                        <Status status="Warranty return" statusClass="warranty" />
+                      </div>
+                    ) : (
+                      <p className="mt-1 text-xs text-zinc-500">Stock exit</p>
+                    )}
                   </td>
                   <td className="px-4 py-4 text-zinc-300">{record.receiver_name || "-"}</td>
                   <td className="px-4 py-4 text-zinc-300">{formatDate(record.delivery_date)}</td>
@@ -5240,6 +5467,7 @@ function DeliveryRecordDetailPage({ data }) {
   const [correctionForm, setCorrectionForm] = useState({
     customerName: "",
     receiverName: "",
+    invoiceNumber: "",
     deliveryDate: "",
     notes: "",
     items: []
@@ -5293,6 +5521,7 @@ function DeliveryRecordDetailPage({ data }) {
     setCorrectionForm({
       customerName: record.customer_name || "",
       receiverName: record.receiver_name || "",
+      invoiceNumber: record.invoice_number || "",
       deliveryDate: record.delivery_date || "",
       notes: record.notes || "",
       items: (record.items || []).map((item) => ({
@@ -5331,6 +5560,7 @@ function DeliveryRecordDetailPage({ data }) {
         body: JSON.stringify({
           customer_name: correctionForm.customerName,
           receiver_name: correctionForm.receiverName,
+          invoice_number: correctionForm.invoiceNumber,
           delivery_date: correctionForm.deliveryDate,
           notes: correctionForm.notes,
           items: correctionForm.items.map((item) => ({
@@ -5399,6 +5629,7 @@ function DeliveryRecordDetailPage({ data }) {
         {record ? (
           <div className="flex flex-wrap items-center gap-3">
             <Status status={deliveryStatusLabel(record)} statusClass={deliveryStatusClass(record)} />
+            {record.is_warranty_return ? <Status status="Warranty return" statusClass="warranty" /> : null}
             {!isCancelled && (canCreateClientReturn || canEditDelivery || canCancelDelivery) ? (
               <>
                 {canCreateClientReturn ? (
@@ -5519,6 +5750,16 @@ function DeliveryRecordDetailPage({ data }) {
                 <DetailRow label="Receiver" value={record.receiver_name || "-"} />
                 <DetailRow label="Delivery Date" value={formatDate(record.delivery_date)} />
                 <DetailRow label="Invoice Number" value={record.invoice_number || "-"} />
+                {record.from_repair_number ? (
+                  <DetailRow
+                    label="From Repair"
+                    value={
+                      <a href={`/operations/repairs/${record.from_repair}/`} className="font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
+                        {record.from_repair_number}
+                      </a>
+                    }
+                  />
+                ) : null}
                 <DetailRow label="Created By" value={record.created_by_name || "-"} />
                 <DetailRow label="Total Units" value={formatCount(record.total_units || 0)} highlight />
                 <DetailRow label="Status" value={deliveryStatusLabel(record)} />
@@ -5582,7 +5823,7 @@ function DeliveryCorrectionPanel({
         <div>
           <h2 className="text-sm font-bold text-white">Edit delivery details</h2>
           <p className="bim-page-description">
-            Safe edits are limited to client, receiver, delivery date, notes, and item notes.
+            Safe edits are limited to client, receiver, invoice number, delivery date, notes, and item notes.
           </p>
         </div>
         <Button type="button" variant="ghost" onClick={onCancel}>
@@ -5598,8 +5839,11 @@ function DeliveryCorrectionPanel({
         <Field label="Receiver">
           <TextInput value={form.receiverName} onChange={(value) => onFieldChange("receiverName", value)} />
         </Field>
+        <Field label="Invoice Number">
+          <TextInput value={form.invoiceNumber} onChange={(value) => onFieldChange("invoiceNumber", value)} />
+        </Field>
         <Field label="Delivery Date" required>
-          <TextInput type="date" value={form.deliveryDate} onChange={(value) => onFieldChange("deliveryDate", value)} />
+          <DateInput value={form.deliveryDate} onChange={(value) => onFieldChange("deliveryDate", value)} />
         </Field>
         <Field label="Notes">
           <TextInput value={form.notes} onChange={(value) => onFieldChange("notes", value)} />
@@ -6571,11 +6815,14 @@ function ProductDetailsPage({ data }) {
 
       {activeTab === "Movements" ? (
         <div className="mt-4">
-          <ProductMovementHistory
-            movements={movements}
-            accessDenied={movementsAccessDenied}
-            limit={movements.length}
-          />
+          <UnitJourneyPanel data={data} units={units} accessDenied={movementsAccessDenied} />
+          <div className="mt-4">
+            <ProductMovementHistory
+              movements={movements}
+              accessDenied={movementsAccessDenied}
+              limit={movements.length}
+            />
+          </div>
         </div>
       ) : null}
 
@@ -6589,6 +6836,78 @@ function ProductDetailsPage({ data }) {
         </div>
       ) : null}
     </Shell>
+  );
+}
+
+// One unit's life as a chain: Sold to <client> -> Returned (RET-..) ->
+// Repair (RPR-.., vendor) -> Returned to <client> (DLV-..). Built server-side
+// from the unit's stock movements and the records they link to.
+function UnitJourneyPanel({ data, units, accessDenied }) {
+  const [unitId, setUnitId] = useState("");
+  const [steps, setSteps] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!unitId && units.length) setUnitId(String(units[0].id));
+  }, [units, unitId]);
+
+  useEffect(() => {
+    if (!unitId || accessDenied) return undefined;
+    const controller = new AbortController();
+    setLoading(true);
+    setError("");
+    fetch(`${data.api.productUnitDetail.replace("{id}", unitId)}journey/`, { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error("Could not load the unit journey.");
+        return response.json();
+      })
+      .then(setSteps)
+      .catch((loadError) => {
+        if (loadError.name !== "AbortError") setError(loadError.message);
+      })
+      .finally(() => setLoading(false));
+    return () => controller.abort();
+  }, [data.api.productUnitDetail, unitId, accessDenied]);
+
+  if (accessDenied || !units.length) return null;
+
+  return (
+    <section className="mt-4 rounded-lg border border-nexus-line bg-nexus-panel p-4" aria-label="Unit Journey">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <h2 className="bim-section-title">Unit Journey</h2>
+        <div className="w-full md:w-72">
+          <SelectInput
+            value={unitId}
+            onChange={setUnitId}
+            options={units.map((unit) => [String(unit.id), unit.serial_number])}
+            placeholder="Select a unit"
+          />
+        </div>
+      </div>
+      {error ? <p className="mt-3 text-sm font-semibold text-[var(--tone-red-text)]">{error}</p> : null}
+      {loading ? <p className="mt-3 text-sm text-zinc-500">Loading journey...</p> : null}
+      {!loading && !error && !steps.length ? <p className="mt-3 text-sm text-zinc-500">No history recorded for this unit yet.</p> : null}
+      {steps.length ? (
+        <ol className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-3">
+          {steps.map((step, index) => (
+            <li key={`${step.movement_type}-${index}`} className="flex items-center gap-2">
+              {index > 0 ? <ChevronRight className="h-4 w-4 shrink-0 text-zinc-600" /> : null}
+              <span className="rounded-md border border-nexus-line bg-nexus-panel2 px-3 py-2 text-sm">
+                {step.href ? (
+                  <a href={step.href} className="font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
+                    {step.label}
+                  </a>
+                ) : (
+                  <span className="font-semibold text-zinc-200">{step.label}</span>
+                )}
+                <span className="mt-0.5 block text-xs text-zinc-500">{formatDate(step.date)}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
+      ) : null}
+    </section>
   );
 }
 
@@ -7194,7 +7513,7 @@ function AddProductPage({ data, isNew = true }) {
 
 function StockEntryPage({ data, mode = "add-unit" }) {
   const isReceiving = mode === "receive";
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocal();
   const [form, setForm] = useState({
     supplier: "",
     entryDate: today,
@@ -7504,7 +7823,7 @@ function StockEntryPage({ data, mode = "add-unit" }) {
             >
               <div className="grid gap-5">
                 <Field label={isReceiving ? "Receiving Date" : "Entry Date"} required>
-                  <TextInput type="date" value={form.entryDate} onChange={(value) => updateField("entryDate", value)} />
+                  <DateInput value={form.entryDate} onChange={(value) => updateField("entryDate", value)} />
                 </Field>
                 {isReceiving ? (
                   <SearchableCreatableSelect
@@ -7622,7 +7941,7 @@ function StockEntryPage({ data, mode = "add-unit" }) {
               <h2 className="bim-section-title">{isReceiving ? "Receiving Summary" : "Unit Summary"}</h2>
             </div>
             <dl className="divide-y divide-nexus-line p-4">
-              <DetailRow label="Date" value={form.entryDate || "-"} />
+              <DetailRow label="Date" value={formatDate(form.entryDate)} />
               {isReceiving ? <DetailRow label="Supplier" value={selectedSupplier?.name || "-"} /> : null}
               {isReceiving ? <DetailRow label="Supplier Invoice Number" value={form.supplierInvoiceNumber || "-"} /> : null}
               {isReceiving ? <DetailRow label="PO Number" value={form.poNumber || "-"} /> : null}
@@ -7639,7 +7958,7 @@ function StockEntryPage({ data, mode = "add-unit" }) {
 }
 
 function CreateDeliveryPage({ data }) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayLocal();
   const [form, setForm] = useState({
     client: "",
     customerName: "",
@@ -7810,7 +8129,7 @@ function CreateDeliveryPage({ data }) {
             <FormSection icon="delivery" title="Delivery Information" subtitle="Internal stock exit details for this dispatch.">
               <div className="grid gap-5">
                 <Field label="Delivery Date" required>
-                  <TextInput value={form.deliveryDate} onChange={(value) => updateField("deliveryDate", value)} />
+                  <DateInput value={form.deliveryDate} onChange={(value) => updateField("deliveryDate", value)} />
                 </Field>
                 <SearchableCreatableSelect
                   label="Client"
@@ -7905,7 +8224,7 @@ function CreateDeliveryPage({ data }) {
               <h2 className="bim-section-title">Delivery Summary</h2>
             </div>
             <dl className="divide-y divide-nexus-line p-4">
-              <DetailRow label="Date" value={form.deliveryDate || "-"} />
+              <DetailRow label="Date" value={formatDate(form.deliveryDate)} />
               <DetailRow label="Client" value={clients.find((client) => String(client.id) === String(form.client))?.name || "-"} />
               <DetailRow label="Receiver" value={form.receiverName || "-"} />
               <DetailRow label="Invoice Number" value={form.invoiceNumber || "-"} />
@@ -8033,6 +8352,311 @@ function SelectInput({ value, onChange, options, placeholder, disabled = false }
         </option>
       ))}
     </select>
+  );
+}
+
+const INTERNAL_KIND_OPTIONS = [
+  ["department", "Department"],
+  ["employee", "Employee"]
+];
+
+const RESERVED_FOR_TYPE_OPTIONS = [
+  ["client", "Client"],
+  ["supplier", "Supplier"],
+  ["internal", "Internal (employee or department)"]
+];
+
+const REPAIR_SOURCE_OPTIONS = [
+  ["internal_stock", "Internal stock"],
+  ["client_return", "Client return (warranty)"],
+  ["internal_party", "Employee or department"]
+];
+
+// Loads the lookup lists the party pickers need. Failed/forbidden requests just
+// leave a list empty, the same way the Delivery page treats its client list.
+function usePartyLookups(data, { clients = false, suppliers = false, internalParties = false, enabled = true } = {}) {
+  const [lookups, setLookups] = useState({ clients: [], suppliers: [], internalParties: [] });
+
+  useEffect(() => {
+    if (!enabled) return undefined;
+    const controller = new AbortController();
+    const wanted = [
+      ["clients", clients, data.api.clients],
+      ["suppliers", suppliers, data.api.suppliers],
+      ["internalParties", internalParties, data.api.internalParties]
+    ].filter(([, isWanted]) => isWanted);
+
+    Promise.all(
+      wanted.map(([, , url]) =>
+        fetch(url, { signal: controller.signal })
+          .then((response) => (response.ok ? response.json() : []))
+          .catch(() => [])
+      )
+    ).then((results) => {
+      if (controller.signal.aborted) return;
+      setLookups((current) => {
+        const next = { ...current };
+        wanted.forEach(([key], index) => {
+          next[key] = results[index];
+        });
+        return next;
+      });
+    });
+
+    return () => controller.abort();
+  }, [data.api.clients, data.api.suppliers, data.api.internalParties, clients, suppliers, internalParties, enabled]);
+
+  const setInternalParties = useCallback(
+    (updater) =>
+      setLookups((current) => ({
+        ...current,
+        internalParties: typeof updater === "function" ? updater(current.internalParties) : updater
+      })),
+    []
+  );
+
+  return { ...lookups, setInternalParties };
+}
+
+function internalPartyLabel(party) {
+  return party.kind_label ? `${party.name} (${party.kind_label})` : party.name;
+}
+
+// Request-body fragment for a picked internal party: an existing one is sent by
+// id, one created inline in the picker is sent by name + kind and created by
+// the server when the record itself saves.
+function internalPartyPayload(value, parties, { idKey, nameKey, kindKey }) {
+  const selected = parties.find((party) => String(party.id) === String(value));
+  if (!selected) return {};
+  return selected.__pending ? { [nameKey]: selected.name, [kindKey]: selected.kind } : { [idKey]: selected.id };
+}
+
+function InternalPartyPicker({ label, required = false, value, onChange, parties, setParties, disabled = false }) {
+  const [newKind, setNewKind] = useState("department");
+
+  function createParty(name) {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      throw new Error("Enter a name before creating it.");
+    }
+    const existing = parties.find(
+      (party) => party.kind === newKind && party.name.trim().toLowerCase() === trimmed.toLowerCase()
+    );
+    if (existing) return existing;
+    const kindLabel = INTERNAL_KIND_OPTIONS.find(([kind]) => kind === newKind)?.[1] || "";
+    const pending = {
+      id: `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      name: trimmed,
+      kind: newKind,
+      kind_label: kindLabel,
+      __pending: true
+    };
+    // Held locally until the record itself saves, same as a new Client in
+    // CreateDeliveryPage.
+    setParties((current) => [...current, pending]);
+    return pending;
+  }
+
+  return (
+    <div className="grid gap-2">
+      <SearchableCreatableSelect
+        label={label}
+        required={required}
+        value={value}
+        onChange={onChange}
+        options={parties}
+        getOptionLabel={internalPartyLabel}
+        onCreate={createParty}
+        placeholder="Search or create an employee or department"
+        disabled={disabled}
+      />
+      <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
+        <span>New entries are saved as</span>
+        {INTERNAL_KIND_OPTIONS.map(([kind, kindLabel]) => (
+          <button
+            key={kind}
+            type="button"
+            disabled={disabled}
+            onClick={() => setNewKind(kind)}
+            className={`rounded border px-2 py-1 font-semibold ${
+              newKind === kind
+                ? "border-[var(--bim-orange-focus)] text-[var(--bim-orange-text)]"
+                : "border-nexus-line text-zinc-400 hover:text-white"
+            }`}
+          >
+            {kindLabel}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// "Reserved for" type + the matching record dropdown. Changing the type clears
+// the picked record, since an id only makes sense within one list.
+function ReservedForPicker({ type, onTypeChange, value, onValueChange, clients, suppliers, internalParties, setInternalParties }) {
+  return (
+    <>
+      <Field label="Reserved For Type" required>
+        <SelectInput
+          value={type}
+          onChange={(nextType) => {
+            onTypeChange(nextType);
+            onValueChange("");
+          }}
+          options={RESERVED_FOR_TYPE_OPTIONS}
+          placeholder="Select type"
+        />
+      </Field>
+      {type === "client" ? (
+        <SearchableCreatableSelect
+          label="Client"
+          required
+          value={value}
+          onChange={onValueChange}
+          options={clients}
+          placeholder="Search clients"
+        />
+      ) : null}
+      {type === "supplier" ? (
+        <SearchableCreatableSelect
+          label="Supplier"
+          required
+          value={value}
+          onChange={onValueChange}
+          options={suppliers}
+          placeholder="Search suppliers"
+        />
+      ) : null}
+      {type === "internal" ? (
+        <InternalPartyPicker
+          label="Employee / Department"
+          required
+          value={value}
+          onChange={onValueChange}
+          parties={internalParties}
+          setParties={setInternalParties}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function reservedForPayload(type, value, internalParties) {
+  if (type === "internal") {
+    return {
+      reserved_for_type: "internal",
+      ...internalPartyPayload(value, internalParties, {
+        idKey: "reserved_for_internal",
+        nameKey: "internal_name_input",
+        kindKey: "internal_kind_input"
+      })
+    };
+  }
+  if (!value) return { reserved_for_type: type };
+  return { reserved_for_type: type, [type === "client" ? "reserved_for_client" : "reserved_for_supplier"]: Number(value) };
+}
+
+// Where a repair's unit came from. Label only: it does not change which units
+// can be picked. Changing the source clears the matching picker.
+function RepairSourcePicker({ source, onSourceChange, clientValue, onClientChange, internalValue, onInternalChange, lookups }) {
+  return (
+    <>
+      <Field label="Source" required>
+        <SelectInput
+          value={source}
+          onChange={(nextSource) => {
+            onSourceChange(nextSource);
+            onClientChange("");
+            onInternalChange("");
+          }}
+          options={REPAIR_SOURCE_OPTIONS}
+          placeholder="Select source"
+        />
+      </Field>
+      {source === "client_return" ? (
+        <SearchableCreatableSelect
+          label="Client"
+          required
+          value={clientValue}
+          onChange={onClientChange}
+          options={lookups.clients}
+          placeholder="Search clients"
+        />
+      ) : null}
+      {source === "internal_party" ? (
+        <InternalPartyPicker
+          label="Employee / Department"
+          required
+          value={internalValue}
+          onChange={onInternalChange}
+          parties={lookups.internalParties}
+          setParties={lookups.setInternalParties}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function repairSourcePayload(source, clientValue, internalValue, internalParties) {
+  if (source === "client_return") {
+    return { source, ...(clientValue ? { source_client: Number(clientValue) } : {}) };
+  }
+  if (source === "internal_party") {
+    return {
+      source,
+      ...internalPartyPayload(internalValue, internalParties, {
+        idKey: "source_internal",
+        nameKey: "source_internal_name_input",
+        kindKey: "source_internal_kind_input"
+      })
+    };
+  }
+  return { source };
+}
+
+function repairVendorParty(record) {
+  return record?.vendor ? { type: "supplier", id: record.vendor, name: record.vendor_name } : null;
+}
+
+function reservedForSummary(type, value, lookups) {
+  const list =
+    type === "client" ? lookups.clients : type === "supplier" ? lookups.suppliers : lookups.internalParties;
+  const selected = list.find((party) => String(party.id) === String(value));
+  if (!selected) return "";
+  return type === "internal" ? internalPartyLabel(selected) : selected.name;
+}
+
+function partyHref(party) {
+  if (!party?.id) return null;
+  if (party.type === "client") return `/clients/${party.id}/`;
+  if (party.type === "supplier") return `/suppliers/${party.id}/`;
+  return null;
+}
+
+function partyTypeLabel(party) {
+  if (party.type === "internal") return party.kind_label || "Internal";
+  return party.type === "supplier" ? "Supplier" : "Client";
+}
+
+// Clients and suppliers link to their page; employees/departments have no page,
+// so they show as plain text with an Employee/Department tag.
+function PartyLink({ party, fallback = "-" }) {
+  if (!party?.name) return fallback;
+  const href = partyHref(party);
+  return (
+    <span className="inline-flex flex-wrap items-center gap-2">
+      {href ? (
+        <a href={href} className="font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
+          {party.name}
+        </a>
+      ) : (
+        <span>{party.name}</span>
+      )}
+      <span className="rounded border border-nexus-line px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+        {partyTypeLabel(party)}
+      </span>
+    </span>
   );
 }
 
@@ -8673,7 +9297,7 @@ function RecentActivity({ items, endpoint }) {
                     <td className="px-4 py-4 text-zinc-400">{item.related || "-"}</td>
                     <td className="px-4 py-4 text-zinc-400">{item.party || "-"}</td>
                     <td className="px-4 py-4 text-zinc-400">{item.user || "-"}</td>
-                    <td className="px-4 py-4 text-zinc-400">{item.date ? String(item.date) : "-"}</td>
+                    <td className="px-4 py-4 text-zinc-400">{formatDate(item.date)}</td>
                     <td className="px-4 py-4">
                       <span className="inline-flex items-center gap-2">
                         <Status status={item.status || "-"} statusClass={item.status_class} />

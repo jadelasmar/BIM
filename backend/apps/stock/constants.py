@@ -45,6 +45,8 @@ VIEW_SUPPLIER = f"{APP_LABEL}.view_supplier"
 ADD_SUPPLIER = f"{APP_LABEL}.add_supplier"
 CHANGE_SUPPLIER = f"{APP_LABEL}.change_supplier"
 
+VIEW_INTERNAL_PARTY = f"{APP_LABEL}.view_internalparty"
+
 VIEW_CLIENT = f"{APP_LABEL}.view_client"
 ADD_CLIENT = f"{APP_LABEL}.add_client"
 CHANGE_CLIENT = f"{APP_LABEL}.change_client"

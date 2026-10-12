@@ -376,7 +376,9 @@ class Command(BaseCommand):
         if reserved_active:
             services.create_reservation_record(
                 unit_ids=[reserved_active[0].pk],
-                reserved_for="Field Support Team - J. Ortiz",
+                reserved_for_type="internal",
+                internal_name_input="Field Support Team",
+                internal_kind_input="department",
                 reason="Deployed with field technician",
                 notes=SEED_NOTE + "Demo reservation.",
                 reserved_by=performed_by,
@@ -384,7 +386,8 @@ class Command(BaseCommand):
         if len(reserved_active) > 1:
             services.create_reservation_record(
                 unit_ids=[unit.pk for unit in reserved_active[1:]],
-                reserved_for="Warehouse Expansion Project",
+                reserved_for_type="client",
+                reserved_for_client=clients[SEED_CLIENT_NAMES[0]],
                 reason="Held for new branch rollout",
                 notes=SEED_NOTE + "Demo reservation.",
                 reserved_by=performed_by,
@@ -392,7 +395,8 @@ class Command(BaseCommand):
         if len(reserved_released) > 1:
             released = services.create_reservation_record(
                 unit_ids=[unit.pk for unit in reserved_released[:2]],
-                reserved_for="Trade Show Demo Booth",
+                reserved_for_type="supplier",
+                reserved_for_supplier=next(iter(suppliers.values())),
                 reason="Reserved for annual trade show",
                 notes=SEED_NOTE + "Demo reservation.",
                 reserved_by=performed_by,
@@ -403,7 +407,8 @@ class Command(BaseCommand):
         if len(reserved_released) > 2:
             cancelled = services.create_reservation_record(
                 unit_ids=[unit.pk for unit in reserved_released[2:]],
-                reserved_for="Branch Rollout Hold",
+                reserved_for_type="client",
+                reserved_for_client=clients[SEED_CLIENT_NAMES[1 %% len(SEED_CLIENT_NAMES)]],
                 reason="Tentative hold pending budget approval",
                 notes=SEED_NOTE + "Demo reservation.",
                 reserved_by=performed_by,
@@ -418,7 +423,8 @@ class Command(BaseCommand):
         if len(issued_active) > 1:
             services.create_issue_record(
                 unit_ids=[unit.pk for unit in issued_active[:2]],
-                issued_to="Front Desk - Reception",
+                assigned_to_name_input="Front Desk - Reception",
+                assigned_to_kind_input="department",
                 reason="Temporary coverage during renovation",
                 notes=SEED_NOTE + "Demo temporary assignment.",
                 issued_by=performed_by,
@@ -426,7 +432,9 @@ class Command(BaseCommand):
         if len(issued_active) > 2:
             services.create_issue_record(
                 unit_ids=[issued_active[2].pk],
-                issued_to="Field Technician - M. Alvarez",
+                assigned_to_name_input="M. Alvarez",
+                assigned_to_kind_input="employee",
+                expected_return_date=today - timedelta(days=2),
                 reason="On-site client support",
                 notes=SEED_NOTE + "Demo temporary assignment.",
                 issued_by=performed_by,
@@ -434,7 +442,8 @@ class Command(BaseCommand):
         if issued_returned:
             returned_issue = services.create_issue_record(
                 unit_ids=[unit.pk for unit in issued_returned],
-                issued_to="Marketing Dept - Loaner Pool",
+                assigned_to_name_input="Marketing Dept",
+                assigned_to_kind_input="department",
                 reason="Conference loaner equipment",
                 notes=SEED_NOTE + "Demo temporary assignment.",
                 issued_by=performed_by,
@@ -450,7 +459,7 @@ class Command(BaseCommand):
             services.create_repair_record(
                 unit_ids=[repair_active[0].pk],
                 repair_reason="Reported malfunctioning by end user",
-                technician="Internal IT - R. Haddad",
+                vendor=next(iter(suppliers.values())),
                 notes=SEED_NOTE + "Demo repair.",
                 sent_by=performed_by,
             )
@@ -458,7 +467,7 @@ class Command(BaseCommand):
             services.create_repair_record(
                 unit_ids=[repair_active[1].pk],
                 repair_reason="Failed routine diagnostic check",
-                technician="Internal IT - R. Haddad",
+                vendor=next(iter(suppliers.values())),
                 notes=SEED_NOTE + "Demo repair.",
                 sent_by=performed_by,
             )
@@ -466,7 +475,7 @@ class Command(BaseCommand):
             resolved_repair = services.create_repair_record(
                 unit_ids=[unit.pk for unit in repair_resolved],
                 repair_reason="Overheating under sustained load",
-                technician="Vendor - TechFix Solutions",
+                vendor=next(iter(suppliers.values())),
                 notes=SEED_NOTE + "Demo repair.",
                 sent_by=performed_by,
             )

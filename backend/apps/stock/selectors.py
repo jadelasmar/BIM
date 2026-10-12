@@ -5,6 +5,10 @@ from django.urls import reverse
 from django.utils import timezone
 
 from . import constants as stock_constants
+from .services import (
+    _active_client_return_item_for_unit,
+    _latest_completed_delivery_item_for_unit,
+)
 from .models import (
     Client,
     ClientReturnRecord,
@@ -51,7 +55,8 @@ def reserved_unit_count():
 
 
 def delivery_record_count():
-    return DeliveryRecord.objects.filter(isactive=True).count()
+    # Warranty returns are zero-value hand-backs of repaired units, not sales.
+    return DeliveryRecord.objects.filter(isactive=True, is_warranty_return=False).count()
 
 
 def pending_reservation_count():
@@ -60,6 +65,20 @@ def pending_reservation_count():
 
 def pending_issue_count():
     return IssueRecord.objects.filter(status=IssueRecord.STATUS_ACTIVE).count()
+
+
+def overdue_issue_count():
+    return IssueRecord.objects.filter(
+        status=IssueRecord.STATUS_ACTIVE,
+        expected_return_date__lt=timezone.localdate(),
+    ).count()
+
+
+def repairs_without_vendor_count():
+    return RepairRecord.objects.filter(
+        status=RepairRecord.STATUS_ACTIVE,
+        vendor__isnull=True,
+    ).count()
 
 
 def pending_repair_count():
@@ -139,6 +158,122 @@ def stock_status_breakdown():
     return {"available": available, "total": total, "bars": bars}
 
 
+def returnable_units(query="", delivery_id=None, limit=30):
+    """Sold units a Client Return can pick from, each with the client derived
+    from its latest completed delivery. A unit that cannot be returned carries
+    a blocked_reason instead of being hidden, so the picker can explain why."""
+    units = (
+        ProductUnit.objects.filter(status=ProductUnit.STATUS_SOLD, isactive=True)
+        .select_related("product", "product__category", "product__model__brand")
+        .order_by("serial_number")
+    )
+    query = (query or "").strip()
+    if query:
+        units = units.filter(
+            Q(serial_number__icontains=query)
+            | Q(product__descript__icontains=query)
+            | Q(product__sku__icontains=query)
+        )
+
+    rows = []
+    for unit in units[: limit * 4]:
+        item = _latest_completed_delivery_item_for_unit(unit)
+        latest_return = _active_client_return_item_for_unit(unit)
+        if item is not None and delivery_id and item.delivery_id != int(delivery_id):
+            continue
+        blocked = ""
+        client = None
+        if item is None:
+            blocked = "This unit has no completed delivery."
+        elif latest_return is not None and latest_return.delivery_item_id == item.pk:
+            blocked = "This unit was already returned under its latest delivery."
+        elif item.delivery.client_id is None:
+            blocked = "This delivery has no client. Fix the delivery's client first."
+        else:
+            client = {"id": item.delivery.client_id, "name": item.delivery.client.name}
+        rows.append(
+            {
+                "id": unit.pk,
+                "serial_number": unit.serial_number,
+                "product_name": str(unit.product),
+                "product_sku": unit.product.sku,
+                "status": unit.status,
+                "delivery_id": item.delivery_id if item else None,
+                "delivery_number": item.delivery.delivery_number if item else "",
+                "client": client,
+                "blocked_reason": blocked,
+            }
+        )
+        if len(rows) >= limit:
+            break
+    return rows
+
+
+def unit_journey(unit):
+    """Ordered steps of one unit's life, built from its stock movements and the
+    records they link to, e.g. Sold to Acme (DLV-..) -> Returned (RET-..) ->
+    Repair (RPR-.., vendor) -> Returned to Acme (DLV-..)."""
+    movements = (
+        unit.movements.select_related(
+            "receiving_record",
+            "delivery_record",
+            "delivery_record__client",
+            "client_return_record",
+            "repair_record",
+            "repair_record__vendor",
+            "reservation_record",
+            "issue_record",
+            "removal_record",
+        )
+        .order_by("movement_date", "crdate", "pk")
+    )
+
+    def step(movement, label, reference="", href=""):
+        return {
+            "date": movement.movement_date,
+            "label": label,
+            "reference": reference,
+            "href": href,
+            "movement_type": movement.movement_type,
+        }
+
+    def delivery_href(delivery):
+        return reverse("operations_delivery_detail", kwargs={"pk": delivery.pk})
+
+    def return_href(client_return):
+        return reverse("operations_client_return_detail", kwargs={"pk": client_return.pk})
+
+    def repair_label(repair):
+        vendor = repair.vendor.name if repair.vendor_id else "no vendor"
+        return f"Repair ({repair.repair_number}, {vendor})"
+
+    steps = []
+    for m in movements:
+        kind = m.movement_type
+        delivery = m.delivery_record
+        client_return = m.client_return_record
+        repair = m.repair_record
+        if kind == m.TYPE_DELIVERED and delivery:
+            client_name = delivery.client.name if delivery.client_id else delivery.customer_name
+            steps.append(step(m, f"Sold to {client_name} ({delivery.delivery_number})", delivery.delivery_number, delivery_href(delivery)))
+        elif kind in (m.TYPE_CLIENT_RETURNED_AVAILABLE, m.TYPE_CLIENT_RETURNED_REPAIR) and client_return:
+            suffix = " - back in stock" if kind == m.TYPE_CLIENT_RETURNED_AVAILABLE else ""
+            steps.append(step(m, f"Returned ({client_return.return_number}){suffix}", client_return.return_number, return_href(client_return)))
+            if kind == m.TYPE_CLIENT_RETURNED_REPAIR and repair:
+                steps.append(step(m, repair_label(repair), repair.repair_number, reverse("operations_repair_detail", kwargs={"pk": repair.pk})))
+        elif kind == m.TYPE_SENT_TO_REPAIR and repair:
+            steps.append(step(m, repair_label(repair), repair.repair_number, reverse("operations_repair_detail", kwargs={"pk": repair.pk})))
+        elif kind == m.TYPE_REPAIR_RETURNED_TO_CLIENT and delivery:
+            client_name = delivery.client.name if delivery.client_id else delivery.customer_name
+            steps.append(step(m, f"Returned to {client_name} ({delivery.delivery_number})", delivery.delivery_number, delivery_href(delivery)))
+        elif kind == m.TYPE_REPAIR_RESOLVED and repair:
+            steps.append(step(m, f"Repair completed - back in stock ({repair.repair_number})", repair.repair_number, reverse("operations_repair_detail", kwargs={"pk": repair.pk})))
+        else:
+            label = m.get_movement_type_display()
+            steps.append(step(m, f"{label} ({m.reference})" if m.reference else label, m.reference))
+    return steps
+
+
 RECENT_ACTIVITY_LIMIT = 8
 
 
@@ -188,7 +323,7 @@ def recent_stock_activity(user, limit=RECENT_ACTIVITY_LIMIT, offset=0):
                     if delivery.created_by
                     else "",
                     "date": delivery.delivery_date,
-                    "status": "Delivered",
+                    "status": "Warranty return" if delivery.is_warranty_return else "Delivered",
                     "status_class": "delivered",
                     "href": reverse("operations_delivery_detail", kwargs={"pk": delivery.pk}),
                 }
@@ -603,7 +738,7 @@ def global_search(user, query, limit=GLOBAL_SEARCH_RESULT_LIMIT):
         matches = RepairRecord.objects.filter(
             Q(repair_number__icontains=query)
             | Q(repair_reason__icontains=query)
-            | Q(technician__icontains=query)
+            | Q(vendor__name__icontains=query)
         ).order_by("-repair_date", "-repair_number")
         group = _search_group(
             "repairs",

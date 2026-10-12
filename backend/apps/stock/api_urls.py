@@ -138,6 +138,21 @@ urlpatterns = [
     path("suppliers/<int:pk>/", api_views.SupplierDetailAPIView.as_view(), name="supplier-detail"),
     path("clients/", api_views.ClientListCreateAPIView.as_view(), name="clients"),
     path("clients/<int:pk>/", api_views.ClientDetailAPIView.as_view(), name="client-detail"),
+    path(
+        "client-returns/returnable-units/",
+        api_views.ReturnableUnitsAPIView.as_view(),
+        name="client-return-returnable-units",
+    ),
+    path(
+        "product-units/<int:pk>/journey/",
+        api_views.ProductUnitJourneyAPIView.as_view(),
+        name="product-unit-journey",
+    ),
+    path(
+        "internal-parties/",
+        api_views.InternalPartyListAPIView.as_view(),
+        name="internal-parties",
+    ),
     path("brands/", api_views.BrandListAPIView.as_view(), name="brands"),
     path("models/", api_views.ProductModelListAPIView.as_view(), name="models"),
     path("categories/", api_views.CategoryListAPIView.as_view(), name="categories"),

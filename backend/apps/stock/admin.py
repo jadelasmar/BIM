@@ -10,6 +10,7 @@ from .models import (
     ClientReturnRecord,
     DeliveryItem,
     DeliveryRecord,
+    InternalParty,
     IssueItem,
     IssueRecord,
     Product,
@@ -195,6 +196,15 @@ class ClientAdmin(admin.ModelAdmin):
     search_fields = ("name", "contact_person", "phone", "email")
     readonly_fields = ("crdate",)
     ordering = ("name",)
+
+
+@admin.register(InternalParty)
+class InternalPartyAdmin(admin.ModelAdmin):
+    list_display = ("name", "kind", "isactive")
+    list_filter = ("kind", "isactive")
+    search_fields = ("name",)
+    readonly_fields = ("crdate",)
+    ordering = ("kind", "name")
 
 
 # ProductUnitPurchaseForm sets useful defaults when buying stock.
@@ -413,6 +423,10 @@ class ReservationRecordAdmin(admin.ModelAdmin):
                 "fields": (
                     "reservation_number",
                     "reserved_for",
+                    "reserved_for_type",
+                    "reserved_for_client",
+                    "reserved_for_supplier",
+                    "reserved_for_internal",
                     "reason",
                     "status",
                     "reserved_by",
@@ -494,8 +508,10 @@ class IssueRecordAdmin(admin.ModelAdmin):
                 "fields": (
                     "issue_number",
                     "issued_to",
+                    "assigned_to",
                     "reason",
                     "issue_date",
+                    "expected_return_date",
                     "status",
                     "issued_by",
                     "isactive",
@@ -550,7 +566,8 @@ class RepairRecordAdmin(admin.ModelAdmin):
     list_display = (
         "repair_number",
         "repair_reason",
-        "technician",
+        "vendor",
+        "source",
         "repair_date",
         "status",
         "resolution",
@@ -563,7 +580,7 @@ class RepairRecordAdmin(admin.ModelAdmin):
     search_fields = (
         "repair_number",
         "repair_reason",
-        "technician",
+        "vendor__name",
         "items__product_unit__serial_number",
         "items__product__descript",
         "items__product__sku",
@@ -589,7 +606,10 @@ class RepairRecordAdmin(admin.ModelAdmin):
                 "fields": (
                     "repair_number",
                     "repair_reason",
-                    "technician",
+                    "vendor",
+                    "source",
+                    "source_client",
+                    "source_internal",
                     "repair_date",
                     "status",
                     "sent_by",
@@ -801,7 +821,7 @@ class DeliveryRecordAdmin(admin.ModelAdmin):
         "items__product__sku",
     )
     list_filter = ("status", "delivery_date", "isactive")
-    readonly_fields = ("delivery_number", "cancelled_at", "crdate")
+    readonly_fields = ("delivery_number", "is_warranty_return", "from_repair", "cancelled_at", "crdate")
     autocomplete_fields = ("created_by", "cancelled_by")
     ordering = ("-delivery_date", "-delivery_number")
 
@@ -811,9 +831,12 @@ class DeliveryRecordAdmin(admin.ModelAdmin):
             {
                 "fields": (
                     "delivery_number",
+                    "client",
                     "customer_name",
                     "receiver_name",
                     "delivery_date",
+                    "is_warranty_return",
+                    "from_repair",
                     "status",
                     "created_by",
                     "isactive",

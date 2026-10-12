@@ -8,6 +8,7 @@ from .models import (
     ClientReturnRecord,
     DeliveryItem,
     DeliveryRecord,
+    InternalParty,
     IssueItem,
     IssueRecord,
     ProductUnit,
@@ -22,6 +23,78 @@ from .models import (
     StockMovement,
     Supplier,
 )
+
+
+_UNSET = object()
+
+
+def _resolve_internal_party(internal=None, name_input="", kind_input=""):
+    """Return an existing InternalParty, or get-or-create one from a typed name
+    (the picker's inline "create" option). Returns None when neither is given."""
+    if internal is not None:
+        return internal
+
+    name = (name_input or "").strip()
+    if not name:
+        return None
+    if len(name) > 150:
+        raise ValidationError("Employee or department name must be 150 characters or fewer.")
+
+    kind = (kind_input or "").strip()
+    if kind not in (InternalParty.KIND_EMPLOYEE, InternalParty.KIND_DEPARTMENT):
+        raise ValidationError("Choose whether the new internal party is an employee or a department.")
+
+    party, _created = InternalParty.objects.get_or_create(kind=kind, name=name)
+    return party
+
+
+def _resolve_reservation_party(
+    *,
+    party_type,
+    client=None,
+    supplier=None,
+    internal=None,
+    internal_name_input="",
+    internal_kind_input="",
+):
+    if party_type == ReservationRecord.TYPE_CLIENT:
+        if client is None:
+            raise ValidationError("Choose the client this reservation is for.")
+        return party_type, client, None, None, client.name
+    if party_type == ReservationRecord.TYPE_SUPPLIER:
+        if supplier is None:
+            raise ValidationError("Choose the supplier this reservation is for.")
+        return party_type, None, supplier, None, supplier.name
+    if party_type == ReservationRecord.TYPE_INTERNAL:
+        party = _resolve_internal_party(internal, internal_name_input, internal_kind_input)
+        if party is None:
+            raise ValidationError("Choose the employee or department this reservation is for.")
+        return party_type, None, None, party, party.name
+    raise ValidationError("Reserved for type must be client, supplier, or internal.")
+
+
+def _resolve_repair_source(
+    *,
+    source,
+    source_client=None,
+    source_internal=None,
+    source_internal_name_input="",
+    source_internal_kind_input="",
+):
+    if source == RepairRecord.SOURCE_INTERNAL_STOCK:
+        return source, None, None
+    if source == RepairRecord.SOURCE_CLIENT_RETURN:
+        if source_client is None:
+            raise ValidationError("Choose the client this repair came from.")
+        return source, source_client, None
+    if source == RepairRecord.SOURCE_INTERNAL_PARTY:
+        party = _resolve_internal_party(
+            source_internal, source_internal_name_input, source_internal_kind_input
+        )
+        if party is None:
+            raise ValidationError("Choose the employee or department this repair came from.")
+        return source, None, party
+    raise ValidationError("Repair source must be internal stock, client return, or employee or department.")
 
 
 def _clean_serial_numbers(serial_numbers):
@@ -251,6 +324,10 @@ def create_delivery_record(
 
     if not client and client_name_input.strip():
         client, _created = Client.objects.get_or_create(name=client_name_input.strip())
+    if client is None:
+        # A client record is what later lets a Client Return derive who a unit
+        # belongs to; free-text customer names alone are not enough.
+        raise ValidationError("Choose a client for this delivery.")
 
     units = list(
         ProductUnit.objects.select_for_update()
@@ -315,7 +392,28 @@ def create_delivery_record(
 
 
 def _active_client_return_item_for_unit(unit):
-    return unit.client_return_items.filter(isactive=True).first()
+    # A unit can be returned more than once (sold, returned, repaired, returned
+    # to the client, returned again); the newest return line is the current one.
+    return unit.client_return_items.filter(isactive=True).order_by("-pk").first()
+
+
+def _latest_delivery_item_for_unit(unit):
+    """The unit's current delivery line: the newest one created. Earlier lines
+    (e.g. the original sale before a warranty return) are history."""
+    return (
+        unit.delivery_items.select_related("delivery", "delivery__client")
+        .order_by("-pk")
+        .first()
+    )
+
+
+def _latest_completed_delivery_item_for_unit(unit):
+    return (
+        unit.delivery_items.select_related("delivery", "delivery__client")
+        .filter(isactive=True, delivery__isactive=True, delivery__status=DeliveryRecord.STATUS_COMPLETED)
+        .order_by("-pk")
+        .first()
+    )
 
 
 @transaction.atomic
@@ -325,11 +423,10 @@ def create_client_return_record(
     resolution,
     delivery=None,
     client=None,
-    client_name_input="",
-    customer_name="",
     received_from="",
     return_date=None,
     reason="",
+    repair_vendor=None,
     notes="",
     received_by=None,
 ):
@@ -341,9 +438,8 @@ def create_client_return_record(
         ClientReturnRecord.RESOLUTION_REPAIR,
     ):
         raise ValidationError("Client returns can only move units to available or repair.")
-
-    if not client and client_name_input.strip():
-        client, _created = Client.objects.get_or_create(name=client_name_input.strip())
+    if resolution == ClientReturnRecord.RESOLUTION_REPAIR and repair_vendor is None:
+        raise ValidationError("Choose the repair vendor for units going to repair.")
 
     units = list(
         ProductUnit.objects.select_for_update()
@@ -366,29 +462,51 @@ def create_client_return_record(
             "Client return can only use active sold units: " + ", ".join(invalid_units)
         )
 
-    delivery_items = list(
-        DeliveryItem.objects.select_for_update()
-        .select_related("delivery", "product", "product_unit")
-        .filter(product_unit_id__in=unique_ids)
-    )
-    delivery_items_by_unit_id = {item.product_unit_id: item for item in delivery_items}
+    # The client always comes from each unit's latest completed delivery, never
+    # from the request. A client sent in the request is only a cross-check.
+    delivery_items_by_unit_id = {}
     blocked_units = []
     for unit in units:
-        item = delivery_items_by_unit_id.get(unit.pk)
-        active_return = _active_client_return_item_for_unit(unit)
+        item = _latest_completed_delivery_item_for_unit(unit)
+        latest_return = _active_client_return_item_for_unit(unit)
         if (
             item is None
-            or not item.isactive
-            or not item.delivery.isactive
-            or item.delivery.status != DeliveryRecord.STATUS_COMPLETED
-            or active_return is not None
+            # Already returned under this same delivery line; a new sale (e.g. a
+            # warranty return) creates a newer line that can be returned again.
+            or (latest_return is not None and latest_return.delivery_item_id == item.pk)
             or (delivery is not None and item.delivery_id != delivery.pk)
         ):
             blocked_units.append(unit.serial_number or str(unit.pk))
+        else:
+            delivery_items_by_unit_id[unit.pk] = item
     if blocked_units:
         raise ValidationError(
             "Client return requires active sold units linked to completed deliveries: "
             + ", ".join(blocked_units)
+        )
+
+    no_client_deliveries = sorted(
+        {
+            item.delivery.delivery_number
+            for item in delivery_items_by_unit_id.values()
+            if item.delivery.client_id is None
+        }
+    )
+    if no_client_deliveries:
+        raise ValidationError(
+            "This delivery has no client. Fix the delivery's client first. ("
+            + ", ".join(no_client_deliveries)
+            + ")"
+        )
+    client_ids = {item.delivery.client_id for item in delivery_items_by_unit_id.values()}
+    if len(client_ids) > 1:
+        raise ValidationError(
+            "These units were delivered to different clients. Create a separate client return for each client."
+        )
+    record_client = next(iter(delivery_items_by_unit_id.values())).delivery.client
+    if client is not None and client.pk != record_client.pk:
+        raise ValidationError(
+            f"The client must match the unit's latest delivery ({record_client.name})."
         )
 
     delivery_ids = {item.delivery_id for item in delivery_items_by_unit_id.values()}
@@ -396,15 +514,10 @@ def create_client_return_record(
     if record_delivery is None and len(delivery_ids) == 1:
         record_delivery = next(iter(delivery_items_by_unit_id.values())).delivery
 
-    record_client = client or (record_delivery.client if record_delivery else None)
     client_return = ClientReturnRecord.objects.create(
         delivery=record_delivery,
         client=record_client,
-        customer_name=(
-            customer_name
-            or (record_client.name if record_client else "")
-            or (record_delivery.customer_name if record_delivery else "")
-        ).strip(),
+        customer_name=record_client.name,
         received_from=(received_from or "").strip(),
         return_date=return_date or timezone.localdate(),
         reason=(reason or "").strip(),
@@ -423,6 +536,9 @@ def create_client_return_record(
     if resolution == ProductUnit.STATUS_REPAIR:
         repair_record = RepairRecord.objects.create(
             client_return=client_return,
+            vendor=repair_vendor,
+            source=RepairRecord.SOURCE_CLIENT_RETURN,
+            source_client=record_client,
             repair_reason=(client_return.reason or "Client return - repair needed").strip(),
             repair_date=client_return.return_date,
             notes=notes,
@@ -561,9 +677,6 @@ def update_client_return_record_header(
     client_return,
     *,
     return_date=None,
-    client=None,
-    client_name_input=None,
-    customer_name=None,
     received_from=None,
     reason=None,
     notes=None,
@@ -571,14 +684,6 @@ def update_client_return_record_header(
     if client_return.status == ClientReturnRecord.STATUS_CANCELLED:
         raise ValidationError("Cancelled client return records cannot be edited.")
 
-    if client is not None:
-        client_return.client = client
-    elif client_name_input is not None and client_name_input.strip():
-        client_return.client, _created = Client.objects.get_or_create(
-            name=client_name_input.strip()
-        )
-    if customer_name is not None:
-        client_return.customer_name = customer_name.strip()
     if received_from is not None:
         client_return.received_from = received_from.strip()
     if return_date is not None:
@@ -589,8 +694,6 @@ def update_client_return_record_header(
         client_return.notes = notes
     client_return.save(
         update_fields=(
-            "client",
-            "customer_name",
             "received_from",
             "return_date",
             "reason",
@@ -609,7 +712,12 @@ def _active_reservation_item_for_unit(unit):
 def create_reservation_record(
     *,
     unit_ids,
-    reserved_for,
+    reserved_for_type,
+    reserved_for_client=None,
+    reserved_for_supplier=None,
+    reserved_for_internal=None,
+    internal_name_input="",
+    internal_kind_input="",
     reason="",
     notes="",
     reserved_by=None,
@@ -617,6 +725,17 @@ def create_reservation_record(
     unique_ids = list(dict.fromkeys(unit_ids or []))
     if not unique_ids:
         raise ValidationError("At least one stock unit is required.")
+
+    party_type, party_client, party_supplier, party_internal, party_name = (
+        _resolve_reservation_party(
+            party_type=reserved_for_type,
+            client=reserved_for_client,
+            supplier=reserved_for_supplier,
+            internal=reserved_for_internal,
+            internal_name_input=internal_name_input,
+            internal_kind_input=internal_kind_input,
+        )
+    )
 
     units = list(
         ProductUnit.objects.select_for_update()
@@ -641,7 +760,11 @@ def create_reservation_record(
         )
 
     reservation = ReservationRecord.objects.create(
-        reserved_for=(reserved_for or "").strip(),
+        reserved_for=party_name,
+        reserved_for_type=party_type,
+        reserved_for_client=party_client,
+        reserved_for_supplier=party_supplier,
+        reserved_for_internal=party_internal,
         reason=(reason or "").strip(),
         notes=notes,
         reserved_by=reserved_by,
@@ -675,20 +798,49 @@ def create_reservation_record(
 def update_reservation_record_header(
     reservation,
     *,
-    reserved_for=None,
+    reserved_for_type=None,
+    reserved_for_client=None,
+    reserved_for_supplier=None,
+    reserved_for_internal=None,
+    internal_name_input="",
+    internal_kind_input="",
     reason=None,
     notes=None,
 ):
     if reservation.status != ReservationRecord.STATUS_ACTIVE:
         raise ValidationError("Only active reservation records can be edited.")
 
-    if reserved_for is not None:
-        reservation.reserved_for = reserved_for.strip()
+    if reserved_for_type is not None:
+        party_type, party_client, party_supplier, party_internal, party_name = (
+            _resolve_reservation_party(
+                party_type=reserved_for_type,
+                client=reserved_for_client,
+                supplier=reserved_for_supplier,
+                internal=reserved_for_internal,
+                internal_name_input=internal_name_input,
+                internal_kind_input=internal_kind_input,
+            )
+        )
+        reservation.reserved_for = party_name
+        reservation.reserved_for_type = party_type
+        reservation.reserved_for_client = party_client
+        reservation.reserved_for_supplier = party_supplier
+        reservation.reserved_for_internal = party_internal
     if reason is not None:
         reservation.reason = reason.strip()
     if notes is not None:
         reservation.notes = notes
-    reservation.save(update_fields=("reserved_for", "reason", "notes"))
+    reservation.save(
+        update_fields=(
+            "reserved_for",
+            "reserved_for_type",
+            "reserved_for_client",
+            "reserved_for_supplier",
+            "reserved_for_internal",
+            "reason",
+            "notes",
+        )
+    )
 
     return reservation
 
@@ -784,15 +936,30 @@ def _active_issue_item_for_unit(unit):
 def create_issue_record(
     *,
     unit_ids,
-    issued_to,
+    assigned_to=None,
+    assigned_to_name_input="",
+    assigned_to_kind_input="",
     reason="",
     issue_date=None,
+    expected_return_date=None,
     notes="",
     issued_by=None,
 ):
     unique_ids = list(dict.fromkeys(unit_ids or []))
     if not unique_ids:
         raise ValidationError("At least one stock unit is required.")
+
+    assignee = _resolve_internal_party(
+        assigned_to, assigned_to_name_input, assigned_to_kind_input
+    )
+    if assignee is None:
+        raise ValidationError("Choose the employee or department this assignment is for.")
+    if (
+        expected_return_date
+        and issue_date
+        and expected_return_date < issue_date
+    ):
+        raise ValidationError("Expected return date cannot be before the assignment date.")
 
     units = list(
         ProductUnit.objects.select_for_update()
@@ -817,9 +984,11 @@ def create_issue_record(
         )
 
     issue = IssueRecord.objects.create(
-        issued_to=(issued_to or "").strip(),
+        issued_to=assignee.name,
+        assigned_to=assignee,
         reason=(reason or "").strip(),
         issue_date=issue_date or timezone.localdate(),
+        expected_return_date=expected_return_date,
         notes=notes,
         issued_by=issued_by,
     )
@@ -852,23 +1021,47 @@ def create_issue_record(
 def update_issue_record_header(
     issue,
     *,
-    issued_to=None,
+    assigned_to=None,
+    assigned_to_name_input="",
+    assigned_to_kind_input="",
     reason=None,
     issue_date=None,
+    expected_return_date=_UNSET,
     notes=None,
 ):
     if issue.status != IssueRecord.STATUS_ACTIVE:
         raise ValidationError("Only active issue records can be edited.")
 
-    if issued_to is not None:
-        issue.issued_to = issued_to.strip()
+    assignee = _resolve_internal_party(
+        assigned_to, assigned_to_name_input, assigned_to_kind_input
+    )
+    if assignee is not None:
+        issue.issued_to = assignee.name
+        issue.assigned_to = assignee
     if reason is not None:
         issue.reason = reason.strip()
     if issue_date is not None:
         issue.issue_date = issue_date
+    if expected_return_date is not _UNSET:
+        issue.expected_return_date = expected_return_date
+    if (
+        issue.expected_return_date
+        and issue.issue_date
+        and issue.expected_return_date < issue.issue_date
+    ):
+        raise ValidationError("Expected return date cannot be before the assignment date.")
     if notes is not None:
         issue.notes = notes
-    issue.save(update_fields=("issued_to", "reason", "issue_date", "notes"))
+    issue.save(
+        update_fields=(
+            "issued_to",
+            "assigned_to",
+            "reason",
+            "issue_date",
+            "expected_return_date",
+            "notes",
+        )
+    )
 
     return issue
 
@@ -965,7 +1158,12 @@ def create_repair_record(
     *,
     unit_ids,
     repair_reason,
-    technician="",
+    vendor=None,
+    source=RepairRecord.SOURCE_INTERNAL_STOCK,
+    source_client=None,
+    source_internal=None,
+    source_internal_name_input="",
+    source_internal_kind_input="",
     repair_date=None,
     notes="",
     sent_by=None,
@@ -973,6 +1171,16 @@ def create_repair_record(
     unique_ids = list(dict.fromkeys(unit_ids or []))
     if not unique_ids:
         raise ValidationError("At least one stock unit is required.")
+    if vendor is None:
+        raise ValidationError("Repair vendor is required.")
+
+    source, source_client, source_internal = _resolve_repair_source(
+        source=source,
+        source_client=source_client,
+        source_internal=source_internal,
+        source_internal_name_input=source_internal_name_input,
+        source_internal_kind_input=source_internal_kind_input,
+    )
 
     units = list(
         ProductUnit.objects.select_for_update()
@@ -998,7 +1206,10 @@ def create_repair_record(
 
     repair = RepairRecord.objects.create(
         repair_reason=(repair_reason or "").strip(),
-        technician=(technician or "").strip(),
+        vendor=vendor,
+        source=source,
+        source_client=source_client,
+        source_internal=source_internal,
         repair_date=repair_date or timezone.localdate(),
         notes=notes,
         sent_by=sent_by,
@@ -1033,7 +1244,7 @@ def update_repair_record_header(
     repair,
     *,
     repair_reason=None,
-    technician=None,
+    vendor=None,
     repair_date=None,
     notes=None,
 ):
@@ -1042,13 +1253,13 @@ def update_repair_record_header(
 
     if repair_reason is not None:
         repair.repair_reason = repair_reason.strip()
-    if technician is not None:
-        repair.technician = technician.strip()
+    if vendor is not None:
+        repair.vendor = vendor
     if repair_date is not None:
         repair.repair_date = repair_date
     if notes is not None:
         repair.notes = notes
-    repair.save(update_fields=("repair_reason", "technician", "repair_date", "notes"))
+    repair.save(update_fields=("repair_reason", "vendor", "repair_date", "notes"))
 
     return repair
 
@@ -1091,6 +1302,14 @@ def resolve_repair_record(
         raise ValidationError(
             "Returned to Client is only available for repairs created from a client return."
         )
+
+    return_client = None
+    if resolution == ProductUnit.STATUS_SOLD:
+        return_client = repair.source_client or repair.client_return.client
+        if return_client is None:
+            raise ValidationError(
+                "This repair has no client to return the units to. Fix the client first."
+            )
 
     items = list(
         repair.items.select_for_update()
@@ -1139,20 +1358,36 @@ def resolve_repair_record(
     else:
         movement_type = StockMovement.TYPE_REPAIR_DEACTIVATED
 
+    # "Returned to Client": the units go straight back to the client without
+    # passing through Available. A zero-value, flagged delivery records it so the
+    # history shows the unit going back out, linked to this repair.
+    warranty_delivery = None
+    if resolution == ProductUnit.STATUS_SOLD:
+        warranty_delivery = DeliveryRecord.objects.create(
+            client=return_client,
+            customer_name=return_client.name,
+            delivery_date=repair.resolved_date,
+            notes=f"Warranty return after repair {repair.repair_number}",
+            status=DeliveryRecord.STATUS_COMPLETED,
+            is_warranty_return=True,
+            from_repair=repair,
+            created_by=resolved_by,
+        )
+
     for item in items:
         unit = item.product_unit
         from_status = unit.status
         unit.status = resolution
         if resolution == ProductUnit.STATUS_INACTIVE:
             unit.isactive = False
-        elif resolution == ProductUnit.STATUS_SOLD:
-            return_item = (
-                repair.client_return.items.filter(product_unit=unit)
-                .select_related("delivery_item__delivery")
-                .first()
+        elif warranty_delivery is not None:
+            unit.sold_date = warranty_delivery.delivery_date
+            DeliveryItem.objects.create(
+                delivery=warranty_delivery,
+                product_unit=unit,
+                product=unit.product,
+                sale_price=0,
             )
-            delivery = return_item.delivery_item.delivery if return_item and return_item.delivery_item else None
-            unit.sold_date = delivery.delivery_date if delivery else repair.resolved_date
         unit.save(update_fields=("status", "isactive", "sold_date"))
         create_stock_movement(
             product_unit=unit,
@@ -1164,6 +1399,7 @@ def resolve_repair_record(
             performed_by=resolved_by,
             movement_date=repair.resolved_date,
             repair_record=repair,
+            delivery_record=warranty_delivery,
             reference=repair.repair_number,
         )
 
@@ -1244,11 +1480,7 @@ def create_removal_record(
 
 
 def _unit_has_delivery(unit):
-    try:
-        unit.delivery_item
-    except ObjectDoesNotExist:
-        return False
-    return True
+    return unit.delivery_items.exists()
 
 
 def _unit_can_be_corrected(unit):
@@ -1263,9 +1495,8 @@ def _delivery_unit_can_be_corrected(item):
     unit = item.product_unit
     if not item.isactive or not unit:
         return False
-    try:
-        current_delivery_item = unit.delivery_item
-    except ObjectDoesNotExist:
+    current_delivery_item = _latest_delivery_item_for_unit(unit)
+    if current_delivery_item is None:
         return False
     return (
         unit.isactive
@@ -1403,6 +1634,7 @@ def update_delivery_record_header(
     *,
     customer_name=None,
     receiver_name=None,
+    invoice_number=None,
     delivery_date=None,
     notes=None,
     items=None,
@@ -1427,6 +1659,8 @@ def update_delivery_record_header(
         delivery.customer_name = customer_name.strip()
     if receiver_name is not None:
         delivery.receiver_name = receiver_name.strip()
+    if invoice_number is not None:
+        delivery.invoice_number = invoice_number.strip()
     if delivery_date is not None:
         delivery.delivery_date = delivery_date
     if notes is not None:
@@ -1435,6 +1669,7 @@ def update_delivery_record_header(
         update_fields=(
             "customer_name",
             "receiver_name",
+            "invoice_number",
             "delivery_date",
             "notes",
         )
@@ -1466,6 +1701,10 @@ def update_delivery_record_header(
 def cancel_delivery_record(delivery, *, cancelled_by=None, cancel_reason=""):
     if delivery.status == DeliveryRecord.STATUS_CANCELLED:
         return delivery
+    if delivery.is_warranty_return:
+        raise ValidationError(
+            "Warranty return deliveries cannot be cancelled; the unit was already repaired and returned to the client."
+        )
 
     items = list(delivery.items.select_related("product_unit"))
     blocked_units = [

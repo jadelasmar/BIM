@@ -14,6 +14,7 @@ from .models import (
     Client,
     ClientReturnRecord,
     DeliveryRecord,
+    InternalParty,
     IssueRecord,
     Product,
     ProductModel,
@@ -25,7 +26,13 @@ from .models import (
     StockMovement,
     Supplier,
 )
-from .selectors import RECENT_ACTIVITY_LIMIT, global_search, recent_activity_page
+from .selectors import (
+    RECENT_ACTIVITY_LIMIT,
+    global_search,
+    recent_activity_page,
+    returnable_units,
+    unit_journey,
+)
 from .serializers import (
     BrandSerializer,
     CategorySerializer,
@@ -36,6 +43,7 @@ from .serializers import (
     DeliveryRecordCancelSerializer,
     DeliveryRecordCorrectionSerializer,
     DeliveryRecordSerializer,
+    InternalPartySerializer,
     IssueRecordCorrectionSerializer,
     IssueRecordSerializer,
     IssueReturnSerializer,
@@ -521,7 +529,13 @@ class ReservationRecordListCreateAPIView(WritePermissionRequiredMixin, generics.
         _require_perm(self.request.user, stock_constants.VIEW_RESERVATION_RECORD)
         queryset = (
             ReservationRecord.objects.all()
-            .select_related("reserved_by", "released_by")
+            .select_related(
+                "reserved_by",
+                "released_by",
+                "reserved_for_client",
+                "reserved_for_supplier",
+                "reserved_for_internal",
+            )
             .prefetch_related(
                 "items",
                 "items__product",
@@ -566,7 +580,13 @@ class ReservationRecordDetailAPIView(WritePermissionRequiredMixin, generics.Retr
         _require_perm(self.request.user, stock_constants.VIEW_RESERVATION_RECORD)
         return (
             ReservationRecord.objects.all()
-            .select_related("reserved_by", "released_by")
+            .select_related(
+                "reserved_by",
+                "released_by",
+                "reserved_for_client",
+                "reserved_for_supplier",
+                "reserved_for_internal",
+            )
             .prefetch_related(
                 "items",
                 "items__product",
@@ -628,7 +648,7 @@ class IssueRecordListCreateAPIView(WritePermissionRequiredMixin, generics.ListCr
         _require_perm(self.request.user, stock_constants.VIEW_ISSUE_RECORD)
         queryset = (
             IssueRecord.objects.all()
-            .select_related("issued_by", "returned_by")
+            .select_related("issued_by", "returned_by", "assigned_to")
             .prefetch_related(
                 "items",
                 "items__product",
@@ -673,7 +693,7 @@ class IssueRecordDetailAPIView(WritePermissionRequiredMixin, generics.RetrieveUp
         _require_perm(self.request.user, stock_constants.VIEW_ISSUE_RECORD)
         return (
             IssueRecord.objects.all()
-            .select_related("issued_by", "returned_by")
+            .select_related("issued_by", "returned_by", "assigned_to")
             .prefetch_related(
                 "items",
                 "items__product",
@@ -726,7 +746,13 @@ class RepairRecordListCreateAPIView(WritePermissionRequiredMixin, generics.ListC
         _require_perm(self.request.user, stock_constants.VIEW_REPAIR_RECORD)
         queryset = (
             RepairRecord.objects.all()
-            .select_related("sent_by", "resolved_by")
+            .select_related(
+                "sent_by",
+                "resolved_by",
+                "vendor",
+                "source_client",
+                "source_internal",
+            )
             .prefetch_related(
                 "items",
                 "items__product",
@@ -740,7 +766,7 @@ class RepairRecordListCreateAPIView(WritePermissionRequiredMixin, generics.ListC
             queryset = queryset.filter(
                 Q(repair_number__icontains=query)
                 | Q(repair_reason__icontains=query)
-                | Q(technician__icontains=query)
+                | Q(vendor__name__icontains=query)
                 | Q(items__product_unit__serial_number__icontains=query)
                 | Q(items__product__descript__icontains=query)
                 | Q(items__product__sku__icontains=query)
@@ -771,7 +797,14 @@ class RepairRecordDetailAPIView(WritePermissionRequiredMixin, generics.RetrieveU
         _require_perm(self.request.user, stock_constants.VIEW_REPAIR_RECORD)
         return (
             RepairRecord.objects.all()
-            .select_related("sent_by", "resolved_by", "client_return")
+            .select_related(
+                "sent_by",
+                "resolved_by",
+                "client_return",
+                "vendor",
+                "source_client",
+                "source_internal",
+            )
             .prefetch_related(
                 "items",
                 "items__product",
@@ -1134,6 +1167,44 @@ class ClientDetailAPIView(WritePermissionRequiredMixin, generics.RetrieveUpdateA
     def perform_update(self, serializer):
         _require_perm(self.request.user, stock_constants.CHANGE_CLIENT)
         serializer.save()
+
+
+class ReturnableUnitsAPIView(APIView):
+    """Sold units for the Client Return picker, each with the client derived
+    from its latest delivery (or the reason it cannot be returned)."""
+
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get(self, request):
+        _require_perm(request.user, stock_constants.VIEW_CLIENT_RETURN_RECORD)
+        return Response(
+            returnable_units(
+                request.query_params.get("q", ""),
+                request.query_params.get("delivery") or None,
+            )
+        )
+
+
+class ProductUnitJourneyAPIView(APIView):
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get(self, request, pk):
+        _require_perm(request.user, stock_constants.VIEW_STOCK_MOVEMENT)
+        unit = get_object_or_404(ProductUnit, pk=pk)
+        return Response(unit_journey(unit))
+
+
+class InternalPartyListAPIView(generics.ListAPIView):
+    serializer_class = InternalPartySerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get_queryset(self):
+        _require_perm(self.request.user, stock_constants.VIEW_INTERNAL_PARTY)
+        queryset = InternalParty.objects.filter(isactive=True).order_by("kind", "name")
+        query = self.request.query_params.get("q", "").strip()
+        if query:
+            queryset = queryset.filter(name__icontains=query)
+        return queryset
 
 
 class GlobalSearchAPIView(APIView):

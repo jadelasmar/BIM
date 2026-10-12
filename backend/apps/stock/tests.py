@@ -10,6 +10,7 @@ from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from django.utils import timezone
 from io import BytesIO
+from datetime import timedelta
 from pathlib import Path
 from PIL import Image
 from tempfile import TemporaryDirectory
@@ -42,6 +43,7 @@ def _admin_user_change_data(user, **overrides):
     return data
 
 from .admin import ProductAdmin, ProductUnitAdmin, ProductUnitPurchaseForm
+from .selectors import delivery_record_count
 from .models import (
     Brand,
     Category,
@@ -86,6 +88,7 @@ class ProductAdminTests(SimpleTestCase):
                 "issued_quantity",
                 "sold_quantity",
                 "repair_quantity",
+                "removed_quantity",
                 "reorder_stock_level",
                 "stock_alert",
                 "category",
@@ -152,7 +155,7 @@ class UIRegistryTests(SimpleTestCase):
         create_client_return = UI_TOKENS["create_client_return"]
 
         self.assertEqual(create_delivery["icon"], delivery_records["icon"])
-        self.assertEqual(create_delivery["tone"], delivery_records["tone"])
+        self.assertEqual(delivery_records["tone"], "yellow")
         self.assertEqual(create_delivery["icon"], "delivery")
         self.assertEqual(create_delivery["tone"], "indigo")
         self.assertEqual(create_reservation["icon"], reservation_records["icon"])
@@ -345,9 +348,8 @@ class UIRegistryTests(SimpleTestCase):
         ]
 
         self.assertIn("function SearchableCreatableSelect", app_source)
-        self.assertIn("async function createSupplierOption", stock_entry_source)
-        self.assertIn('fetch(data.api.suppliers', stock_entry_source)
-        self.assertIn('body: JSON.stringify({ name: trimmedName })', stock_entry_source)
+        self.assertIn("function createSupplierOption", stock_entry_source)
+        self.assertIn("__pending: true", stock_entry_source)
         self.assertIn('label="Supplier"', stock_entry_source)
         self.assertIn('placeholder="Search or create supplier..."', stock_entry_source)
         self.assertIn("onCreate={createSupplierOption}", stock_entry_source)
@@ -360,10 +362,10 @@ class UIRegistryTests(SimpleTestCase):
             app_source.index("function CreateDeliveryPage")
         ]
 
-        self.assertIn('new Date().toISOString().slice(0, 10)', stock_entry_source)
+        self.assertIn('todayLocal()', stock_entry_source)
         self.assertIn("entryDate: today", stock_entry_source)
         self.assertIn('label={isReceiving ? "Receiving Date" : "Entry Date"}', stock_entry_source)
-        self.assertIn('<TextInput type="date" value={form.entryDate}', stock_entry_source)
+        self.assertIn('<DateInput value={form.entryDate}', stock_entry_source)
 
     def test_receive_stock_received_by_uses_logged_in_user_without_selector(self):
         app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
@@ -401,7 +403,7 @@ class UIRegistryTests(SimpleTestCase):
         self.assertIn("await createReceivingRecord();", stock_entry_source)
         self.assertIn("await createProductUnits();", stock_entry_source)
         self.assertIn(
-            "window.location.assign(created.id ? `/operations/receiving/${created.id}/` : data.routes.receivingRecords)",
+            "navigateAfterDelay(created.id ? `/operations/receiving/${created.id}/` : data.routes.receivingRecords)",
             stock_entry_source,
         )
         self.assertNotIn("Invoice Reference", stock_entry_source)
@@ -429,14 +431,15 @@ class UIRegistryTests(SimpleTestCase):
         app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
         detail_source = app_source[
             app_source.index("function ReceivingRecordDetailPage"):
-            app_source.index("function ReceivingCorrectionPanel")
+            app_source.index("function ReceivingItemsTable")
         ]
 
         self.assertIn("data.api.receivingRecordDetail", detail_source)
         self.assertIn("receivingId", detail_source)
         self.assertIn("Back to Receiving Records", detail_source)
         self.assertIn("record.items", detail_source)
-        self.assertIn("Reference cost only", detail_source)
+        self.assertIn("<ReceivingItemsTable", detail_source)
+        self.assertIn("Reference cost only", app_source)
         self.assertIn("<ReceivingRecordDetailPage data={data}", app_source)
         self.assertNotIn('<PlaceholderPage data={data} title="Receiving Record"', app_source)
 
@@ -511,7 +514,7 @@ class UIRegistryTests(SimpleTestCase):
         ]
 
         self.assertIn(
-            "window.location.assign(created.id ? `/operations/deliveries/${created.id}/` : data.routes.deliveryRecords)",
+            "navigateAfterDelay(created.id ? `/operations/deliveries/${created.id}/` : data.routes.deliveryRecords)",
             delivery_source,
         )
         self.assertNotIn("window.location.assign(data.routes.inventory)", delivery_source)
@@ -636,7 +639,8 @@ class UIRegistryTests(SimpleTestCase):
         response = self.client.get("/stock/")
 
         self.assertEqual(response.status_code, 404)
-        self.assertNotIn("/stock/", app_source)
+        self.assertNotIn('"/stock/', app_source)
+        self.assertNotIn('href="/stock/', app_source)
         self.assertNotIn("bim_stock:", react_shell_source)
 
 
@@ -1962,7 +1966,10 @@ class BIMPOSAccessTests(TestCase):
         user.user_permissions.add(Permission.objects.get(codename="view_product"))
         ReservationRecord.objects.create(reserved_for="Service desk")
         IssueRecord.objects.create(issued_to="Technician Team")
-        RepairRecord.objects.create(repair_reason="Printer head failure")
+        RepairRecord.objects.create(
+            repair_reason="Printer head failure",
+            vendor=Supplier.objects.create(name="Pending Actions Vendor"),
+        )
         RepairRecord.objects.create(
             repair_reason="Already resolved unit",
             status=RepairRecord.STATUS_RESOLVED,
@@ -1977,9 +1984,42 @@ class BIMPOSAccessTests(TestCase):
         )
 
         self.assertEqual(pending_actions_kpi["value"], "3")
+        self.assertEqual(pending_actions_kpi["tone"], "cyan")
+        self.assertEqual(
+            pending_actions_kpi["detail"],
+            "1 reservation, 1 temporary assignment, 1 repair",
+        )
+
+    def test_command_center_pending_actions_flags_overdue_and_vendorless_repairs(self):
+        user = User.objects.create_user(username="viewer-flags", password="test-pass")
+        user.user_permissions.add(Permission.objects.get(codename="view_product"))
+        IssueRecord.objects.create(
+            issued_to="Technician Team",
+            expected_return_date=timezone.localdate() - timedelta(days=2),
+        )
+        IssueRecord.objects.create(
+            issued_to="Not due yet",
+            expected_return_date=timezone.localdate() + timedelta(days=2),
+        )
+        RepairRecord.objects.create(repair_reason="No vendor yet")
+        RepairRecord.objects.create(
+            repair_reason="Resolved without vendor",
+            status=RepairRecord.STATUS_RESOLVED,
+        )
+        self.client.force_login(user)
+
+        response = self.client.get("/")
+        pending_actions_kpi = next(
+            item
+            for item in response.context["initial_data"]["kpis"]
+            if item["label"] == "Pending Actions"
+        )
+
+        self.assertEqual(pending_actions_kpi["value"], "3")
         self.assertEqual(pending_actions_kpi["tone"], "warning")
         self.assertEqual(
-            pending_actions_kpi["detail"], "1 reservation, 1 issue, 1 repair"
+            pending_actions_kpi["detail"],
+            "2 temporary assignments (1 overdue), 1 repair (1 without vendor)",
         )
 
     def test_command_center_pending_actions_kpi_is_neutral_when_empty(self):
@@ -1995,7 +2035,7 @@ class BIMPOSAccessTests(TestCase):
         )
 
         self.assertEqual(pending_actions_kpi["value"], "0")
-        self.assertEqual(pending_actions_kpi["tone"], "neutral")
+        self.assertEqual(pending_actions_kpi["tone"], "cyan")
         self.assertEqual(pending_actions_kpi["detail"], "Nothing awaiting action")
 
     def test_command_center_quick_add_includes_disabled_supplier_action(self):
@@ -2474,6 +2514,7 @@ class ProductUnitStatusBehaviorTests(TestCase):
                 ProductUnit.STATUS_SOLD,
                 ProductUnit.STATUS_REPAIR,
                 ProductUnit.STATUS_INACTIVE,
+                ProductUnit.STATUS_REMOVED,
             ],
         )
 
@@ -2804,12 +2845,18 @@ class InventoryApiTests(TestCase):
             user.user_permissions.add(Permission.objects.get(codename=codename))
         return user
 
-    def _sold_unit_with_delivery(self, serial_number="API-AVAILABLE", customer_name="Retail Client"):
+    def _sold_unit_with_delivery(
+        self, serial_number="API-AVAILABLE", customer_name="Retail Client", with_client=True
+    ):
         unit = ProductUnit.objects.get(serial_number=serial_number)
         unit.status = ProductUnit.STATUS_SOLD
         unit.sold_date = timezone.localdate()
         unit.save(update_fields=("status", "sold_date"))
+        client = (
+            Client.objects.get_or_create(name=customer_name)[0] if with_client else None
+        )
         delivery = DeliveryRecord.objects.create(
+            client=client,
             customer_name=customer_name,
             receiver_name="Client Receiver",
             delivery_date=timezone.localdate(),
@@ -3217,7 +3264,9 @@ class InventoryApiTests(TestCase):
         response = self.client.post(
             "/api/stock/reservations/",
             {
-                "reserved_for": "Front Office POS refresh",
+                "reserved_for_type": "internal",
+                "internal_name_input": "Front Office POS refresh",
+                "internal_kind_input": "department",
                 "reason": "Hold for installation",
                 "notes": "Install window pending",
                 "unit_ids": [unit.pk],
@@ -3265,7 +3314,9 @@ class InventoryApiTests(TestCase):
             response = self.client.post(
                 "/api/stock/reservations/",
                 {
-                    "reserved_for": "Blocked hold",
+                    "reserved_for_type": "internal",
+                    "internal_name_input": "Blocked hold",
+                    "internal_kind_input": "department",
                     "reason": "Not available",
                     "unit_ids": [unit.pk],
                 },
@@ -3447,7 +3498,9 @@ class InventoryApiTests(TestCase):
         create_response = self.client.post(
             "/api/stock/reservations/",
             {
-                "reserved_for": "Missing product-unit permission",
+                "reserved_for_type": "internal",
+                "internal_name_input": "Missing product-unit permission",
+                "internal_kind_input": "department",
                 "reason": "Blocked",
                 "unit_ids": [unit.pk],
             },
@@ -3503,7 +3556,8 @@ class InventoryApiTests(TestCase):
         response = self.client.post(
             "/api/stock/issues/",
             {
-                "issued_to": "Technician Team",
+                "assigned_to_name_input": "Technician Team",
+                "assigned_to_kind_input": "department",
                 "reason": "Temporary setup",
                 "issue_date": str(timezone.localdate()),
                 "notes": "Return after event",
@@ -3566,7 +3620,8 @@ class InventoryApiTests(TestCase):
             response = self.client.post(
                 "/api/stock/issues/",
                 {
-                    "issued_to": "Blocked issue",
+                    "assigned_to_name_input": "Blocked issue",
+                    "assigned_to_kind_input": "department",
                     "reason": "Not available",
                     "unit_ids": [unit.pk],
                 },
@@ -3728,7 +3783,8 @@ class InventoryApiTests(TestCase):
         create_response = self.client.post(
             "/api/stock/issues/",
             {
-                "issued_to": "Missing product-unit permission",
+                "assigned_to_name_input": "Missing product-unit permission",
+                "assigned_to_kind_input": "department",
                 "unit_ids": [unit.pk],
             },
             content_type="application/json",
@@ -3778,13 +3834,14 @@ class InventoryApiTests(TestCase):
             "change_productunit",
         )
         unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        vendor = Supplier.objects.create(name="Repair Vendor")
         self.client.force_login(user)
 
         response = self.client.post(
             "/api/stock/repairs/",
             {
                 "repair_reason": "Printer head failure",
-                "technician": "Internal IT",
+                "vendor": vendor.pk,
                 "repair_date": str(timezone.localdate()),
                 "notes": "Diagnose before reuse",
                 "unit_ids": [unit.pk],
@@ -3868,7 +3925,6 @@ class InventoryApiTests(TestCase):
         unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
         repair = RepairRecord.objects.create(
             repair_reason="Printer head failure",
-            technician="Internal IT",
             sent_by=user,
         )
         RepairItem.objects.create(
@@ -4254,6 +4310,7 @@ class InventoryApiTests(TestCase):
         response = self.client.post(
             "/api/stock/deliveries/",
             {
+                "client_name_input": "Internal Department",
                 "customer_name": "Internal Department",
                 "receiver_name": "Receiver Name",
                 "delivery_date": str(timezone.localdate()),
@@ -4297,6 +4354,7 @@ class InventoryApiTests(TestCase):
         response = self.client.post(
             "/api/stock/deliveries/",
             {
+                "client_name_input": "Internal Department",
                 "customer_name": "Internal Department",
                 "receiver_name": "Receiver Name",
                 "invoice_number": "INV-2026-0007",
@@ -4665,7 +4723,6 @@ class InventoryApiTests(TestCase):
             "/api/stock/client-returns/",
             {
                 "delivery": delivery.pk,
-                "customer_name": "Retail Client",
                 "received_from": "Client Receiver",
                 "return_date": str(timezone.localdate()),
                 "reason": "Returned after replacement",
@@ -4685,6 +4742,7 @@ class InventoryApiTests(TestCase):
         self.assertEqual(response.json()["return_number"][:9], f"RET-{timezone.localdate().year}-")
         self.assertEqual(client_return.delivery, delivery)
         self.assertEqual(client_return.customer_name, "Retail Client")
+        self.assertEqual(client_return.client, delivery.client)
         self.assertEqual(client_return.received_by, user)
         self.assertEqual(client_return.total_units, 1)
         self.assertEqual(item.delivery_item, delivery_item)
@@ -4703,7 +4761,7 @@ class InventoryApiTests(TestCase):
         self.assertEqual(movement.client_return_record, client_return)
         self.assertEqual(movement.performed_by, user)
 
-    def test_client_return_api_creates_new_client_from_name_input(self):
+    def test_client_return_api_derives_client_and_never_creates_one(self):
         user = self._user_with_permissions(
             "view_clientreturnrecord",
             "add_clientreturnrecord",
@@ -4726,8 +4784,253 @@ class InventoryApiTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 201, response.content)
-        new_client = Client.objects.get(name="Harbor Logistics LLC")
-        self.assertEqual(response.json()["client"], new_client.pk)
+        self.assertEqual(response.json()["client_id"], delivery.client_id)
+        self.assertFalse(Client.objects.filter(name="Harbor Logistics LLC").exists())
+
+    # ---- Client Return / warranty repair flow ----
+
+    def _flow_user(self):
+        return self._user_with_permissions(
+            "view_clientreturnrecord",
+            "add_clientreturnrecord",
+            "view_repairrecord",
+            "add_repairrecord",
+            "change_repairrecord",
+            "view_deliveryrecord",
+            "add_deliveryrecord",
+            "change_deliveryrecord",
+            "change_productunit",
+        )
+
+    def _post_return(self, unit_ids, resolution=ProductUnit.STATUS_AVAILABLE, **extra):
+        return self.client.post(
+            "/api/stock/client-returns/",
+            {"resolution": resolution, "unit_ids": unit_ids, **extra},
+            content_type="application/json",
+        )
+
+    def _warranty_repair(self):
+        """A sold unit returned to repair, with its repair record."""
+        unit, delivery, _item = self._sold_unit_with_delivery()
+        response = self._post_return(
+            [unit.pk], ProductUnit.STATUS_REPAIR, repair_vendor=self.supplier.pk
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        return unit, delivery, RepairRecord.objects.get(
+            client_return_id=response.json()["id"]
+        )
+
+    def _resolve_repair(self, repair, resolution):
+        return self.client.post(
+            f"/api/stock/repairs/{repair.pk}/resolve/",
+            {"resolution": resolution, "resolution_notes": "Checked"},
+            content_type="application/json",
+        )
+
+    def test_delivery_api_requires_a_client_record(self):
+        user = self._flow_user()
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/api/stock/deliveries/",
+            {"customer_name": "Free text only", "unit_ids": [unit.pk]},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400, response.content)
+        unit.refresh_from_db()
+        self.assertEqual(unit.status, ProductUnit.STATUS_AVAILABLE)
+        self.assertFalse(DeliveryRecord.objects.exists())
+
+    def test_client_return_rejects_non_sold_unit(self):
+        self.client.force_login(self._flow_user())
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+
+        response = self._post_return([unit.pk])
+
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertFalse(ClientReturnRecord.objects.exists())
+
+    def test_client_return_rejects_delivery_without_client(self):
+        self.client.force_login(self._flow_user())
+        unit, _delivery, _item = self._sold_unit_with_delivery(with_client=False)
+
+        response = self._post_return([unit.pk])
+
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertIn(
+            "This delivery has no client. Fix the delivery's client first.",
+            str(response.json()),
+        )
+        unit.refresh_from_db()
+        self.assertEqual(unit.status, ProductUnit.STATUS_SOLD)
+
+    def test_client_return_rejects_units_from_different_clients(self):
+        self.client.force_login(self._flow_user())
+        ProductUnit.objects.create(product=self.product, serial_number="API-SECOND")
+        unit_a, _d1, _i1 = self._sold_unit_with_delivery(customer_name="Client A")
+        unit_b, _d2, _i2 = self._sold_unit_with_delivery(
+            serial_number="API-SECOND", customer_name="Client B"
+        )
+
+        response = self._post_return([unit_a.pk, unit_b.pk])
+
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertIn("different clients", str(response.json()))
+        self.assertFalse(ClientReturnRecord.objects.exists())
+
+    def test_client_return_rejects_client_that_does_not_match_latest_delivery(self):
+        self.client.force_login(self._flow_user())
+        unit, _delivery, _item = self._sold_unit_with_delivery(customer_name="Client A")
+        other = Client.objects.create(name="Client B")
+
+        response = self._post_return([unit.pk], client=other.pk)
+
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertIn("must match", str(response.json()))
+        unit.refresh_from_db()
+        self.assertEqual(unit.status, ProductUnit.STATUS_SOLD)
+
+    def test_client_return_to_repair_requires_a_vendor(self):
+        self.client.force_login(self._flow_user())
+        unit, _delivery, _item = self._sold_unit_with_delivery()
+
+        response = self._post_return([unit.pk], ProductUnit.STATUS_REPAIR)
+
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertIn("repair_vendor", response.json())
+        unit.refresh_from_db()
+        self.assertEqual(unit.status, ProductUnit.STATUS_SOLD)
+        self.assertFalse(RepairRecord.objects.exists())
+
+    def test_client_return_to_available_does_not_need_a_vendor(self):
+        self.client.force_login(self._flow_user())
+        unit, _delivery, _item = self._sold_unit_with_delivery()
+
+        response = self._post_return([unit.pk])
+
+        self.assertEqual(response.status_code, 201, response.content)
+
+    def test_repair_return_to_original_client_creates_warranty_delivery(self):
+        self.client.force_login(self._flow_user())
+        unit, original_delivery, repair = self._warranty_repair()
+        self.assertEqual(repair.vendor, self.supplier)
+        self.assertEqual(repair.source_client, original_delivery.client)
+
+        response = self._resolve_repair(repair, ProductUnit.STATUS_SOLD)
+
+        self.assertEqual(response.status_code, 200, response.content)
+        unit.refresh_from_db()
+        self.assertEqual(unit.status, ProductUnit.STATUS_SOLD)
+        warranty = DeliveryRecord.objects.get(from_repair=repair)
+        self.assertTrue(warranty.is_warranty_return)
+        self.assertEqual(warranty.client, original_delivery.client)
+        self.assertEqual(warranty.receiver_name, "")
+        self.assertEqual(warranty.invoice_number, "")
+        self.assertEqual(warranty.status, DeliveryRecord.STATUS_COMPLETED)
+        line = warranty.items.get()
+        self.assertEqual(line.product_unit, unit)
+        self.assertEqual(line.sale_price, 0)
+        movement = StockMovement.objects.get(
+            product_unit=unit, movement_type=StockMovement.TYPE_REPAIR_RETURNED_TO_CLIENT
+        )
+        self.assertEqual(movement.from_status, ProductUnit.STATUS_REPAIR)
+        self.assertEqual(movement.to_status, ProductUnit.STATUS_SOLD)
+        self.assertEqual(movement.delivery_record, warranty)
+        self.assertEqual(movement.repair_record, repair)
+        self.assertFalse(
+            StockMovement.objects.filter(
+                product_unit=unit, to_status=ProductUnit.STATUS_AVAILABLE
+            ).exists()
+        )
+        detail = self.client.get(f"/api/stock/repairs/{repair.pk}/").json()
+        self.assertEqual(detail["return_delivery_number"], warranty.delivery_number)
+
+    def test_repair_return_to_stock_ends_available_without_a_delivery(self):
+        self.client.force_login(self._flow_user())
+        unit, _delivery, repair = self._warranty_repair()
+
+        response = self._resolve_repair(repair, ProductUnit.STATUS_AVAILABLE)
+
+        self.assertEqual(response.status_code, 200, response.content)
+        unit.refresh_from_db()
+        self.assertEqual(unit.status, ProductUnit.STATUS_AVAILABLE)
+        self.assertFalse(DeliveryRecord.objects.filter(from_repair=repair).exists())
+
+    def test_return_to_client_is_only_offered_for_repairs_from_a_client_return(self):
+        self.client.force_login(self._flow_user())
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        response = self.client.post(
+            "/api/stock/repairs/",
+            {"repair_reason": "Bench test", "vendor": self.supplier.pk, "unit_ids": [unit.pk]},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        repair = RepairRecord.objects.get()
+
+        response = self._resolve_repair(repair, ProductUnit.STATUS_SOLD)
+
+        self.assertEqual(response.status_code, 400, response.content)
+        unit.refresh_from_db()
+        self.assertEqual(unit.status, ProductUnit.STATUS_REPAIR)
+
+    def test_warranty_return_delivery_cannot_be_cancelled(self):
+        self.client.force_login(self._flow_user())
+        unit, _delivery, repair = self._warranty_repair()
+        self._resolve_repair(repair, ProductUnit.STATUS_SOLD)
+        warranty = DeliveryRecord.objects.get(from_repair=repair)
+
+        response = self.client.post(
+            f"/api/stock/deliveries/{warranty.pk}/cancel/",
+            {"cancel_reason": "Mistake"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400, response.content)
+        warranty.refresh_from_db()
+        unit.refresh_from_db()
+        self.assertEqual(warranty.status, DeliveryRecord.STATUS_COMPLETED)
+        self.assertEqual(unit.status, ProductUnit.STATUS_SOLD)
+
+    def test_unit_with_two_delivery_lines_uses_the_latest_for_guards_and_returns(self):
+        self.client.force_login(self._flow_user())
+        unit, original_delivery, repair = self._warranty_repair()
+        self._resolve_repair(repair, ProductUnit.STATUS_SOLD)
+        warranty = DeliveryRecord.objects.get(from_repair=repair)
+
+        self.assertEqual(unit.delivery_items.count(), 2)
+        # The original sale is now history: it can no longer be cancelled/corrected.
+        cancel = self.client.post(
+            f"/api/stock/deliveries/{original_delivery.pk}/cancel/",
+            {"cancel_reason": "Too late"},
+            content_type="application/json",
+        )
+        self.assertEqual(cancel.status_code, 400, cancel.content)
+        correction = self.client.patch(
+            f"/api/stock/deliveries/{original_delivery.pk}/",
+            {"delivery_date": "2026-01-01"},
+            content_type="application/json",
+        )
+        self.assertEqual(correction.status_code, 400, correction.content)
+        # The unit is sold again under the newer line, so it can be returned again.
+        listing = self.client.get(
+            "/api/stock/client-returns/returnable-units/", {"q": unit.serial_number}
+        ).json()
+        self.assertEqual(listing[0]["delivery_number"], warranty.delivery_number)
+        self.assertEqual(listing[0]["blocked_reason"], "")
+        second = self._post_return([unit.pk])
+        self.assertEqual(second.status_code, 201, second.content)
+        unit.refresh_from_db()
+        self.assertEqual(unit.status, ProductUnit.STATUS_AVAILABLE)
+
+    def test_warranty_returns_are_not_counted_as_deliveries(self):
+        self.client.force_login(self._flow_user())
+        _unit, _delivery, repair = self._warranty_repair()
+        self._resolve_repair(repair, ProductUnit.STATUS_SOLD)
+
+        self.assertEqual(DeliveryRecord.objects.count(), 2)
+        self.assertEqual(delivery_record_count(), 1)
 
     def test_client_return_api_does_not_persist_new_client_on_save_failure(self):
         user = self._user_with_permissions(
@@ -4769,11 +5072,11 @@ class InventoryApiTests(TestCase):
             "/api/stock/client-returns/",
             {
                 "delivery": delivery.pk,
-                "customer_name": "Retail Client",
                 "received_from": "Client Receiver",
                 "return_date": str(timezone.localdate()),
                 "reason": "Needs testing",
                 "resolution": ProductUnit.STATUS_REPAIR,
+                "repair_vendor": self.supplier.pk,
                 "unit_ids": [unit.pk],
             },
             content_type="application/json",
@@ -4789,6 +5092,10 @@ class InventoryApiTests(TestCase):
         )
         self.assertEqual(movement.from_status, ProductUnit.STATUS_SOLD)
         self.assertEqual(movement.to_status, ProductUnit.STATUS_REPAIR)
+        repair = RepairRecord.objects.get(client_return__items__product_unit=unit)
+        self.assertEqual(repair.vendor, self.supplier)
+        self.assertEqual(repair.source, RepairRecord.SOURCE_CLIENT_RETURN)
+        self.assertEqual(repair.source_client, delivery.client)
 
     def test_client_return_api_rejects_units_without_active_completed_delivery_item(self):
         user = self._user_with_permissions(

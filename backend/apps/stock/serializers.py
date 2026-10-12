@@ -10,6 +10,7 @@ from .models import (
     ClientReturnRecord,
     DeliveryItem,
     DeliveryRecord,
+    InternalParty,
     IssueItem,
     IssueRecord,
     Product,
@@ -143,6 +144,27 @@ class ClientSerializer(serializers.ModelSerializer):
         if queryset.exists():
             raise serializers.ValidationError("Client already exists.")
         return name
+
+
+class InternalPartySerializer(serializers.ModelSerializer):
+    kind_label = serializers.CharField(source="get_kind_display", read_only=True)
+
+    class Meta:
+        model = InternalParty
+        fields = ("id", "kind", "kind_label", "name")
+        read_only_fields = fields
+
+
+def _party_payload(party_type, party):
+    """Compact {type, id, name, kind?} used by detail/list views to render a
+    party as a link (client/supplier) or a plain tagged name (internal)."""
+    if party is None:
+        return None
+    payload = {"type": party_type, "id": party.pk, "name": party.name}
+    if party_type == "internal":
+        payload["kind"] = party.kind
+        payload["kind_label"] = party.get_kind_display()
+    return payload
 
 
 class ProductSerializer(serializers.ModelSerializer):
@@ -563,6 +585,35 @@ class ReservationRecordSerializer(serializers.ModelSerializer):
         required=True,
         allow_empty=False,
     )
+    reserved_for_type = serializers.ChoiceField(
+        choices=ReservationRecord.RESERVED_FOR_TYPE_CHOICES,
+    )
+    reserved_for_client = serializers.PrimaryKeyRelatedField(
+        queryset=Client.objects.filter(isactive=True),
+        required=False,
+        allow_null=True,
+    )
+    reserved_for_supplier = serializers.PrimaryKeyRelatedField(
+        queryset=Supplier.objects.filter(isactive=True),
+        required=False,
+        allow_null=True,
+    )
+    reserved_for_internal = serializers.PrimaryKeyRelatedField(
+        queryset=InternalParty.objects.filter(isactive=True),
+        required=False,
+        allow_null=True,
+    )
+    internal_name_input = serializers.CharField(
+        required=False,
+        write_only=True,
+        allow_blank=True,
+    )
+    internal_kind_input = serializers.CharField(
+        required=False,
+        write_only=True,
+        allow_blank=True,
+    )
+    reserved_for_party = serializers.SerializerMethodField()
     reserved_by_name = serializers.CharField(
         source="reserved_by.get_username",
         read_only=True,
@@ -579,6 +630,13 @@ class ReservationRecordSerializer(serializers.ModelSerializer):
             "id",
             "reservation_number",
             "reserved_for",
+            "reserved_for_type",
+            "reserved_for_client",
+            "reserved_for_supplier",
+            "reserved_for_internal",
+            "internal_name_input",
+            "internal_kind_input",
+            "reserved_for_party",
             "reason",
             "notes",
             "status",
@@ -597,6 +655,8 @@ class ReservationRecordSerializer(serializers.ModelSerializer):
         )
         read_only_fields = (
             "reservation_number",
+            "reserved_for",
+            "reserved_for_party",
             "status",
             "reserved_by",
             "reserved_by_name",
@@ -612,6 +672,19 @@ class ReservationRecordSerializer(serializers.ModelSerializer):
 
     def get_total_units(self, obj):
         return obj.total_units
+
+    def get_reserved_for_party(self, obj):
+        party = _party_payload(
+            obj.reserved_for_type,
+            {
+                ReservationRecord.TYPE_CLIENT: obj.reserved_for_client,
+                ReservationRecord.TYPE_SUPPLIER: obj.reserved_for_supplier,
+                ReservationRecord.TYPE_INTERNAL: obj.reserved_for_internal,
+            }.get(obj.reserved_for_type),
+        )
+        # The party row can be gone (SET_NULL) or never linked; fall back to
+        # the name snapshot so the record still shows who it was for.
+        return party or {"type": obj.reserved_for_type, "id": None, "name": obj.reserved_for}
 
     def create(self, validated_data):
         unit_ids = validated_data.pop("unit_ids")
@@ -644,15 +717,41 @@ class ReservationReleaseSerializer(serializers.Serializer):
 
 
 class ReservationRecordCorrectionSerializer(serializers.ModelSerializer):
+    reserved_for_type = serializers.ChoiceField(
+        choices=ReservationRecord.RESERVED_FOR_TYPE_CHOICES,
+        required=False,
+    )
+    reserved_for_client = serializers.PrimaryKeyRelatedField(
+        queryset=Client.objects.filter(isactive=True),
+        required=False,
+        allow_null=True,
+    )
+    reserved_for_supplier = serializers.PrimaryKeyRelatedField(
+        queryset=Supplier.objects.filter(isactive=True),
+        required=False,
+        allow_null=True,
+    )
+    reserved_for_internal = serializers.PrimaryKeyRelatedField(
+        queryset=InternalParty.objects.filter(isactive=True),
+        required=False,
+        allow_null=True,
+    )
+    internal_name_input = serializers.CharField(required=False, allow_blank=True)
+    internal_kind_input = serializers.CharField(required=False, allow_blank=True)
+
     class Meta:
         model = ReservationRecord
         fields = (
-            "reserved_for",
+            "reserved_for_type",
+            "reserved_for_client",
+            "reserved_for_supplier",
+            "reserved_for_internal",
+            "internal_name_input",
+            "internal_kind_input",
             "reason",
             "notes",
         )
         extra_kwargs = {
-            "reserved_for": {"required": False, "allow_blank": False},
             "reason": {"required": False, "allow_blank": True},
             "notes": {"required": False, "allow_blank": True},
         }
@@ -713,6 +812,23 @@ class IssueRecordSerializer(serializers.ModelSerializer):
         required=True,
         allow_empty=False,
     )
+    assigned_to = serializers.PrimaryKeyRelatedField(
+        queryset=InternalParty.objects.filter(isactive=True),
+        required=False,
+        allow_null=True,
+    )
+    assigned_to_name_input = serializers.CharField(
+        required=False,
+        write_only=True,
+        allow_blank=True,
+    )
+    assigned_to_kind_input = serializers.CharField(
+        required=False,
+        write_only=True,
+        allow_blank=True,
+    )
+    assigned_to_party = serializers.SerializerMethodField()
+    is_overdue = serializers.BooleanField(read_only=True)
     issued_by_name = serializers.CharField(
         source="issued_by.get_username",
         read_only=True,
@@ -729,8 +845,14 @@ class IssueRecordSerializer(serializers.ModelSerializer):
             "id",
             "issue_number",
             "issued_to",
+            "assigned_to",
+            "assigned_to_name_input",
+            "assigned_to_kind_input",
+            "assigned_to_party",
             "reason",
             "issue_date",
+            "expected_return_date",
+            "is_overdue",
             "returned_date",
             "notes",
             "status",
@@ -748,6 +870,9 @@ class IssueRecordSerializer(serializers.ModelSerializer):
         )
         read_only_fields = (
             "issue_number",
+            "issued_to",
+            "assigned_to_party",
+            "is_overdue",
             "returned_date",
             "status",
             "issued_by",
@@ -763,6 +888,10 @@ class IssueRecordSerializer(serializers.ModelSerializer):
 
     def get_total_units(self, obj):
         return obj.total_units
+
+    def get_assigned_to_party(self, obj):
+        party = _party_payload("internal", obj.assigned_to)
+        return party or {"type": "internal", "id": None, "name": obj.issued_to}
 
     def create(self, validated_data):
         unit_ids = validated_data.pop("unit_ids")
@@ -796,18 +925,29 @@ class IssueReturnSerializer(serializers.Serializer):
 
 
 class IssueRecordCorrectionSerializer(serializers.ModelSerializer):
+    assigned_to = serializers.PrimaryKeyRelatedField(
+        queryset=InternalParty.objects.filter(isactive=True),
+        required=False,
+        allow_null=True,
+    )
+    assigned_to_name_input = serializers.CharField(required=False, allow_blank=True)
+    assigned_to_kind_input = serializers.CharField(required=False, allow_blank=True)
+
     class Meta:
         model = IssueRecord
         fields = (
-            "issued_to",
+            "assigned_to",
+            "assigned_to_name_input",
+            "assigned_to_kind_input",
             "reason",
             "issue_date",
+            "expected_return_date",
             "notes",
         )
         extra_kwargs = {
-            "issued_to": {"required": False, "allow_blank": False},
             "reason": {"required": False, "allow_blank": True},
             "issue_date": {"required": False},
+            "expected_return_date": {"required": False, "allow_null": True},
             "notes": {"required": False, "allow_blank": True},
         }
 
@@ -868,6 +1008,42 @@ class RepairRecordSerializer(serializers.ModelSerializer):
         required=True,
         allow_empty=False,
     )
+    vendor = serializers.PrimaryKeyRelatedField(
+        queryset=Supplier.objects.filter(isactive=True),
+        required=True,
+        allow_null=False,
+    )
+    vendor_name = serializers.CharField(source="vendor.name", read_only=True, default="")
+    source = serializers.ChoiceField(
+        choices=RepairRecord.SOURCE_CHOICES,
+        required=False,
+        default=RepairRecord.SOURCE_INTERNAL_STOCK,
+    )
+    source_label = serializers.CharField(source="get_source_display", read_only=True)
+    source_client = serializers.PrimaryKeyRelatedField(
+        queryset=Client.objects.filter(isactive=True),
+        required=False,
+        allow_null=True,
+    )
+    source_internal = serializers.PrimaryKeyRelatedField(
+        queryset=InternalParty.objects.filter(isactive=True),
+        required=False,
+        allow_null=True,
+    )
+    source_internal_name_input = serializers.CharField(
+        required=False,
+        write_only=True,
+        allow_blank=True,
+    )
+    source_internal_kind_input = serializers.CharField(
+        required=False,
+        write_only=True,
+        allow_blank=True,
+    )
+    source_party = serializers.SerializerMethodField()
+    return_delivery_id = serializers.SerializerMethodField()
+    return_delivery_number = serializers.SerializerMethodField()
+    client_return_id = serializers.IntegerField(read_only=True)
     sent_by_name = serializers.CharField(
         source="sent_by.get_username",
         read_only=True,
@@ -889,7 +1065,18 @@ class RepairRecordSerializer(serializers.ModelSerializer):
             "id",
             "repair_number",
             "repair_reason",
-            "technician",
+            "vendor",
+            "vendor_name",
+            "source",
+            "source_label",
+            "source_client",
+            "source_internal",
+            "source_internal_name_input",
+            "source_internal_kind_input",
+            "source_party",
+            "return_delivery_id",
+            "return_delivery_number",
+            "client_return_id",
             "repair_date",
             "resolved_date",
             "resolution",
@@ -911,6 +1098,12 @@ class RepairRecordSerializer(serializers.ModelSerializer):
         )
         read_only_fields = (
             "repair_number",
+            "vendor_name",
+            "source_label",
+            "source_party",
+            "return_delivery_id",
+            "return_delivery_number",
+            "client_return_id",
             "resolved_date",
             "resolution",
             "resolution_notes",
@@ -930,6 +1123,24 @@ class RepairRecordSerializer(serializers.ModelSerializer):
     def get_total_units(self, obj):
         return obj.total_units
 
+    def _return_delivery(self, obj):
+        return obj.return_deliveries.filter(is_warranty_return=True).order_by("-pk").first()
+
+    def get_return_delivery_id(self, obj):
+        delivery = self._return_delivery(obj)
+        return delivery.pk if delivery else None
+
+    def get_return_delivery_number(self, obj):
+        delivery = self._return_delivery(obj)
+        return delivery.delivery_number if delivery else ""
+
+    def get_source_party(self, obj):
+        if obj.source == RepairRecord.SOURCE_CLIENT_RETURN:
+            return _party_payload("client", obj.source_client)
+        if obj.source == RepairRecord.SOURCE_INTERNAL_PARTY:
+            return _party_payload("internal", obj.source_internal)
+        return None
+
     def create(self, validated_data):
         unit_ids = validated_data.pop("unit_ids")
         request = self.context.get("request")
@@ -944,17 +1155,22 @@ class RepairRecordSerializer(serializers.ModelSerializer):
 
 
 class RepairRecordCorrectionSerializer(serializers.ModelSerializer):
+    vendor = serializers.PrimaryKeyRelatedField(
+        queryset=Supplier.objects.filter(isactive=True),
+        required=False,
+        allow_null=False,
+    )
+
     class Meta:
         model = RepairRecord
         fields = (
             "repair_reason",
-            "technician",
+            "vendor",
             "repair_date",
             "notes",
         )
         extra_kwargs = {
             "repair_reason": {"required": False, "allow_blank": False},
-            "technician": {"required": False, "allow_blank": True},
             "repair_date": {"required": False},
             "notes": {"required": False, "allow_blank": True},
         }
@@ -1150,16 +1366,21 @@ class ClientReturnRecordSerializer(serializers.ModelSerializer):
         read_only=True,
         default="",
     )
+    # The client comes from the units' latest delivery. A client sent here is
+    # only cross-checked against it by the service (mismatch is rejected).
     client = serializers.PrimaryKeyRelatedField(
         queryset=Client.objects.filter(isactive=True),
         required=False,
         allow_null=True,
-    )
-    client_name = serializers.CharField(source="client.name", read_only=True, default="")
-    client_name_input = serializers.CharField(
-        required=False,
         write_only=True,
-        allow_blank=True,
+    )
+    client_id = serializers.IntegerField(read_only=True)
+    client_name = serializers.CharField(source="client.name", read_only=True, default="")
+    repair_vendor = serializers.PrimaryKeyRelatedField(
+        queryset=Supplier.objects.filter(isactive=True),
+        required=False,
+        allow_null=True,
+        write_only=True,
     )
     received_by_name = serializers.CharField(
         source="received_by.get_username",
@@ -1173,6 +1394,8 @@ class ClientReturnRecordSerializer(serializers.ModelSerializer):
     )
     repair_record_id = serializers.SerializerMethodField()
     repair_record_number = serializers.SerializerMethodField()
+    repair_vendor_id = serializers.SerializerMethodField()
+    repair_vendor_name = serializers.SerializerMethodField()
 
     class Meta:
         model = ClientReturnRecord
@@ -1182,13 +1405,14 @@ class ClientReturnRecordSerializer(serializers.ModelSerializer):
             "delivery",
             "delivery_number",
             "client",
+            "client_id",
             "client_name",
-            "client_name_input",
             "customer_name",
             "received_from",
             "return_date",
             "reason",
             "resolution",
+            "repair_vendor",
             "notes",
             "status",
             "cancel_reason",
@@ -1199,6 +1423,8 @@ class ClientReturnRecordSerializer(serializers.ModelSerializer):
             "received_by_name",
             "repair_record_id",
             "repair_record_number",
+            "repair_vendor_id",
+            "repair_vendor_name",
             "total_units",
             "unit_ids",
             "items",
@@ -1208,7 +1434,9 @@ class ClientReturnRecordSerializer(serializers.ModelSerializer):
         read_only_fields = (
             "return_number",
             "delivery_number",
+            "client_id",
             "client_name",
+            "customer_name",
             "status",
             "cancel_reason",
             "cancelled_at",
@@ -1218,16 +1446,33 @@ class ClientReturnRecordSerializer(serializers.ModelSerializer):
             "received_by_name",
             "repair_record_id",
             "repair_record_number",
+            "repair_vendor_id",
+            "repair_vendor_name",
             "total_units",
             "items",
             "crdate",
         )
-        extra_kwargs = {
-            "customer_name": {"required": False, "allow_blank": True},
-        }
 
     def get_total_units(self, obj):
         return obj.total_units
+
+    def validate(self, attrs):
+        if (
+            attrs.get("resolution") == ClientReturnRecord.RESOLUTION_REPAIR
+            and not attrs.get("repair_vendor")
+        ):
+            raise serializers.ValidationError(
+                {"repair_vendor": "Choose the repair vendor for units going to repair."}
+            )
+        return attrs
+
+    def get_repair_vendor_id(self, obj):
+        repair = self._latest_repair(obj)
+        return repair.vendor_id if repair else None
+
+    def get_repair_vendor_name(self, obj):
+        repair = self._latest_repair(obj)
+        return repair.vendor.name if repair and repair.vendor_id else ""
 
     def _latest_repair(self, obj):
         return obj.repair_records.order_by("-crdate").first()
@@ -1254,30 +1499,15 @@ class ClientReturnRecordSerializer(serializers.ModelSerializer):
 
 
 class ClientReturnRecordCorrectionSerializer(serializers.ModelSerializer):
-    client = serializers.PrimaryKeyRelatedField(
-        queryset=Client.objects.filter(isactive=True),
-        required=False,
-        allow_null=True,
-    )
-    client_name_input = serializers.CharField(
-        required=False,
-        write_only=True,
-        allow_blank=True,
-    )
-
     class Meta:
         model = ClientReturnRecord
         fields = (
-            "client",
-            "client_name_input",
-            "customer_name",
             "received_from",
             "return_date",
             "reason",
             "notes",
         )
         extra_kwargs = {
-            "customer_name": {"required": False, "allow_blank": True},
             "received_from": {"required": False, "allow_blank": True},
             "return_date": {"required": False},
             "reason": {"required": False, "allow_blank": True},
@@ -1339,12 +1569,20 @@ class DeliveryRecordSerializer(serializers.ModelSerializer):
         write_only=True,
         default=dict,
     )
+    from_repair_number = serializers.CharField(
+        source="from_repair.repair_number",
+        read_only=True,
+        default="",
+    )
 
     class Meta:
         model = DeliveryRecord
         fields = (
             "id",
             "delivery_number",
+            "is_warranty_return",
+            "from_repair",
+            "from_repair_number",
             "client",
             "client_name",
             "client_name_input",
@@ -1368,6 +1606,9 @@ class DeliveryRecordSerializer(serializers.ModelSerializer):
         )
         read_only_fields = (
             "delivery_number",
+            "is_warranty_return",
+            "from_repair",
+            "from_repair_number",
             "client_name",
             "cancel_reason",
             "cancelled_at",
@@ -1378,6 +1619,9 @@ class DeliveryRecordSerializer(serializers.ModelSerializer):
             "items",
             "crdate",
         )
+        extra_kwargs = {
+            "customer_name": {"required": False, "allow_blank": True},
+        }
 
     def get_total_units(self, obj):
         return obj.total_units
@@ -1405,11 +1649,14 @@ class DeliveryRecordSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         unit_ids = validated_data.pop("unit_ids")
         request = self.context.get("request")
-        return create_delivery_record(
-            unit_ids=unit_ids,
-            created_by=request.user if request else None,
-            **validated_data,
-        )
+        try:
+            return create_delivery_record(
+                unit_ids=unit_ids,
+                created_by=request.user if request else None,
+                **validated_data,
+            )
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc
 
 
 class DeliveryItemCorrectionSerializer(serializers.Serializer):
@@ -1425,6 +1672,7 @@ class DeliveryRecordCorrectionSerializer(serializers.ModelSerializer):
         fields = (
             "customer_name",
             "receiver_name",
+            "invoice_number",
             "delivery_date",
             "notes",
             "items",
@@ -1432,6 +1680,7 @@ class DeliveryRecordCorrectionSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             "customer_name": {"required": False, "allow_blank": False},
             "receiver_name": {"required": False, "allow_blank": True},
+            "invoice_number": {"required": False, "allow_blank": True},
             "delivery_date": {"required": False},
             "notes": {"required": False, "allow_blank": True},
         }
@@ -1447,6 +1696,9 @@ class DeliveryRecordCorrectionSerializer(serializers.ModelSerializer):
                 receiver_name=validated_data.get("receiver_name")
                 if "receiver_name" in validated_data
                 else instance.receiver_name,
+                invoice_number=validated_data.get("invoice_number")
+                if "invoice_number" in validated_data
+                else instance.invoice_number,
                 delivery_date=validated_data.get("delivery_date")
                 if "delivery_date" in validated_data
                 else instance.delivery_date,

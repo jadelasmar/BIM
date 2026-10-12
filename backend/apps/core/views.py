@@ -17,10 +17,12 @@ from apps.stock.selectors import (
     low_stock_alerts,
     low_stock_counts,
     out_of_stock_products,
+    overdue_issue_count,
     pending_issue_count,
     pending_repair_count,
     pending_reservation_count,
     recent_receiving_count,
+    repairs_without_vendor_count,
     recent_stock_activity,
     reserved_unit_count,
     stock_status_breakdown,
@@ -84,7 +86,7 @@ def _plural(value, singular, plural=None):
     return plural or f"{singular}s"
 
 
-def _pending_actions_detail(reservations, issues, repairs):
+def _pending_actions_detail(reservations, issues, repairs, overdue_issues=0, repairs_no_vendor=0):
     counts = (reservations, issues, repairs)
     if not all(isinstance(count, int) for count in counts):
         return "Operations data unavailable"
@@ -93,9 +95,15 @@ def _pending_actions_detail(reservations, issues, repairs):
     if reservations:
         parts.append(f"{_format_count(reservations)} {_plural(reservations, 'reservation')}")
     if issues:
-        parts.append(f"{_format_count(issues)} {_plural(issues, 'temporary assignment')}")
+        issue_part = f"{_format_count(issues)} {_plural(issues, 'temporary assignment')}"
+        if overdue_issues:
+            issue_part += f" ({_format_count(overdue_issues)} overdue)"
+        parts.append(issue_part)
     if repairs:
-        parts.append(f"{_format_count(repairs)} {_plural(repairs, 'repair')}")
+        repair_part = f"{_format_count(repairs)} {_plural(repairs, 'repair')}"
+        if repairs_no_vendor:
+            repair_part += f" ({_format_count(repairs_no_vendor)} without vendor)"
+        parts.append(repair_part)
 
     return ", ".join(parts) if parts else "Nothing awaiting action"
 
@@ -135,6 +143,8 @@ def _command_center_initial_data(
     pending_reservations,
     pending_issues,
     pending_repairs,
+    overdue_issues=0,
+    repairs_no_vendor=0,
     current_path=None,
 ):
     can_view_stock = user_can_view_stock(request.user)
@@ -270,6 +280,7 @@ def _command_center_initial_data(
             "receivingRecordDetail": "/api/stock/receiving-records/{id}/",
             "suppliers": "/api/stock/suppliers/",
             "clients": "/api/stock/clients/",
+            "internalParties": "/api/stock/internal-parties/",
             "brands": "/api/stock/brands/",
             "models": "/api/stock/models/",
             "categories": "/api/stock/categories/",
@@ -358,10 +369,15 @@ def _command_center_initial_data(
             },
             {
                 "value": _format_count(pending_actions_total),
-                "detail": _pending_actions_detail(pending_reservations, pending_issues, pending_repairs),
+                "detail": _pending_actions_detail(
+                    pending_reservations, pending_issues, pending_repairs, overdue_issues, repairs_no_vendor
+                ),
                 "trend": "",
                 "href": operations_href,
-                **ui_item("pending_actions"),
+                **ui_item(
+                    "pending_actions",
+                    **({"tone": "warning"} if overdue_issues or repairs_no_vendor else {}),
+                ),
             },
         ],
         "overview": [
@@ -409,6 +425,8 @@ def _build_command_center_initial_data(request, current_path=None):
     pending_reservations = pending_reservation_count() if can_view_stock else "-"
     pending_issues = pending_issue_count() if can_view_stock else "-"
     pending_repairs = pending_repair_count() if can_view_stock else "-"
+    overdue_issues = overdue_issue_count() if can_view_stock else 0
+    repairs_no_vendor = repairs_without_vendor_count() if can_view_stock else 0
     can_create_delivery = user.has_perm(
         stock_constants.ADD_DELIVERY_RECORD
     ) and user.has_perm(stock_constants.CHANGE_PRODUCT_UNIT)
@@ -619,6 +637,8 @@ def _build_command_center_initial_data(request, current_path=None):
         pending_reservations=pending_reservations,
         pending_issues=pending_issues,
         pending_repairs=pending_repairs,
+        overdue_issues=overdue_issues,
+        repairs_no_vendor=repairs_no_vendor,
         current_path=current_path,
     )
 

@@ -173,6 +173,38 @@ class Client(models.Model):
         return self.name
 
 
+# InternalParty is an employee or department inside the company. It is the
+# "internal" counterpart to Client/Supplier for reservations, temporary
+# assignments, and repair sources. There is no page for it by design; entries
+# are created inline from the party pickers.
+class InternalParty(models.Model):
+    KIND_EMPLOYEE = "employee"
+    KIND_DEPARTMENT = "department"
+
+    KIND_CHOICES = [
+        (KIND_EMPLOYEE, "Employee"),
+        (KIND_DEPARTMENT, "Department"),
+    ]
+
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES)
+    name = models.CharField(max_length=150)
+    crdate = models.DateTimeField(default=timezone.now)
+    isactive = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("kind", "name")
+        verbose_name_plural = "Internal parties"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["kind", "name"],
+                name="unique_internal_party_kind_name",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.get_kind_display()})"
+
+
 # ProductUnit is one real physical stock item.
 # It tracks serial number, purchase info, selling info, and stock status.
 class ProductUnit(models.Model):
@@ -403,6 +435,17 @@ class DeliveryRecord(models.Model):
         choices=STATUS_CHOICES,
         default=STATUS_COMPLETED,
     )
+    # A warranty return sends a repaired unit back to its original client at no
+    # charge. It is a zero-value delivery, not a sale, so it is flagged and kept
+    # out of delivery counts/totals.
+    is_warranty_return = models.BooleanField(default=False)
+    from_repair = models.ForeignKey(
+        "RepairRecord",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="return_deliveries",
+    )
     cancel_reason = models.TextField(blank=True)
     cancelled_at = models.DateTimeField(blank=True, null=True)
     cancelled_by = models.ForeignKey(
@@ -457,10 +500,13 @@ class DeliveryItem(models.Model):
         on_delete=models.CASCADE,
         related_name="items",
     )
-    product_unit = models.OneToOneField(
+    # A unit can have several delivery lines over its life (e.g. the original
+    # sale, then a warranty return after repair). The newest line is the
+    # unit's current one; see services._latest_delivery_item_for_unit().
+    product_unit = models.ForeignKey(
         ProductUnit,
         on_delete=models.PROTECT,
-        related_name="delivery_item",
+        related_name="delivery_items",
     )
     product = models.ForeignKey(Product, on_delete=models.PROTECT)
     sale_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -491,13 +537,52 @@ class ReservationRecord(models.Model):
         (STATUS_CANCELLED, "Cancelled"),
     ]
 
+    TYPE_CLIENT = "client"
+    TYPE_SUPPLIER = "supplier"
+    TYPE_INTERNAL = "internal"
+
+    RESERVED_FOR_TYPE_CHOICES = [
+        (TYPE_CLIENT, "Client"),
+        (TYPE_SUPPLIER, "Supplier"),
+        (TYPE_INTERNAL, "Internal"),
+    ]
+
     reservation_number = models.CharField(
         max_length=32,
         unique=True,
         blank=True,
         editable=False,
     )
+    # reserved_for is a name snapshot written by the service from whichever
+    # party FK is set, the same way DeliveryRecord.customer_name mirrors
+    # DeliveryRecord.client. Search and Recent Activity read it directly.
     reserved_for = models.CharField(max_length=150)
+    reserved_for_type = models.CharField(
+        max_length=20,
+        choices=RESERVED_FOR_TYPE_CHOICES,
+        default=TYPE_CLIENT,
+    )
+    reserved_for_client = models.ForeignKey(
+        Client,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="reservations",
+    )
+    reserved_for_supplier = models.ForeignKey(
+        Supplier,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="reservations",
+    )
+    reserved_for_internal = models.ForeignKey(
+        InternalParty,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="reservations",
+    )
     reason = models.CharField(max_length=150, blank=True)
     notes = models.TextField(blank=True)
     status = models.CharField(
@@ -599,9 +684,18 @@ class IssueRecord(models.Model):
         blank=True,
         editable=False,
     )
+    # issued_to is a name snapshot written by the service from assigned_to.
     issued_to = models.CharField(max_length=150)
+    assigned_to = models.ForeignKey(
+        InternalParty,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="issues",
+    )
     reason = models.CharField(max_length=150, blank=True)
     issue_date = models.DateField(default=timezone.localdate)
+    expected_return_date = models.DateField(blank=True, null=True)
     returned_date = models.DateField(blank=True, null=True)
     notes = models.TextField(blank=True)
     status = models.CharField(
@@ -652,6 +746,14 @@ class IssueRecord(models.Model):
     @property
     def total_units(self):
         return self.items.filter(isactive=True).count()
+
+    @property
+    def is_overdue(self):
+        return bool(
+            self.status == self.STATUS_ACTIVE
+            and self.expected_return_date
+            and self.expected_return_date < timezone.localdate()
+        )
 
     def __str__(self):
         return self.issue_number or "Issue"
@@ -706,6 +808,16 @@ class RepairRecord(models.Model):
         (RESOLUTION_SOLD, "Returned to Client"),
     ]
 
+    SOURCE_INTERNAL_STOCK = "internal_stock"
+    SOURCE_CLIENT_RETURN = "client_return"
+    SOURCE_INTERNAL_PARTY = "internal_party"
+
+    SOURCE_CHOICES = [
+        (SOURCE_INTERNAL_STOCK, "Internal stock"),
+        (SOURCE_CLIENT_RETURN, "Client return (warranty)"),
+        (SOURCE_INTERNAL_PARTY, "Employee or department"),
+    ]
+
     client_return = models.ForeignKey(
         "ClientReturnRecord",
         on_delete=models.SET_NULL,
@@ -720,7 +832,36 @@ class RepairRecord(models.Model):
         editable=False,
     )
     repair_reason = models.CharField(max_length=150)
-    technician = models.CharField(max_length=150, blank=True)
+    # Nullable only because repairs created automatically by a Client Return
+    # have no vendor yet; the manual create flow always requires one.
+    vendor = models.ForeignKey(
+        Supplier,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="repairs",
+    )
+    # source is a label only: it records where the unit came from, it does not
+    # change which units can be picked (those still move Available -> Repair).
+    source = models.CharField(
+        max_length=20,
+        choices=SOURCE_CHOICES,
+        default=SOURCE_INTERNAL_STOCK,
+    )
+    source_client = models.ForeignKey(
+        Client,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="repairs_sourced",
+    )
+    source_internal = models.ForeignKey(
+        InternalParty,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="repairs_sourced",
+    )
     repair_date = models.DateField(default=timezone.localdate)
     resolved_date = models.DateField(blank=True, null=True)
     resolution = models.CharField(
