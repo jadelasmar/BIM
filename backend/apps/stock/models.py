@@ -446,6 +446,15 @@ class DeliveryRecord(models.Model):
         null=True,
         related_name="return_deliveries",
     )
+    # Set when the delivery was created straight from a reservation: the
+    # reserved units go reserved -> sold and the reservation closes as delivered.
+    from_reservation = models.ForeignKey(
+        "ReservationRecord",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="deliveries",
+    )
     cancel_reason = models.TextField(blank=True)
     cancelled_at = models.DateTimeField(blank=True, null=True)
     cancelled_by = models.ForeignKey(
@@ -530,11 +539,13 @@ class ReservationRecord(models.Model):
     STATUS_ACTIVE = "active"
     STATUS_RELEASED = "released"
     STATUS_CANCELLED = "cancelled"
+    STATUS_DELIVERED = "delivered"
 
     STATUS_CHOICES = [
         (STATUS_ACTIVE, "Active"),
         (STATUS_RELEASED, "Released"),
         (STATUS_CANCELLED, "Cancelled"),
+        (STATUS_DELIVERED, "Delivered"),
     ]
 
     TYPE_CLIENT = "client"

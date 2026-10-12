@@ -540,6 +540,7 @@ class ReservationRecordListCreateAPIView(WritePermissionRequiredMixin, generics.
                 "items",
                 "items__product",
                 "items__product_unit",
+                "deliveries",
             )
             .order_by("-reserved_at", "-reservation_number")
         )
@@ -591,6 +592,7 @@ class ReservationRecordDetailAPIView(WritePermissionRequiredMixin, generics.Retr
                 "items",
                 "items__product",
                 "items__product_unit",
+                "deliveries",
             )
         )
 

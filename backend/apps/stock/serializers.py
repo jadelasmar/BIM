@@ -614,6 +614,7 @@ class ReservationRecordSerializer(serializers.ModelSerializer):
         allow_blank=True,
     )
     reserved_for_party = serializers.SerializerMethodField()
+    delivery = serializers.SerializerMethodField()
     reserved_by_name = serializers.CharField(
         source="reserved_by.get_username",
         read_only=True,
@@ -637,6 +638,7 @@ class ReservationRecordSerializer(serializers.ModelSerializer):
             "internal_name_input",
             "internal_kind_input",
             "reserved_for_party",
+            "delivery",
             "reason",
             "notes",
             "status",
@@ -657,6 +659,7 @@ class ReservationRecordSerializer(serializers.ModelSerializer):
             "reservation_number",
             "reserved_for",
             "reserved_for_party",
+            "delivery",
             "status",
             "reserved_by",
             "reserved_by_name",
@@ -672,6 +675,19 @@ class ReservationRecordSerializer(serializers.ModelSerializer):
 
     def get_total_units(self, obj):
         return obj.total_units
+
+    def get_delivery(self, obj):
+        # The delivery this reservation was turned into, if any (newest first
+        # in case an earlier one was cancelled).
+        deliveries = sorted(obj.deliveries.all(), key=lambda row: row.pk, reverse=True)
+        if not deliveries:
+            return None
+        latest = deliveries[0]
+        return {
+            "id": latest.pk,
+            "delivery_number": latest.delivery_number,
+            "status": latest.status,
+        }
 
     def get_reserved_for_party(self, obj):
         party = _party_payload(
@@ -1574,6 +1590,16 @@ class DeliveryRecordSerializer(serializers.ModelSerializer):
         read_only=True,
         default="",
     )
+    from_reservation = serializers.PrimaryKeyRelatedField(
+        queryset=ReservationRecord.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    from_reservation_number = serializers.CharField(
+        source="from_reservation.reservation_number",
+        read_only=True,
+        default="",
+    )
 
     class Meta:
         model = DeliveryRecord
@@ -1583,6 +1609,8 @@ class DeliveryRecordSerializer(serializers.ModelSerializer):
             "is_warranty_return",
             "from_repair",
             "from_repair_number",
+            "from_reservation",
+            "from_reservation_number",
             "client",
             "client_name",
             "client_name_input",
@@ -1609,6 +1637,7 @@ class DeliveryRecordSerializer(serializers.ModelSerializer):
             "is_warranty_return",
             "from_repair",
             "from_repair_number",
+            "from_reservation_number",
             "client_name",
             "cancel_reason",
             "cancelled_at",
@@ -1631,20 +1660,24 @@ class DeliveryRecordSerializer(serializers.ModelSerializer):
         units = ProductUnit.objects.filter(pk__in=unique_ids, isactive=True)
         units_by_id = {unit.pk: unit for unit in units}
         missing_ids = [unit_id for unit_id in unique_ids if unit_id not in units_by_id]
-        unavailable_units = [
-            unit.serial_number
-            for unit in units_by_id.values()
-            if unit.status != ProductUnit.STATUS_AVAILABLE
-        ]
 
         if missing_ids:
             raise serializers.ValidationError("One or more stock units were not found.")
-        if unavailable_units:
-            raise serializers.ValidationError(
-                "Only available stock units can be delivered."
-            )
 
         return unique_ids
+
+    def validate(self, attrs):
+        # Units delivered from a reservation are reserved, not available; the
+        # service validates that case against the reservation's own lines.
+        if not attrs.get("from_reservation"):
+            unavailable_units = ProductUnit.objects.filter(
+                pk__in=attrs.get("unit_ids", []),
+            ).exclude(status=ProductUnit.STATUS_AVAILABLE)
+            if unavailable_units.exists():
+                raise serializers.ValidationError(
+                    {"unit_ids": "Only available stock units can be delivered."}
+                )
+        return attrs
 
     def create(self, validated_data):
         unit_ids = validated_data.pop("unit_ids")

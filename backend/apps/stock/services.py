@@ -317,10 +317,35 @@ def create_delivery_record(
     created_by=None,
     status=DeliveryRecord.STATUS_COMPLETED,
     unit_sale_prices=None,
+    from_reservation=None,
 ):
     unique_ids = list(dict.fromkeys(unit_ids or []))
     if not unique_ids:
         raise ValidationError("At least one available stock unit is required.")
+
+    # Delivering a reservation: its reserved units go straight to sold (never
+    # via Available) and the reservation closes as delivered.
+    reservation = None
+    reservation_items = []
+    if from_reservation is not None:
+        reservation = ReservationRecord.objects.select_for_update().get(
+            pk=from_reservation.pk
+        )
+        if reservation.status != ReservationRecord.STATUS_ACTIVE:
+            raise ValidationError("Only active reservations can be delivered.")
+        if reservation.reserved_for_type != ReservationRecord.TYPE_CLIENT:
+            raise ValidationError("Only client reservations can be delivered.")
+        reservation_items = list(
+            reservation.items.select_for_update()
+            .select_related("product_unit")
+            .filter(isactive=True)
+        )
+        if set(unique_ids) != {item.product_unit_id for item in reservation_items}:
+            raise ValidationError(
+                "A delivery from a reservation must include all of that reservation's units."
+            )
+        if client is None and not client_name_input.strip():
+            client = reservation.reserved_for_client
 
     if not client and client_name_input.strip():
         client, _created = Client.objects.get_or_create(name=client_name_input.strip())
@@ -340,16 +365,28 @@ def create_delivery_record(
     if missing_ids:
         raise ValidationError("One or more stock units were not found.")
 
-    unavailable_units = [
-        unit.serial_number
-        for unit in units
-        if not unit.isactive or unit.status != ProductUnit.STATUS_AVAILABLE
-    ]
-    if unavailable_units:
-        raise ValidationError(
-            "Only active available stock units can be delivered: "
-            + ", ".join(sorted(unavailable_units))
-        )
+    if reservation is not None:
+        blocked_units = [
+            item.product_unit.serial_number
+            for item in reservation_items
+            if not _reservation_item_can_be_released(item)
+        ]
+        if blocked_units:
+            raise ValidationError(
+                "Cannot deliver reservation because these stock units are no longer untouched reserved units: "
+                + ", ".join(sorted(blocked_units))
+            )
+    else:
+        unavailable_units = [
+            unit.serial_number
+            for unit in units
+            if not unit.isactive or unit.status != ProductUnit.STATUS_AVAILABLE
+        ]
+        if unavailable_units:
+            raise ValidationError(
+                "Only active available stock units can be delivered: "
+                + ", ".join(sorted(unavailable_units))
+            )
 
     sale_prices = unit_sale_prices or {}
 
@@ -362,6 +399,7 @@ def create_delivery_record(
         delivery_date=delivery_date or timezone.localdate(),
         notes=notes,
         status=status,
+        from_reservation=reservation,
         created_by=created_by,
     )
     for unit in units:
@@ -380,13 +418,23 @@ def create_delivery_record(
             movement_type=StockMovement.TYPE_DELIVERED,
             from_status=from_status,
             to_status=ProductUnit.STATUS_SOLD,
-            reason="Delivered stock",
+            reason=f"Delivered from reservation {reservation.reservation_number}"
+            if reservation
+            else "Delivered stock",
             notes=notes,
             performed_by=created_by,
             movement_date=delivery.delivery_date,
             delivery_record=delivery,
+            reservation_record=reservation,
             reference=delivery.delivery_number,
         )
+
+    if reservation is not None:
+        reservation.status = ReservationRecord.STATUS_DELIVERED
+        reservation.save(update_fields=("status",))
+        for item in reservation_items:
+            item.isactive = False
+            item.save(update_fields=("isactive",))
 
     return delivery
 

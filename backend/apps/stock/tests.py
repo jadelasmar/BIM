@@ -572,7 +572,8 @@ class UIRegistryTests(SimpleTestCase):
         self.assertIn("data.api.reservations", app_source)
         self.assertIn("data.api.reservationDetail", app_source)
         self.assertIn("Release Reservation", app_source)
-        self.assertIn("Reserved stock must be released before delivery.", app_source)
+        self.assertIn("Deliver reserved stock to the client directly", app_source)
+        self.assertIn("/operations/deliveries/new/?reservation=", app_source)
 
     def test_frontend_has_issue_list_detail_and_create_screens(self):
         app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
@@ -4372,6 +4373,140 @@ class InventoryApiTests(TestCase):
         self.assertEqual(item.sale_price, 125.50)
         self.assertEqual(response.json()["invoice_number"], "INV-2026-0007")
         self.assertEqual(response.json()["items"][0]["sale_price"], "125.50")
+
+    def test_delivery_api_edits_invoice_number(self):
+        user = self._user_with_permissions(
+            "change_deliveryrecord",
+            "view_deliveryrecord",
+        )
+        client_obj = Client.objects.create(name="Invoice Client")
+        delivery = DeliveryRecord.objects.create(
+            client=client_obj,
+            customer_name=client_obj.name,
+            invoice_number="75638/244",
+        )
+        self.client.force_login(user)
+
+        response = self.client.patch(
+            f"/api/stock/deliveries/{delivery.pk}/",
+            {"invoice_number": "75638/224"},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        delivery.refresh_from_db()
+        self.assertEqual(delivery.invoice_number, "75638/224")
+        self.assertEqual(response.json()["invoice_number"], "75638/224")
+
+    def _reserved_unit_for_client(self, user, client_obj):
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        unit.status = ProductUnit.STATUS_RESERVED
+        unit.save(update_fields=("status", "sold_date"))
+        reservation = ReservationRecord.objects.create(
+            reserved_for=client_obj.name,
+            reserved_for_type=ReservationRecord.TYPE_CLIENT,
+            reserved_for_client=client_obj,
+            reserved_by=user,
+        )
+        item = ReservationItem.objects.create(
+            reservation=reservation,
+            product=self.product,
+            product_unit=unit,
+        )
+        return unit, reservation, item
+
+    def test_delivery_api_creates_delivery_from_client_reservation(self):
+        user = self._user_with_permissions(
+            "add_deliveryrecord",
+            "view_reservationrecord",
+            "change_reservationrecord",
+            "change_productunit",
+        )
+        client_obj = Client.objects.create(name="Reservation Client")
+        unit, reservation, item = self._reserved_unit_for_client(user, client_obj)
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/api/stock/deliveries/",
+            {
+                "client": client_obj.pk,
+                "customer_name": client_obj.name,
+                "invoice_number": "INV-1",
+                "delivery_date": str(timezone.localdate()),
+                "from_reservation": reservation.pk,
+                "unit_ids": [unit.pk],
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(response.json()["from_reservation"], reservation.pk)
+        self.assertEqual(response.json()["from_reservation_number"], reservation.reservation_number)
+        reservation.refresh_from_db()
+        item.refresh_from_db()
+        unit.refresh_from_db()
+        self.assertEqual(reservation.status, ReservationRecord.STATUS_DELIVERED)
+        self.assertFalse(item.isactive)
+        self.assertEqual(unit.status, ProductUnit.STATUS_SOLD)
+        movement = StockMovement.objects.get(
+            product_unit=unit,
+            movement_type=StockMovement.TYPE_DELIVERED,
+        )
+        self.assertEqual(movement.from_status, ProductUnit.STATUS_RESERVED)
+        self.assertEqual(movement.to_status, ProductUnit.STATUS_SOLD)
+        self.assertEqual(movement.reservation_record, reservation)
+
+        detail = self.client.get(f"/api/stock/reservations/{reservation.pk}/")
+        self.assertEqual(detail.json()["status"], "delivered")
+        self.assertEqual(
+            detail.json()["delivery"]["delivery_number"],
+            response.json()["delivery_number"],
+        )
+
+        # A delivered reservation can no longer be released.
+        release = self.client.post(
+            f"/api/stock/reservations/{reservation.pk}/release/",
+            {"release_reason": "Too late"},
+            content_type="application/json",
+        )
+        self.assertEqual(release.status_code, 400)
+
+    def test_delivery_from_reservation_rejects_partial_and_non_client_reservations(self):
+        user = self._user_with_permissions(
+            "add_deliveryrecord",
+            "change_productunit",
+        )
+        client_obj = Client.objects.create(name="Reservation Client")
+        unit, reservation, _item = self._reserved_unit_for_client(user, client_obj)
+        self.client.force_login(user)
+
+        partial = self.client.post(
+            "/api/stock/deliveries/",
+            {
+                "client": client_obj.pk,
+                "from_reservation": reservation.pk,
+                "unit_ids": [unit.pk, unit.pk + 999],
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(partial.status_code, 400)
+
+        reservation.reserved_for_type = ReservationRecord.TYPE_INTERNAL
+        reservation.save(update_fields=("reserved_for_type",))
+        internal = self.client.post(
+            "/api/stock/deliveries/",
+            {
+                "client": client_obj.pk,
+                "from_reservation": reservation.pk,
+                "unit_ids": [unit.pk],
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(internal.status_code, 400)
+        unit.refresh_from_db()
+        reservation.refresh_from_db()
+        self.assertEqual(unit.status, ProductUnit.STATUS_RESERVED)
+        self.assertEqual(reservation.status, ReservationRecord.STATUS_ACTIVE)
 
     def test_delivery_api_creates_new_client_from_name_input(self):
         user = self._user_with_permissions(

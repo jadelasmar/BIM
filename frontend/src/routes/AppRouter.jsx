@@ -1815,6 +1815,7 @@ function ReservationRecordDetailPage({ data }) {
   const { showError } = useToast();
   const canReleaseReservation = Boolean(data.permissions?.canReleaseReservation);
   const canEditReservation = Boolean(data.permissions?.canEditReservation);
+  const canCreateDelivery = Boolean(data.permissions?.canCreateDelivery);
   const partyLookups = usePartyLookups(data, {
     clients: true,
     suppliers: true,
@@ -1952,6 +1953,7 @@ function ReservationRecordDetailPage({ data }) {
   }
 
   const isActive = record.status === "active";
+  const canDeliverReservation = canCreateDelivery && isActive && record.reserved_for_type === "client";
 
   return (
     <Shell data={data}>
@@ -1964,14 +1966,22 @@ function ReservationRecordDetailPage({ data }) {
             <h1 className="bim-page-title">{record.reservation_number}</h1>
             <Status status={reservationStatusLabel(record)} statusClass={record.status} />
           </div>
-          <p className="bim-page-description">Reserved stock must be released before delivery.</p>
+          <p className="bim-page-description">Deliver reserved stock to the client directly, or release it back to available stock.</p>
         </div>
-        {isActive && canEditReservation ? (
+        {isActive && (canEditReservation || canDeliverReservation) ? (
           <div className="flex flex-wrap items-center gap-3">
-            <Button type="button" variant="outline" onClick={() => setEditing((current) => !current)}>
-              <Edit3 className="h-4 w-4" />
-              Edit Details
-            </Button>
+            {canDeliverReservation ? (
+              <Button as="a" href={`/operations/deliveries/new/?reservation=${record.id}`} variant="outline">
+                <Icon name={workflowMeta.create_delivery.icon} className="h-4 w-4" />
+                Create Delivery
+              </Button>
+            ) : null}
+            {canEditReservation ? (
+              <Button type="button" variant="outline" onClick={() => setEditing((current) => !current)}>
+                <Edit3 className="h-4 w-4" />
+                Edit Details
+              </Button>
+            ) : null}
           </div>
         ) : null}
       </header>
@@ -2009,6 +2019,16 @@ function ReservationRecordDetailPage({ data }) {
               <DetailRow label="Notes" value={record.notes || "-"} />
               {record.released_at ? <DetailRow label="Released Date" value={formatDate(record.released_at)} /> : null}
               {record.release_reason ? <DetailRow label="Release Reason" value={record.release_reason} /> : null}
+              {record.delivery ? (
+                <DetailRow
+                  label="Delivery"
+                  value={
+                    <a href={`/operations/deliveries/${record.delivery.id}/`} className="font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
+                      {record.delivery.delivery_number}
+                    </a>
+                  }
+                />
+              ) : null}
             </dl>
           </section>
 
@@ -2029,7 +2049,7 @@ function ReservationRecordDetailPage({ data }) {
           <section className="rounded-lg border border-nexus-line bg-nexus-panel p-4">
             <h2 className="bim-section-title">Release Reservation</h2>
             <p className="mt-3 text-sm text-zinc-500">
-              Release only when this hold is no longer needed. Units return to available stock.
+              Release only when this hold is no longer needed. Units return to available stock. To sell them to the client, use Create Delivery instead.
             </p>
             <div className="mt-4">
               <Field label="Release Reason" required>
@@ -5750,6 +5770,16 @@ function DeliveryRecordDetailPage({ data }) {
                 <DetailRow label="Receiver" value={record.receiver_name || "-"} />
                 <DetailRow label="Delivery Date" value={formatDate(record.delivery_date)} />
                 <DetailRow label="Invoice Number" value={record.invoice_number || "-"} />
+                {record.from_reservation_number ? (
+                  <DetailRow
+                    label="From Reservation"
+                    value={
+                      <a href={`/operations/reservations/${record.from_reservation}/`} className="font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
+                        {record.from_reservation_number}
+                      </a>
+                    }
+                  />
+                ) : null}
                 {record.from_repair_number ? (
                   <DetailRow
                     label="From Repair"
@@ -7959,6 +7989,8 @@ function StockEntryPage({ data, mode = "add-unit" }) {
 
 function CreateDeliveryPage({ data }) {
   const today = todayLocal();
+  const reservationId = new URLSearchParams(window.location.search).get("reservation") || "";
+  const [reservation, setReservation] = useState(null);
   const [form, setForm] = useState({
     client: "",
     customerName: "",
@@ -7995,6 +8027,49 @@ function CreateDeliveryPage({ data }) {
 
     return () => controller.abort();
   }, [data.api.clients, data.api.productUnits]);
+
+  // Delivering a reservation: pre-fill its client and reserved units. The unit
+  // list is fixed to the reservation lines (the whole reservation is delivered).
+  useEffect(() => {
+    if (!reservationId) return undefined;
+    const controller = new AbortController();
+
+    async function loadReservation() {
+      const response = await fetch(data.api.reservationDetail.replace("{id}", reservationId), {
+        signal: controller.signal
+      });
+      if (!response.ok) throw new Error("Could not load the reservation.");
+      const record = await response.json();
+      if (record.status !== "active" || record.reserved_for_type !== "client") {
+        throw new Error("Only active client reservations can be delivered.");
+      }
+      setReservation(record);
+      setForm((current) => ({
+        ...current,
+        client: record.reserved_for_client ? String(record.reserved_for_client) : current.client,
+        customerName: record.reserved_for || current.customerName
+      }));
+      setSelectedUnits(
+        (record.items || [])
+          .filter((item) => item.isactive)
+          .map((item) => ({
+            id: item.product_unit,
+            product_name: item.product_name,
+            product_sku: item.product_sku,
+            serial_number: item.serial_number,
+            salePrice: "0.00"
+          }))
+      );
+    }
+
+    loadReservation().catch((loadFailure) => {
+      if (loadFailure.name !== "AbortError") {
+        setLoadError(loadFailure.message);
+      }
+    });
+
+    return () => controller.abort();
+  }, [data.api.reservationDetail, reservationId]);
 
   const selectedIds = new Set(selectedUnits.map((unit) => unit.id));
   const filteredUnits = units
@@ -8076,6 +8151,7 @@ function CreateDeliveryPage({ data }) {
           invoice_number: form.invoiceNumber,
           delivery_date: form.deliveryDate,
           notes: form.notes,
+          ...(reservation ? { from_reservation: reservation.id } : {}),
           unit_ids: selectedUnits.map((unit) => unit.id),
           unit_sale_prices: Object.fromEntries(
             selectedUnits.map((unit) => [unit.id, unit.salePrice || "0.00"])
@@ -8105,10 +8181,14 @@ function CreateDeliveryPage({ data }) {
           <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
               <h1 className="bim-page-title">Create Delivery</h1>
-              <p className="bim-page-description">Record outgoing stock and update unit status.</p>
+              <p className="bim-page-description">
+                {reservation
+                  ? `Delivering reservation ${reservation.reservation_number}. Its reserved units are sold to the client and the reservation is closed.`
+                  : "Record outgoing stock and update unit status."}
+              </p>
             </div>
             <div className="flex flex-wrap gap-3 text-sm">
-              <a href="/inventory/" className="inline-flex h-9 items-center gap-2 rounded-md px-3 font-semibold text-zinc-200 hover:bg-nexus-panel">
+              <a href={reservation ? `/operations/reservations/${reservation.id}/` : "/inventory/"} className="inline-flex h-9 items-center gap-2 rounded-md px-3 font-semibold text-zinc-200 hover:bg-nexus-panel">
                 <X className="h-4 w-4" />
                 Cancel
               </a>
@@ -8158,8 +8238,8 @@ function CreateDeliveryPage({ data }) {
               </div>
             </FormSection>
 
-            <FormSection icon="box" title="Stock Units" subtitle="Search available stock units and add them to this delivery.">
-              <div className="relative">
+            <FormSection icon="box" title="Stock Units" subtitle={reservation ? "Reserved units from this reservation." : "Search available stock units and add them to this delivery."}>
+              <div className="relative" hidden={Boolean(reservationId)}>
                 <SearchBar
                   className="flex-1"
                   value={query}
@@ -8198,9 +8278,11 @@ function CreateDeliveryPage({ data }) {
                       <CompactField label="Reference Sale Price">
                         <TextInput value={unit.salePrice} onChange={(value) => updateUnitSalePrice(unit.id, value)} />
                       </CompactField>
-                      <button onClick={() => removeUnit(unit.id)} type="button" className="text-zinc-500 hover:text-nexus-red">
-                        <X className="h-4 w-4" />
-                      </button>
+                      {reservationId ? <span /> : (
+                        <button onClick={() => removeUnit(unit.id)} type="button" className="text-zinc-500 hover:text-nexus-red">
+                          <X className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                   ))
                 ) : (
