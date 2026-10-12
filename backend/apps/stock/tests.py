@@ -1991,6 +1991,22 @@ class BIMPOSAccessTests(TestCase):
             "1 reservation, 1 temporary assignment, 1 repair",
         )
 
+    def test_command_center_pending_actions_card_links_to_pending_page(self):
+        user = User.objects.create_superuser(
+            username="pending-admin", email="pending-admin@example.com", password="test-pass"
+        )
+        self.client.force_login(user)
+
+        response = self.client.get("/")
+        pending_actions_kpi = next(
+            item
+            for item in response.context["initial_data"]["kpis"]
+            if item["label"] == "Pending Actions"
+        )
+
+        self.assertEqual(pending_actions_kpi["href"], "/operations/pending/")
+        self.assertEqual(self.client.get("/operations/pending/").status_code, 200)
+
     def test_command_center_pending_actions_flags_overdue_and_vendorless_repairs(self):
         user = User.objects.create_user(username="viewer-flags", password="test-pass")
         user.user_permissions.add(Permission.objects.get(codename="view_product"))
@@ -3294,6 +3310,44 @@ class InventoryApiTests(TestCase):
         self.assertEqual(movement.to_status, ProductUnit.STATUS_RESERVED)
         self.assertEqual(movement.reference, reservation.reservation_number)
         self.assertEqual(movement.performed_by, user)
+
+    def test_reservation_api_creates_new_client_and_supplier_from_name_input(self):
+        user = self._user_with_permissions(
+            "view_reservationrecord",
+            "add_reservationrecord",
+            "change_reservationrecord",
+            "change_productunit",
+        )
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/api/stock/reservations/",
+            {
+                "reserved_for_type": "client",
+                "client_name_input": "Brand New Client",
+                "unit_ids": [unit.pk],
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        new_client = Client.objects.get(name="Brand New Client")
+        reservation = ReservationRecord.objects.get(pk=response.json()["id"])
+        self.assertEqual(reservation.reserved_for_client, new_client)
+        self.assertEqual(reservation.reserved_for, "Brand New Client")
+
+        # Editing the reservation can switch it to another brand-new supplier.
+        edit = self.client.patch(
+            f"/api/stock/reservations/{reservation.pk}/",
+            {"reserved_for_type": "supplier", "supplier_name_input": "Brand New Supplier"},
+            content_type="application/json",
+        )
+        self.assertEqual(edit.status_code, 200, edit.content)
+        reservation.refresh_from_db()
+        self.assertEqual(reservation.reserved_for_type, ReservationRecord.TYPE_SUPPLIER)
+        self.assertEqual(reservation.reserved_for_supplier.name, "Brand New Supplier")
+        self.assertIsNone(reservation.reserved_for_client)
 
     def test_reservation_api_rejects_sold_reserved_and_inactive_units(self):
         user = self._user_with_permissions(

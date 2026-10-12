@@ -1733,6 +1733,106 @@ function ReservationRecordsPage({ data }) {
   );
 }
 
+// Everything on the Command Center "Pending Actions" card, in one place: the
+// active reservations, temporary assignments and repairs, newest work that needs
+// attention first (overdue assignments, repairs with no vendor).
+function PendingActionsPage({ data }) {
+  const [sections, setSections] = useState({
+    reservations: { records: [], loading: true, error: "" },
+    issues: { records: [], loading: true, error: "" },
+    repairs: { records: [], loading: true, error: "" }
+  });
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const sources = [
+      ["reservations", data.api.reservations, "reservation records"],
+      ["issues", data.api.issues, "temporary assignment records"],
+      ["repairs", data.api.repairs, "repair records"]
+    ];
+
+    sources.forEach(async ([key, url, label]) => {
+      try {
+        const response = await fetch(url, { signal: controller.signal });
+        if (response.status === 403) {
+          setSections((current) => ({ ...current, [key]: { records: [], loading: false, error: "", hidden: true } }));
+          return;
+        }
+        if (!response.ok) throw new Error(`Could not load ${label}.`);
+        const records = (await response.json()).filter((record) => record.status === "active");
+        setSections((current) => ({ ...current, [key]: { records, loading: false, error: "" } }));
+      } catch (loadError) {
+        if (loadError.name !== "AbortError") {
+          setSections((current) => ({ ...current, [key]: { records: [], loading: false, error: loadError.message } }));
+        }
+      }
+    });
+
+    return () => controller.abort();
+  }, [data.api.reservations, data.api.issues, data.api.repairs]);
+
+  const issueRecords = [...sections.issues.records].sort((a, b) => Number(Boolean(b.is_overdue)) - Number(Boolean(a.is_overdue)));
+  const repairRecords = [...sections.repairs.records].sort((a, b) => Number(!b.vendor) - Number(!a.vendor));
+  const overdueCount = issueRecords.filter((record) => record.is_overdue).length;
+  const noVendorCount = repairRecords.filter((record) => !record.vendor).length;
+  const blocks = [
+    {
+      key: "reservations",
+      title: "Active Reservations",
+      detail: "Held stock that has not been delivered or released yet.",
+      href: "/operations/reservations/",
+      section: sections.reservations,
+      table: <ReservationRecordsTable records={sections.reservations.records} loading={sections.reservations.loading} error={sections.reservations.error} />
+    },
+    {
+      key: "issues",
+      title: "Active Temporary Assignments",
+      detail: overdueCount ? `${formatCount(overdueCount)} overdue, shown first.` : "Units out on loan that have not been returned yet.",
+      href: "/operations/issues/",
+      section: sections.issues,
+      table: <IssueRecordsTable records={issueRecords} loading={sections.issues.loading} error={sections.issues.error} />
+    },
+    {
+      key: "repairs",
+      title: "Active Repairs",
+      detail: noVendorCount ? `${formatCount(noVendorCount)} without a vendor, shown first.` : "Units still at repair that have not been resolved.",
+      href: "/operations/repairs/",
+      section: sections.repairs,
+      table: <RepairRecordsTable records={repairRecords} loading={sections.repairs.loading} error={sections.repairs.error} />
+    }
+  ].filter((block) => !block.section.hidden);
+
+  return (
+    <Shell data={data}>
+      <header className="mb-5 border-b border-nexus-line pb-4">
+        <a href={data.routes.operations || "/operations/"} className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
+          <ChevronRight className="h-4 w-4 rotate-180" />
+          Back to Operations
+        </a>
+        <h1 className="mt-3 bim-page-title">Pending Actions</h1>
+        <p className="bim-page-description">Open jobs that still need to be delivered, returned, or resolved.</p>
+      </header>
+
+      {blocks.map((block) => (
+        <section key={block.key} className="mb-8">
+          <div className="flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
+            <div>
+              <h2 className="bim-section-title">
+                {block.title} ({block.section.loading ? "-" : formatCount(block.section.records.length)})
+              </h2>
+              <p className="bim-helper-text mt-1">{block.detail}</p>
+            </div>
+            <a href={block.href} className="text-sm font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
+              View all records
+            </a>
+          </div>
+          {block.table}
+        </section>
+      ))}
+    </Shell>
+  );
+}
+
 function ReservationRecordsTable({ records, loading, error }) {
   return (
     <section className="mt-4 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
@@ -1881,7 +1981,7 @@ function ReservationRecordDetailPage({ data }) {
           ...reservedForPayload(
             correctionForm.reservedForType,
             correctionForm.reservedForValue,
-            partyLookups.internalParties
+            partyLookups
           ),
           reason: correctionForm.reason,
           notes: correctionForm.notes
@@ -2099,6 +2199,8 @@ function ReservationCorrectionPanel({ form, lookups, saving, error, onFieldChang
           suppliers={lookups.suppliers}
           internalParties={lookups.internalParties}
           setInternalParties={lookups.setInternalParties}
+          setClients={lookups.setClients}
+          setSuppliers={lookups.setSuppliers}
         />
         <Field label="Reason">
           <TextInput value={form.reason} onChange={(value) => onFieldChange("reason", value)} />
@@ -2234,7 +2336,7 @@ function CreateReservationPage({ data }) {
           "X-CSRFToken": data.csrfToken
         },
         body: JSON.stringify({
-          ...reservedForPayload(form.reservedForType, form.reservedForValue, partyLookups.internalParties),
+          ...reservedForPayload(form.reservedForType, form.reservedForValue, partyLookups),
           reason: form.reason,
           notes: form.notes,
           unit_ids: selectedUnits.map((unit) => unit.id)
@@ -2295,6 +2397,8 @@ function CreateReservationPage({ data }) {
                   suppliers={partyLookups.suppliers}
                   internalParties={partyLookups.internalParties}
                   setInternalParties={partyLookups.setInternalParties}
+                  setClients={partyLookups.setClients}
+                  setSuppliers={partyLookups.setSuppliers}
                 />
                 <Field label="Reason">
                   <TextInput value={form.reason} onChange={(value) => updateField("reason", value)} placeholder="Why this stock is being held" />
@@ -8496,8 +8600,24 @@ function usePartyLookups(data, { clients = false, suppliers = false, internalPar
       })),
     []
   );
+  const setClients = useCallback(
+    (updater) =>
+      setLookups((current) => ({
+        ...current,
+        clients: typeof updater === "function" ? updater(current.clients) : updater
+      })),
+    []
+  );
+  const setSuppliers = useCallback(
+    (updater) =>
+      setLookups((current) => ({
+        ...current,
+        suppliers: typeof updater === "function" ? updater(current.suppliers) : updater
+      })),
+    []
+  );
 
-  return { ...lookups, setInternalParties };
+  return { ...lookups, setInternalParties, setClients, setSuppliers };
 }
 
 function internalPartyLabel(party) {
@@ -8576,7 +8696,27 @@ function InternalPartyPicker({ label, required = false, value, onChange, parties
 
 // "Reserved for" type + the matching record dropdown. Changing the type clears
 // the picked record, since an id only makes sense within one list.
-function ReservedForPicker({ type, onTypeChange, value, onValueChange, clients, suppliers, internalParties, setInternalParties }) {
+function ReservedForPicker({ type, onTypeChange, value, onValueChange, clients, suppliers, internalParties, setInternalParties, setClients, setSuppliers }) {
+  // A client/supplier created here is held locally (not saved to the server)
+  // until the record itself saves, same as a new Client on CreateDeliveryPage.
+  function createNamedParty(list, setList) {
+    return (name) => {
+      const trimmed = name.trim();
+      if (!trimmed) {
+        throw new Error("Enter a name before creating it.");
+      }
+      const existing = list.find((party) => party.name.trim().toLowerCase() === trimmed.toLowerCase());
+      if (existing) return existing;
+      const pending = {
+        id: `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        name: trimmed,
+        __pending: true
+      };
+      setList((current) => [...current, pending].sort((a, b) => a.name.localeCompare(b.name)));
+      return pending;
+    };
+  }
+
   return (
     <>
       <Field label="Reserved For Type" required>
@@ -8597,7 +8737,8 @@ function ReservedForPicker({ type, onTypeChange, value, onValueChange, clients, 
           value={value}
           onChange={onValueChange}
           options={clients}
-          placeholder="Search clients"
+          onCreate={setClients ? createNamedParty(clients, setClients) : undefined}
+          placeholder="Search or create client..."
         />
       ) : null}
       {type === "supplier" ? (
@@ -8607,7 +8748,8 @@ function ReservedForPicker({ type, onTypeChange, value, onValueChange, clients, 
           value={value}
           onChange={onValueChange}
           options={suppliers}
-          placeholder="Search suppliers"
+          onCreate={setSuppliers ? createNamedParty(suppliers, setSuppliers) : undefined}
+          placeholder="Search or create supplier..."
         />
       ) : null}
       {type === "internal" ? (
@@ -8624,11 +8766,11 @@ function ReservedForPicker({ type, onTypeChange, value, onValueChange, clients, 
   );
 }
 
-function reservedForPayload(type, value, internalParties) {
+function reservedForPayload(type, value, lookups) {
   if (type === "internal") {
     return {
       reserved_for_type: "internal",
-      ...internalPartyPayload(value, internalParties, {
+      ...internalPartyPayload(value, lookups.internalParties, {
         idKey: "reserved_for_internal",
         nameKey: "internal_name_input",
         kindKey: "internal_kind_input"
@@ -8636,6 +8778,11 @@ function reservedForPayload(type, value, internalParties) {
     };
   }
   if (!value) return { reserved_for_type: type };
+  const list = type === "client" ? lookups.clients : lookups.suppliers;
+  const selected = list.find((party) => String(party.id) === String(value));
+  if (selected?.__pending) {
+    return { reserved_for_type: type, [type === "client" ? "client_name_input" : "supplier_name_input"]: selected.name };
+  }
   return { reserved_for_type: type, [type === "client" ? "reserved_for_client" : "reserved_for_supplier"]: Number(value) };
 }
 
@@ -9559,6 +9706,10 @@ const appRoutes = [
   {
     match: (path) => path === "/operations/reservations/",
     render: (data) => <ReservationRecordsPage data={data} />
+  },
+  {
+    match: (path) => path === "/operations/pending/",
+    render: (data) => <PendingActionsPage data={data} />
   },
   {
     match: (path) => /^\/operations\/issues\/\d+\//.test(path),

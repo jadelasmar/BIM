@@ -56,12 +56,20 @@ def _resolve_reservation_party(
     internal=None,
     internal_name_input="",
     internal_kind_input="",
+    client_name_input="",
+    supplier_name_input="",
 ):
     if party_type == ReservationRecord.TYPE_CLIENT:
+        # A client typed into the picker's "create" option is created here, the
+        # same way a new client is created from the Delivery form.
+        if client is None and (client_name_input or "").strip():
+            client, _created = Client.objects.get_or_create(name=client_name_input.strip())
         if client is None:
             raise ValidationError("Choose the client this reservation is for.")
         return party_type, client, None, None, client.name
     if party_type == ReservationRecord.TYPE_SUPPLIER:
+        if supplier is None and (supplier_name_input or "").strip():
+            supplier, _created = Supplier.objects.get_or_create(name=supplier_name_input.strip())
         if supplier is None:
             raise ValidationError("Choose the supplier this reservation is for.")
         return party_type, None, supplier, None, supplier.name
@@ -766,6 +774,8 @@ def create_reservation_record(
     reserved_for_internal=None,
     internal_name_input="",
     internal_kind_input="",
+    client_name_input="",
+    supplier_name_input="",
     reason="",
     notes="",
     reserved_by=None,
@@ -782,6 +792,8 @@ def create_reservation_record(
             internal=reserved_for_internal,
             internal_name_input=internal_name_input,
             internal_kind_input=internal_kind_input,
+            client_name_input=client_name_input,
+            supplier_name_input=supplier_name_input,
         )
     )
 
@@ -852,6 +864,8 @@ def update_reservation_record_header(
     reserved_for_internal=None,
     internal_name_input="",
     internal_kind_input="",
+    client_name_input="",
+    supplier_name_input="",
     reason=None,
     notes=None,
 ):
@@ -867,6 +881,8 @@ def update_reservation_record_header(
                 internal=reserved_for_internal,
                 internal_name_input=internal_name_input,
                 internal_kind_input=internal_kind_input,
+                client_name_input=client_name_input,
+                supplier_name_input=supplier_name_input,
             )
         )
         reservation.reserved_for = party_name

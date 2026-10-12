@@ -373,7 +373,7 @@ def _command_center_initial_data(
                     pending_reservations, pending_issues, pending_repairs, overdue_issues, repairs_no_vendor
                 ),
                 "trend": "",
-                "href": operations_href,
+                "href": reverse("operations_pending") if can_use_operations else None,
                 **ui_item(
                     "pending_actions",
                     **({"tone": "warning"} if overdue_issues or repairs_no_vendor else {}),

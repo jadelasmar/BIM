@@ -7,6 +7,7 @@ urlpatterns = [
     path("", views.module_launcher, name="module_launcher"),
     path("api/command-center/", views.command_center_data, name="command_center_data"),
     path("operations/", views.module_launcher, name="operations"),
+    path("operations/pending/", views.module_launcher, name="operations_pending"),
     path("operations/receiving/", views.module_launcher, name="operations_receiving"),
     path("operations/receiving/new/", views.module_launcher, name="operations_receive_stock"),
     path("operations/receiving/<int:pk>/", views.module_launcher, name="operations_receiving_detail"),

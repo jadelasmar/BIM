@@ -613,6 +613,16 @@ class ReservationRecordSerializer(serializers.ModelSerializer):
         write_only=True,
         allow_blank=True,
     )
+    client_name_input = serializers.CharField(
+        required=False,
+        write_only=True,
+        allow_blank=True,
+    )
+    supplier_name_input = serializers.CharField(
+        required=False,
+        write_only=True,
+        allow_blank=True,
+    )
     reserved_for_party = serializers.SerializerMethodField()
     delivery = serializers.SerializerMethodField()
     reserved_by_name = serializers.CharField(
@@ -637,6 +647,8 @@ class ReservationRecordSerializer(serializers.ModelSerializer):
             "reserved_for_internal",
             "internal_name_input",
             "internal_kind_input",
+            "client_name_input",
+            "supplier_name_input",
             "reserved_for_party",
             "delivery",
             "reason",
@@ -754,6 +766,8 @@ class ReservationRecordCorrectionSerializer(serializers.ModelSerializer):
     )
     internal_name_input = serializers.CharField(required=False, allow_blank=True)
     internal_kind_input = serializers.CharField(required=False, allow_blank=True)
+    client_name_input = serializers.CharField(required=False, allow_blank=True)
+    supplier_name_input = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = ReservationRecord
@@ -764,6 +778,8 @@ class ReservationRecordCorrectionSerializer(serializers.ModelSerializer):
             "reserved_for_internal",
             "internal_name_input",
             "internal_kind_input",
+            "client_name_input",
+            "supplier_name_input",
             "reason",
             "notes",
         )
