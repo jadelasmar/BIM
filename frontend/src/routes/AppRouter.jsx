@@ -1077,7 +1077,7 @@ function ReceivingRecordsPage({ data }) {
             inputClassName="placeholder:text-zinc-500"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search receiving number, supplier, PO, invoice, product, or serial..."
+            placeholder="Search receiving number, supplier, purchase order, invoice, product, or serial..."
           />
           <span className="text-xs text-zinc-500">{records.length} records</span>
         </div>
@@ -1098,7 +1098,7 @@ function ReceivingRecordsTable({ records, loading, error }) {
               <th className="px-4 py-3 font-medium">Receiving</th>
               <th className="px-4 py-3 font-medium">Source</th>
               <th className="px-4 py-3 font-medium">Received Date</th>
-              <th className="px-4 py-3 font-medium">PO / Invoice</th>
+              <th className="px-4 py-3 font-medium">Purchase Order / Invoice</th>
               <th className="px-4 py-3 font-medium">Items</th>
               <th className="px-4 py-3 font-medium">Status</th>
             </tr>
@@ -1123,7 +1123,7 @@ function ReceivingRecordsTable({ records, loading, error }) {
                   </td>
                   <td className="px-4 py-4 text-zinc-300">{formatDate(record.received_date)}</td>
                   <td className="px-4 py-4 font-mono text-xs text-zinc-400">
-                    {record.po_number ? <p>PO: {record.po_number}</p> : null}
+                    {record.po_number ? <p>Purchase Order: {record.po_number}</p> : null}
                     {record.supplier_invoice_number ? <p className="mt-1 text-zinc-500">Inv: {record.supplier_invoice_number}</p> : null}
                     {!record.po_number && !record.supplier_invoice_number ? <p>-</p> : null}
                   </td>
@@ -1440,8 +1440,8 @@ function ReceivingRecordDetailPage({ data }) {
                     <p className="mt-1 text-zinc-300">{formatDate(record.received_date)}</p>
                   </div>
                   <div>
-                    <p className="bim-helper-text">PO Number</p>
-                    <p className="mt-1 font-mono text-xs text-zinc-300">{record.po_number || "No PO number"}</p>
+                    <p className="bim-helper-text">Purchase Order</p>
+                    <p className="mt-1 font-mono text-xs text-zinc-300">{record.po_number || "No purchase order"}</p>
                   </div>
                 </div>
               </div>
@@ -1449,7 +1449,7 @@ function ReceivingRecordDetailPage({ data }) {
               <dl className="mt-5 grid gap-4 md:grid-cols-2">
                 <DetailRow label="Source" value={record.supplier_name || "Manual source"} strong />
                 <DetailRow label="Received Date" value={formatDate(record.received_date)} />
-                <DetailRow label="PO Number" value={record.po_number || "-"} />
+                <DetailRow label="Purchase Order" value={record.po_number || "-"} />
                 <DetailRow label="Supplier Invoice Number" value={record.supplier_invoice_number || "-"} />
                 <DetailRow label="Created By" value={record.created_by_name || "-"} />
                 <DetailRow label="Total Quantity" value={formatCount(record.total_quantity || 0)} highlight />
@@ -1514,7 +1514,7 @@ function ReceivingCorrectionPanel({
         <div>
           <h2 className="text-sm font-bold text-white">Edit receiving details</h2>
           <p className="bim-page-description">
-            Safe edits are limited to supplier, PO number, supplier invoice number, date, notes, line cost, and line notes. For wrong product, quantity, or serial, cancel and recreate the record when the linked units are still unused.
+            Safe edits are limited to supplier, purchase order, supplier invoice number, date, notes, line cost, and line notes. For wrong product, quantity, or serial, cancel and recreate the record when the linked units are still unused.
           </p>
         </div>
         <Button type="button" variant="ghost" onClick={onCancel}>
@@ -1535,7 +1535,7 @@ function ReceivingCorrectionPanel({
         <Field label="Received Date">
           <DateInput value={form.receivedDate} onChange={(value) => onFieldChange("receivedDate", value)} />
         </Field>
-        <Field label="PO Number">
+        <Field label="Purchase Order">
           <TextInput value={form.poNumber} onChange={(value) => onFieldChange("poNumber", value)} placeholder="Purchase order number" />
         </Field>
         <Field label="Supplier Invoice Number">
@@ -1744,7 +1744,7 @@ function ReservationRecordsPage({ data }) {
 
 // Everything on the Command Center "Pending Actions" card, in one place: the
 // active reservations, temporary assignments and repairs, newest work that needs
-// attention first (overdue assignments, repairs with no vendor).
+// attention first (overdue assignments, repairs with no supplier).
 function PendingActionsPage({ data }) {
   const [sections, setSections] = useState({
     reservations: { records: [], loading: true, error: "" },
@@ -1804,7 +1804,7 @@ function PendingActionsPage({ data }) {
     {
       key: "repairs",
       title: "Active Repairs",
-      detail: noVendorCount ? `${formatCount(noVendorCount)} without a vendor, shown first.` : "Units still at repair that have not been resolved.",
+      detail: noVendorCount ? `${formatCount(noVendorCount)} without a supplier, shown first.` : "Units still at repair that have not been resolved.",
       href: "/operations/repairs/",
       section: sections.repairs,
       table: <RepairRecordsTable records={repairRecords} loading={sections.repairs.loading} error={sections.repairs.error} />
@@ -3341,7 +3341,7 @@ function RepairRecordsPage({ data }) {
             inputClassName="placeholder:text-zinc-500"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search repair number, reason, vendor, product, or serial..."
+            placeholder="Search repair number, reason, supplier, product, or serial..."
           />
           <span className="text-xs text-zinc-500">{records.length} records</span>
         </div>
@@ -3360,7 +3360,7 @@ function RepairRecordsTable({ records, loading, error }) {
           <thead className="bg-zinc-800/80 text-zinc-400">
             <tr>
               <th className="px-4 py-3 font-medium">Repair</th>
-              <th className="px-4 py-3 font-medium">Vendor</th>
+              <th className="px-4 py-3 font-medium">Supplier</th>
               <th className="px-4 py-3 font-medium">Repair Date</th>
               <th className="px-4 py-3 font-medium">Source</th>
               <th className="px-4 py-3 font-medium">Reason</th>
@@ -3388,7 +3388,7 @@ function RepairRecordsTable({ records, loading, error }) {
                         {record.vendor_name}
                       </a>
                     ) : record.status === "active" ? (
-                      <Status status="No vendor assigned" statusClass="no_vendor" />
+                      <Status status="No supplier assigned" statusClass="no_vendor" />
                     ) : (
                       "-"
                     )}
@@ -3504,7 +3504,7 @@ function RepairRecordDetailPage({ data }) {
         },
         body: JSON.stringify({
           repair_date: correctionForm.repairDate,
-          ...(correctionForm.vendorValue ? { vendor: Number(correctionForm.vendorValue) } : {}),
+          ...supplierPayload(correctionForm.vendorValue, partyLookups.suppliers, "vendor", "vendor_name_input"),
           repair_reason: correctionForm.repairReason,
           notes: correctionForm.notes
         })
@@ -3595,7 +3595,7 @@ function RepairRecordDetailPage({ data }) {
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="bim-page-title">{record.repair_number}</h1>
             <Status status={repairStatusLabel(record)} statusClass={record.status === "resolved" ? record.resolution || "available" : "repair"} />
-            {isActive && !record.vendor ? <Status status="No vendor assigned" statusClass="no_vendor" /> : null}
+            {isActive && !record.vendor ? <Status status="No supplier assigned" statusClass="no_vendor" /> : null}
           </div>
           <p className="bim-page-description">Reserved, issued, and sold units must use their own workflows before repair.</p>
         </div>
@@ -3651,7 +3651,7 @@ function RepairRecordDetailPage({ data }) {
             <dl className="mt-4 divide-y divide-nexus-line">
               <DetailRow label="Repair Date" value={formatDate(record.repair_date)} />
               <DetailRow
-                label="Repair Vendor"
+                label="Supplier"
                 value={<PartyLink party={repairVendorParty(record)} fallback="Not assigned" />}
               />
               <DetailRow label="Source" value={record.source_label || "-"} />
@@ -3753,7 +3753,7 @@ function RepairCorrectionPanel({ form, lookups, saving, error, onFieldChange, on
         <div>
           <h2 className="text-sm font-bold text-white">Edit repair details</h2>
           <p className="bim-page-description">
-            Safe edits are limited to repair date, vendor, reason, and notes.
+            Safe edits are limited to repair date, supplier, reason, and notes.
           </p>
         </div>
         <Button type="button" variant="ghost" onClick={onCancel}>
@@ -3767,12 +3767,13 @@ function RepairCorrectionPanel({ form, lookups, saving, error, onFieldChange, on
           <DateInput value={form.repairDate} onChange={(value) => onFieldChange("repairDate", value)} />
         </Field>
         <SearchableCreatableSelect
-          label="Repair Vendor"
+          label="Supplier"
           required
           value={form.vendorValue}
           onChange={(value) => onFieldChange("vendorValue", value)}
           options={lookups.suppliers}
-          placeholder="Search suppliers"
+          onCreate={pendingNamedPartyCreator(lookups.suppliers, lookups.setSuppliers)}
+          placeholder="Search or create supplier..."
         />
         <Field label="Reason" required>
           <TextInput value={form.repairReason} onChange={(value) => onFieldChange("repairReason", value)} />
@@ -3902,13 +3903,13 @@ function CreateRepairPage({ data }) {
     setSaving(true);
     try {
       if (!form.vendorValue || !form.repairReason.trim() || !selectedUnits.length) {
-        throw new Error("Repair vendor, repair reason, and at least one available stock unit are required.");
+        throw new Error("Supplier, repair reason, and at least one available stock unit are required.");
       }
       if (form.source === "client_return" && !form.sourceClientValue) {
         throw new Error("Choose the client this repair came from.");
       }
       if (form.source === "internal_party" && !form.sourceInternalValue) {
-        throw new Error("Choose the employee or department this repair came from.");
+        throw new Error("Choose the employee this repair came from.");
       }
 
       const response = await fetch(data.api.repairs, {
@@ -3919,7 +3920,7 @@ function CreateRepairPage({ data }) {
         },
         body: JSON.stringify({
           repair_reason: form.repairReason,
-          vendor: Number(form.vendorValue),
+          ...supplierPayload(form.vendorValue, partyLookups.suppliers, "vendor", "vendor_name_input"),
           ...repairSourcePayload(
             form.source,
             form.sourceClientValue,
@@ -3981,12 +3982,13 @@ function CreateRepairPage({ data }) {
                   <DateInput value={form.repairDate} onChange={(value) => updateField("repairDate", value)} />
                 </Field>
                 <SearchableCreatableSelect
-                  label="Repair Vendor"
+                  label="Supplier"
                   required
                   value={form.vendorValue}
                   onChange={(value) => updateField("vendorValue", value)}
                   options={partyLookups.suppliers}
-                  placeholder="Search suppliers"
+                  onCreate={pendingNamedPartyCreator(partyLookups.suppliers, partyLookups.setSuppliers)}
+                  placeholder="Search or create supplier..."
                 />
                 <RepairSourcePicker
                   source={form.source}
@@ -4042,7 +4044,7 @@ function CreateRepairPage({ data }) {
             <dl className="divide-y divide-nexus-line p-4">
               <DetailRow label="Repair Date" value={formatDate(form.repairDate)} />
               <DetailRow
-                label="Repair Vendor"
+                label="Supplier"
                 value={partyLookups.suppliers.find((supplier) => String(supplier.id) === String(form.vendorValue))?.name || "-"}
               />
               <DetailRow
@@ -4131,6 +4133,8 @@ function ClientUpgradeRecordsPage({ data }) {
   const [records, setRecords] = useState([]);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
+  const [clientFilter, setClientFilter] = useState("");
+  const [updaterFilter, setUpdaterFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -4168,46 +4172,89 @@ function ClientUpgradeRecordsPage({ data }) {
   const upgradedCount = records.filter((record) => record.status === "upgraded").length;
   const scheduledCount = records.filter((record) => record.status === "needs_upgrade" && record.upgrade_date).length;
   const overdueCount = records.filter(isUpgradeOverdue).length;
+  const cancelledCount = records.filter((record) => record.status === "cancelled").length;
+
+  // Clicking the active card again clears it.
+  function toggleFilter(value) {
+    setFilter((current) => (current === value ? "all" : value));
+  }
+
   const upgradeKpis = [
     {
       label: "Needs Upgrade",
       value: formatCount(needsCount),
       detail: "clients waiting for an upgrade",
       icon: "clock-3",
-      tone: needsCount > 0 ? "warning" : "neutral"
+      tone: needsCount > 0 ? "warning" : "neutral",
+      onClick: () => toggleFilter("needs_upgrade"),
+      active: filter === "needs_upgrade"
     },
     {
       label: "Upgraded",
       value: formatCount(upgradedCount),
       detail: "clients already upgraded",
       icon: "check-circle-2",
-      tone: "green"
+      tone: "green",
+      onClick: () => toggleFilter("upgraded"),
+      active: filter === "upgraded"
     },
     {
       label: "Scheduled",
       value: formatCount(scheduledCount),
       detail: "waiting clients with a planned date",
       icon: "refresh-cw",
-      tone: "cyan"
+      tone: "cyan",
+      onClick: () => toggleFilter("scheduled"),
+      active: filter === "scheduled"
     },
     {
       label: "Overdue",
       value: formatCount(overdueCount),
       detail: "planned date has passed",
       icon: "triangle-alert",
-      tone: overdueCount > 0 ? "danger" : "neutral"
+      tone: overdueCount > 0 ? "danger" : "neutral",
+      onClick: () => toggleFilter("overdue"),
+      active: filter === "overdue"
     }
   ];
 
   const filters = [
-    ["all", "All", records.filter((record) => record.status !== "cancelled").length],
+    ["all", "All", records.length - cancelledCount],
     ["needs_upgrade", "Needs Upgrade", needsCount],
+    ["scheduled", "Scheduled", scheduledCount],
+    ["overdue", "Overdue", overdueCount],
     ["upgraded", "Upgraded", upgradedCount],
-    ["cancelled", "Cancelled", records.filter((record) => record.status === "cancelled").length]
+    ["cancelled", "Cancelled", cancelledCount]
   ];
+  const clientOptions = [...new Set(records.map((record) => record.client_name).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b))
+    .map((name) => [name, name]);
+  const updaterOptions = knownUpdaterNumbers(records).map((number) => [number, number]);
+
+  const matchesStatusFilter = {
+    all: (record) => record.status !== "cancelled",
+    needs_upgrade: (record) => record.status === "needs_upgrade",
+    scheduled: (record) => record.status === "needs_upgrade" && Boolean(record.upgrade_date),
+    overdue: isUpgradeOverdue,
+    upgraded: (record) => record.status === "upgraded",
+    cancelled: (record) => record.status === "cancelled"
+  }[filter];
   const visibleRecords = sortUpgradeRecords(
-    records.filter((record) => (filter === "all" ? record.status !== "cancelled" : record.status === filter))
+    records.filter(
+      (record) =>
+        matchesStatusFilter(record) &&
+        (!clientFilter || record.client_name === clientFilter) &&
+        (!updaterFilter || record.updater === updaterFilter)
+    )
   );
+  const hasActiveFilters = filter !== "all" || Boolean(clientFilter) || Boolean(updaterFilter) || Boolean(query.trim());
+
+  function clearFilters() {
+    setFilter("all");
+    setClientFilter("");
+    setUpdaterFilter("");
+    setQuery("");
+  }
 
   return (
     <Shell data={data}>
@@ -4227,15 +4274,21 @@ function ClientUpgradeRecordsPage({ data }) {
       <KpiGrid items={upgradeKpis} />
 
       <section className="mt-4 rounded-lg border border-nexus-line bg-nexus-panel p-3">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center">
-          <SearchBar
-            className="flex-1"
-            inputClassName="placeholder:text-zinc-500"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search client, updater number, upgrade number, or notes..."
-          />
-          <div className="flex flex-wrap gap-2">
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center">
+            <SearchBar
+              className="flex-1"
+              inputClassName="placeholder:text-zinc-500"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search client, updater number, upgrade number, or notes..."
+            />
+            <div className="grid gap-3 sm:grid-cols-2 md:w-96">
+              <SelectInput value={clientFilter} onChange={setClientFilter} options={clientOptions} placeholder="All clients" />
+              <SelectInput value={updaterFilter} onChange={setUpdaterFilter} options={updaterOptions} placeholder="All updaters" />
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             {filters.map(([value, label, count]) => (
               <button
                 key={value}
@@ -4250,6 +4303,12 @@ function ClientUpgradeRecordsPage({ data }) {
                 {label} ({formatCount(count)})
               </button>
             ))}
+            {hasActiveFilters ? (
+              <button type="button" onClick={clearFilters} className="rounded px-3 py-1.5 text-xs font-semibold text-zinc-400 hover:text-white">
+                Clear filters
+              </button>
+            ) : null}
+            <span className="ml-auto text-xs text-zinc-500">{visibleRecords.length} shown</span>
           </div>
         </div>
       </section>
@@ -4579,14 +4638,15 @@ function ClientUpgradeRecordDetailPage({ data }) {
   }, [record]);
 
   // "Mark Upgraded" in the list lands here with the edit panel already open and
-  // set to Upgraded, dated today.
+  // set to Upgraded, dated today (the day it is clicked), replacing any planned
+  // date -- that date was only the plan.
   useEffect(() => {
     if (record && wantsMarkUpgraded && canEdit && record.status === "needs_upgrade") {
       setEditing(true);
       setForm((current) => ({
         ...current,
         status: "upgraded",
-        upgradeDate: current.upgradeDate || todayLocal()
+        upgradeDate: todayLocal()
       }));
     }
   }, [record, wantsMarkUpgraded, canEdit]);
@@ -4596,10 +4656,13 @@ function ClientUpgradeRecordDetailPage({ data }) {
   }
 
   function changeStatus(status) {
+    // Moving a record that is not upgraded yet to Upgraded dates it today, replacing
+    // the planned date. A record that was already upgraded keeps its date.
     setForm((current) => ({
       ...current,
       status,
-      upgradeDate: status === "upgraded" && !current.upgradeDate ? todayLocal() : current.upgradeDate
+      upgradeDate:
+        status === "upgraded" && record?.status !== "upgraded" ? todayLocal() : current.upgradeDate
     }));
   }
 
@@ -5797,8 +5860,8 @@ function ClientReturnRecordDetailPage({ data }) {
                   ) : null}
                   {record.resolution === "repair" && record.repair_record_number ? (
                     <DetailRow
-                      label="Repair Vendor"
-                      value={record.repair_vendor_name || <Status status="No vendor assigned" statusClass="no_vendor" />}
+                      label="Supplier"
+                      value={record.repair_vendor_name || <Status status="No supplier assigned" statusClass="no_vendor" />}
                     />
                   ) : null}
                   {isCancelled ? (
@@ -5992,7 +6055,7 @@ function CreateClientReturnPage({ data }) {
         throw new Error("Select at least one sold stock unit.");
       }
       if (form.resolution === "repair" && !form.repairVendor) {
-        throw new Error("Choose the repair vendor for units going to repair.");
+        throw new Error("Choose the supplier for units going to repair.");
       }
 
       const payload = {
@@ -6000,7 +6063,9 @@ function CreateClientReturnPage({ data }) {
         return_date: form.returnDate || null,
         reason: form.reason,
         resolution: form.resolution,
-        ...(form.resolution === "repair" ? { repair_vendor: Number(form.repairVendor) } : {}),
+        ...(form.resolution === "repair"
+          ? supplierPayload(form.repairVendor, partyLookups.suppliers, "repair_vendor", "repair_vendor_name_input")
+          : {}),
         notes: form.notes,
         unit_ids: selectedUnits.map((unit) => unit.id)
       };
@@ -6090,13 +6155,14 @@ function CreateClientReturnPage({ data }) {
                 </Field>
                 {form.resolution === "repair" ? (
                   <SearchableCreatableSelect
-                    label="Repair Vendor"
+                    label="Supplier"
                     required
                     value={form.repairVendor}
                     onChange={(value) => updateField("repairVendor", value)}
                     options={partyLookups.suppliers}
-                    placeholder="Search suppliers"
-                    helperText="All units in this return share this vendor. Split into separate returns for different vendors."
+                    onCreate={pendingNamedPartyCreator(partyLookups.suppliers, partyLookups.setSuppliers)}
+                    placeholder="Search or create supplier..."
+                    helperText="All units in this return are sent to this supplier. Split into separate returns for different suppliers."
                   />
                 ) : null}
                 <Field label="Reason">
@@ -6154,7 +6220,7 @@ function CreateClientReturnPage({ data }) {
               <DetailRow label="Resolution" value={clientReturnResolutionLabel(form.resolution)} />
               {form.resolution === "repair" ? (
                 <DetailRow
-                  label="Repair Vendor"
+                  label="Supplier"
                   value={partyLookups.suppliers.find((supplier) => String(supplier.id) === String(form.repairVendor))?.name || "-"}
                 />
               ) : null}
@@ -8761,8 +8827,8 @@ function StockEntryPage({ data, mode = "add-unit" }) {
                     <Field label="Supplier Invoice Number">
                       <TextInput value={form.supplierInvoiceNumber} onChange={(value) => updateField("supplierInvoiceNumber", value)} placeholder="Enter supplier invoice number" />
                     </Field>
-                    <Field label="PO Number">
-                      <TextInput value={form.poNumber} onChange={(value) => updateField("poNumber", value)} placeholder="Enter purchase order number" />
+                    <Field label="Purchase Order">
+                      <TextInput value={form.poNumber} onChange={(value) => updateField("poNumber", value)} placeholder="Enter purchase order" />
                     </Field>
                   </>
                 ) : null}
@@ -8862,7 +8928,7 @@ function StockEntryPage({ data, mode = "add-unit" }) {
               <DetailRow label="Date" value={formatDate(form.entryDate)} />
               {isReceiving ? <DetailRow label="Supplier" value={selectedSupplier?.name || "-"} /> : null}
               {isReceiving ? <DetailRow label="Supplier Invoice Number" value={form.supplierInvoiceNumber || "-"} /> : null}
-              {isReceiving ? <DetailRow label="PO Number" value={form.poNumber || "-"} /> : null}
+              {isReceiving ? <DetailRow label="Purchase Order" value={form.poNumber || "-"} /> : null}
               <DetailRow label={isReceiving ? "Received By" : "Added By"} value={handledByName} />
               <DetailRow label="Products" value={lines.length} strong />
               <DetailRow label="Total Units" value={totalUnits} strong />
@@ -9325,21 +9391,16 @@ function SelectInput({ value, onChange, options, placeholder, disabled = false }
   );
 }
 
-const INTERNAL_KIND_OPTIONS = [
-  ["department", "Department"],
-  ["employee", "Employee"]
-];
-
 const RESERVED_FOR_TYPE_OPTIONS = [
   ["client", "Client"],
   ["supplier", "Supplier"],
-  ["internal", "Internal (employee or department)"]
+  ["internal", "Employee"]
 ];
 
 const REPAIR_SOURCE_OPTIONS = [
   ["internal_stock", "Internal stock"],
   ["client_return", "Client return (warranty)"],
-  ["internal_party", "Employee or department"]
+  ["internal_party", "Employee"]
 ];
 
 // Loads the lookup lists the party pickers need. Failed/forbidden requests just
@@ -9418,7 +9479,6 @@ function internalPartyPayload(value, parties, { idKey, nameKey, kindKey }) {
 }
 
 function InternalPartyPicker({ label, required = false, value, onChange, parties, setParties, disabled = false }) {
-  const [newKind, setNewKind] = useState("department");
 
   function createParty(name) {
     const trimmed = name.trim();
@@ -9426,15 +9486,15 @@ function InternalPartyPicker({ label, required = false, value, onChange, parties
       throw new Error("Enter a name before creating it.");
     }
     const existing = parties.find(
-      (party) => party.kind === newKind && party.name.trim().toLowerCase() === trimmed.toLowerCase()
+      (party) => party.kind === "employee" && party.name.trim().toLowerCase() === trimmed.toLowerCase()
     );
     if (existing) return existing;
-    const kindLabel = INTERNAL_KIND_OPTIONS.find(([kind]) => kind === newKind)?.[1] || "";
+    // Only employees are entered; departments are no longer created.
     const pending = {
       id: `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       name: trimmed,
-      kind: newKind,
-      kind_label: kindLabel,
+      kind: "employee",
+      kind_label: "Employee",
       __pending: true
     };
     // Held locally until the record itself saves, same as a new Client in
@@ -9453,33 +9513,25 @@ function InternalPartyPicker({ label, required = false, value, onChange, parties
         options={parties}
         getOptionLabel={internalPartyLabel}
         onCreate={createParty}
-        placeholder="Search or create an employee or department"
+        placeholder="Search or create an employee"
         disabled={disabled}
       />
-      <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500">
-        <span>New entries are saved as</span>
-        {INTERNAL_KIND_OPTIONS.map(([kind, kindLabel]) => (
-          <button
-            key={kind}
-            type="button"
-            disabled={disabled}
-            onClick={() => setNewKind(kind)}
-            className={`rounded border px-2 py-1 font-semibold ${
-              newKind === kind
-                ? "border-[var(--bim-orange-focus)] text-[var(--bim-orange-text)]"
-                : "border-nexus-line text-zinc-400 hover:text-white"
-            }`}
-          >
-            {kindLabel}
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
 
 // "Reserved for" type + the matching record dropdown. Changing the type clears
 // the picked record, since an id only makes sense within one list.
+// Request-body fragment for a supplier picked (or created inline) in a picker:
+// an existing one is sent by id, a new one by name and created by the server when
+// the record itself saves.
+function supplierPayload(value, suppliers, idKey, nameKey) {
+  if (!value) return {};
+  const selected = suppliers.find((supplier) => String(supplier.id) === String(value));
+  if (!selected) return {};
+  return selected.__pending ? { [nameKey]: selected.name } : { [idKey]: selected.id };
+}
+
 // A client/supplier created in a picker is held locally (not saved to the
 // server) until the record itself saves, same as a new Client on
 // CreateDeliveryPage.
@@ -9539,7 +9591,7 @@ function ReservedForPicker({ type, onTypeChange, value, onValueChange, clients, 
       ) : null}
       {type === "internal" ? (
         <InternalPartyPicker
-          label="Employee / Department"
+          label="Employee"
           required
           value={value}
           onChange={onValueChange}
@@ -9600,7 +9652,7 @@ function RepairSourcePicker({ source, onSourceChange, clientValue, onClientChang
       ) : null}
       {source === "internal_party" ? (
         <InternalPartyPicker
-          label="Employee / Department"
+          label="Employee"
           required
           value={internalValue}
           onChange={onInternalChange}
@@ -9653,8 +9705,8 @@ function partyTypeLabel(party) {
   return party.type === "supplier" ? "Supplier" : "Client";
 }
 
-// Clients and suppliers link to their page; employees/departments have no page,
-// so they show as plain text with an Employee/Department tag.
+// Clients and suppliers link to their page; employees have no page, so they
+// show as plain text with an Employee tag (older department rows keep theirs).
 function PartyLink({ party, fallback = "-" }) {
   if (!party?.name) return fallback;
   const href = partyHref(party);
@@ -10111,7 +10163,7 @@ function KpiGrid({ items }) {
               : isWarning
                 ? "border-[rgb(var(--bim-orange-focus-rgb)/70%)]"
                 : "border-nexus-line"
-          } ${item.href ? "cursor-pointer hover:border-[var(--bim-muted)] hover:bg-nexus-panel2 hover:shadow-[var(--bim-card-shadow-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--bim-orange-focus)]" : ""}`;
+          } ${item.href || item.onClick ? "cursor-pointer hover:border-[var(--bim-muted)] hover:bg-nexus-panel2 hover:shadow-[var(--bim-card-shadow-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--bim-orange-focus)]" : ""} ${item.active ? "ring-2 ring-[var(--bim-orange-focus)]" : ""}`;
         const content = (
           <>
             <div className="flex items-start justify-between gap-3">
@@ -10133,7 +10185,7 @@ function KpiGrid({ items }) {
             </p>
             <div className="mt-1 flex items-center justify-between gap-3 text-sm text-zinc-400">
               <span>{item.detail}</span>
-              {item.href ? <ChevronRight className="h-4 w-4 shrink-0 text-zinc-600" /> : null}
+              {item.href || item.onClick ? <ChevronRight className="h-4 w-4 shrink-0 text-zinc-600" /> : null}
             </div>
             {item.namesPreview ? (
               <p className="mt-1 truncate text-xs text-zinc-500" title={item.namesPreview}>
@@ -10147,6 +10199,14 @@ function KpiGrid({ items }) {
             ) : null}
           </>
         );
+
+        if (item.onClick) {
+          return (
+            <button key={item.label} type="button" onClick={item.onClick} aria-pressed={Boolean(item.active)} className={`${className} w-full text-left`}>
+              {content}
+            </button>
+          );
+        }
 
         return item.href ? (
           <a key={item.label} href={item.href} className={className}>

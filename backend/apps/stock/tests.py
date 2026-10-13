@@ -396,7 +396,7 @@ class UIRegistryTests(SimpleTestCase):
         self.assertIn("fetch(data.api.productUnits", stock_entry_source)
         self.assertIn("item_inputs: itemInputs", stock_entry_source)
         self.assertIn("serial_numbers: buildReceivingSerialNumbers(line, lineIndex)", stock_entry_source)
-        self.assertIn('label="PO Number"', stock_entry_source)
+        self.assertIn('label="Purchase Order"', stock_entry_source)
         self.assertIn('label="Supplier Invoice Number"', stock_entry_source)
         self.assertNotIn('label="Reference Number"', stock_entry_source)
         self.assertNotIn('label="Delivery Note Number"', stock_entry_source)
@@ -2038,7 +2038,7 @@ class BIMPOSAccessTests(TestCase):
         self.assertEqual(pending_actions_kpi["tone"], "warning")
         self.assertEqual(
             pending_actions_kpi["detail"],
-            "2 temporary assignments (1 overdue), 1 repair (1 without vendor)",
+            "2 temporary assignments (1 overdue), 1 repair (1 without supplier)",
         )
 
     def test_command_center_pending_actions_kpi_is_neutral_when_empty(self):
@@ -3885,6 +3885,70 @@ class InventoryApiTests(TestCase):
         self.assertEqual(response.json()[0]["issue"], issue.pk)
         self.assertEqual(response.json()[0]["issue_number"], issue.issue_number)
 
+    def test_repair_api_can_create_and_change_to_a_new_supplier(self):
+        user = self._user_with_permissions(
+            "view_repairrecord",
+            "add_repairrecord",
+            "change_repairrecord",
+            "change_productunit",
+        )
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        self.client.force_login(user)
+
+        missing = self.client.post(
+            "/api/stock/repairs/",
+            {"repair_reason": "No supplier", "unit_ids": [unit.pk]},
+            content_type="application/json",
+        )
+        self.assertEqual(missing.status_code, 400)
+
+        response = self.client.post(
+            "/api/stock/repairs/",
+            {
+                "repair_reason": "Printer head failure",
+                "vendor_name_input": "Brand New Supplier",
+                "unit_ids": [unit.pk],
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        repair = RepairRecord.objects.get(pk=response.json()["id"])
+        self.assertEqual(repair.vendor.name, "Brand New Supplier")
+        self.assertEqual(response.json()["vendor_name"], "Brand New Supplier")
+
+        edit = self.client.patch(
+            f"/api/stock/repairs/{repair.pk}/",
+            {"vendor_name_input": "Another New Supplier"},
+            content_type="application/json",
+        )
+        self.assertEqual(edit.status_code, 200, edit.content)
+        repair.refresh_from_db()
+        self.assertEqual(repair.vendor.name, "Another New Supplier")
+
+    def test_new_internal_party_defaults_to_employee(self):
+        user = self._user_with_permissions(
+            "view_reservationrecord",
+            "add_reservationrecord",
+            "change_productunit",
+        )
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/api/stock/reservations/",
+            {
+                "reserved_for_type": "internal",
+                "internal_name_input": "Sam Employee",
+                "unit_ids": [unit.pk],
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        party = ReservationRecord.objects.get(pk=response.json()["id"]).reserved_for_internal
+        self.assertEqual(party.name, "Sam Employee")
+        self.assertEqual(party.kind, "employee")
+
     def test_repair_api_creates_record_and_marks_units_repair(self):
         user = self._user_with_permissions(
             "view_repairrecord",
@@ -5431,6 +5495,43 @@ class InventoryApiTests(TestCase):
         self.assertEqual(repair.vendor, self.supplier)
         self.assertEqual(repair.source, RepairRecord.SOURCE_CLIENT_RETURN)
         self.assertEqual(repair.source_client, delivery.client)
+
+    def test_client_return_to_repair_can_create_a_new_supplier(self):
+        user = self._user_with_permissions(
+            "view_clientreturnrecord",
+            "add_clientreturnrecord",
+            "change_productunit",
+        )
+        unit, delivery, _delivery_item = self._sold_unit_with_delivery()
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/api/stock/client-returns/",
+            {
+                "delivery": delivery.pk,
+                "received_from": "Client Receiver",
+                "resolution": ProductUnit.STATUS_REPAIR,
+                "repair_vendor_name_input": "Brand New Repair Supplier",
+                "unit_ids": [unit.pk],
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        repair = RepairRecord.objects.get(client_return__items__product_unit=unit)
+        self.assertEqual(repair.vendor.name, "Brand New Repair Supplier")
+
+        # Sending to repair still needs a supplier one way or the other.
+        from .serializers import ClientReturnRecordSerializer
+
+        missing = ClientReturnRecordSerializer(
+            data={
+                "resolution": ProductUnit.STATUS_REPAIR,
+                "unit_ids": [unit.pk],
+            }
+        )
+        self.assertFalse(missing.is_valid())
+        self.assertIn("repair_vendor", missing.errors)
 
     def test_client_return_api_rejects_units_without_active_completed_delivery_item(self):
         user = self._user_with_permissions(

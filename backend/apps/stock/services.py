@@ -39,14 +39,29 @@ def _resolve_internal_party(internal=None, name_input="", kind_input=""):
     if not name:
         return None
     if len(name) > 150:
-        raise ValidationError("Employee or department name must be 150 characters or fewer.")
+        raise ValidationError("Employee name must be 150 characters or fewer.")
 
-    kind = (kind_input or "").strip()
+    # Departments are no longer entered; anything new is an employee. Existing
+    # department rows stay selectable.
+    kind = (kind_input or "").strip() or InternalParty.KIND_EMPLOYEE
     if kind not in (InternalParty.KIND_EMPLOYEE, InternalParty.KIND_DEPARTMENT):
-        raise ValidationError("Choose whether the new internal party is an employee or a department.")
+        raise ValidationError("Internal party must be an employee.")
 
     party, _created = InternalParty.objects.get_or_create(kind=kind, name=name)
     return party
+
+
+def _resolve_supplier(supplier=None, name_input=""):
+    """An existing Supplier, or one created from a typed name (the picker's inline
+    "create" option), the same way Receiving creates a new supplier. Returns None
+    when neither is given."""
+    if supplier is not None:
+        return supplier
+    name = (name_input or "").strip()
+    if not name:
+        return None
+    supplier, _created = Supplier.objects.get_or_create(name=name)
+    return supplier
 
 
 def _resolve_reservation_party(
@@ -77,7 +92,7 @@ def _resolve_reservation_party(
     if party_type == ReservationRecord.TYPE_INTERNAL:
         party = _resolve_internal_party(internal, internal_name_input, internal_kind_input)
         if party is None:
-            raise ValidationError("Choose the employee or department this reservation is for.")
+            raise ValidationError("Choose the employee this reservation is for.")
         return party_type, None, None, party, party.name
     raise ValidationError("Reserved for type must be client, supplier, or internal.")
 
@@ -101,9 +116,9 @@ def _resolve_repair_source(
             source_internal, source_internal_name_input, source_internal_kind_input
         )
         if party is None:
-            raise ValidationError("Choose the employee or department this repair came from.")
+            raise ValidationError("Choose the employee this repair came from.")
         return source, None, party
-    raise ValidationError("Repair source must be internal stock, client return, or employee or department.")
+    raise ValidationError("Repair source must be internal stock, client return, or employee.")
 
 
 def _clean_serial_numbers(serial_numbers):
@@ -484,6 +499,7 @@ def create_client_return_record(
     return_date=None,
     reason="",
     repair_vendor=None,
+    repair_vendor_name_input="",
     notes="",
     received_by=None,
 ):
@@ -495,8 +511,10 @@ def create_client_return_record(
         ClientReturnRecord.RESOLUTION_REPAIR,
     ):
         raise ValidationError("Client returns can only move units to available or repair.")
-    if resolution == ClientReturnRecord.RESOLUTION_REPAIR and repair_vendor is None:
-        raise ValidationError("Choose the repair vendor for units going to repair.")
+    if resolution == ClientReturnRecord.RESOLUTION_REPAIR:
+        repair_vendor = _resolve_supplier(repair_vendor, repair_vendor_name_input)
+        if repair_vendor is None:
+            raise ValidationError("Choose the supplier for units going to repair.")
 
     units = list(
         ProductUnit.objects.select_for_update()
@@ -1224,6 +1242,7 @@ def create_repair_record(
     unit_ids,
     repair_reason,
     vendor=None,
+    vendor_name_input="",
     source=RepairRecord.SOURCE_INTERNAL_STOCK,
     source_client=None,
     source_internal=None,
@@ -1236,8 +1255,9 @@ def create_repair_record(
     unique_ids = list(dict.fromkeys(unit_ids or []))
     if not unique_ids:
         raise ValidationError("At least one stock unit is required.")
+    vendor = _resolve_supplier(vendor, vendor_name_input)
     if vendor is None:
-        raise ValidationError("Repair vendor is required.")
+        raise ValidationError("Supplier is required.")
 
     source, source_client, source_internal = _resolve_repair_source(
         source=source,
@@ -1310,12 +1330,14 @@ def update_repair_record_header(
     *,
     repair_reason=None,
     vendor=None,
+    vendor_name_input="",
     repair_date=None,
     notes=None,
 ):
     if repair.status != RepairRecord.STATUS_ACTIVE:
         raise ValidationError("Only active repair records can be edited.")
 
+    vendor = _resolve_supplier(vendor, vendor_name_input)
     if repair_reason is not None:
         repair.repair_reason = repair_reason.strip()
     if vendor is not None:

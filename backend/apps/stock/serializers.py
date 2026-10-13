@@ -1046,8 +1046,13 @@ class RepairRecordSerializer(serializers.ModelSerializer):
     )
     vendor = serializers.PrimaryKeyRelatedField(
         queryset=Supplier.objects.filter(isactive=True),
-        required=True,
-        allow_null=False,
+        required=False,
+        allow_null=True,
+    )
+    vendor_name_input = serializers.CharField(
+        required=False,
+        write_only=True,
+        allow_blank=True,
     )
     vendor_name = serializers.CharField(source="vendor.name", read_only=True, default="")
     source = serializers.ChoiceField(
@@ -1102,6 +1107,7 @@ class RepairRecordSerializer(serializers.ModelSerializer):
             "repair_number",
             "repair_reason",
             "vendor",
+            "vendor_name_input",
             "vendor_name",
             "source",
             "source_label",
@@ -1196,12 +1202,14 @@ class RepairRecordCorrectionSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=False,
     )
+    vendor_name_input = serializers.CharField(required=False, allow_blank=True)
 
     class Meta:
         model = RepairRecord
         fields = (
             "repair_reason",
             "vendor",
+            "vendor_name_input",
             "repair_date",
             "notes",
         )
@@ -1418,6 +1426,11 @@ class ClientReturnRecordSerializer(serializers.ModelSerializer):
         allow_null=True,
         write_only=True,
     )
+    repair_vendor_name_input = serializers.CharField(
+        required=False,
+        write_only=True,
+        allow_blank=True,
+    )
     received_by_name = serializers.CharField(
         source="received_by.get_username",
         read_only=True,
@@ -1449,6 +1462,7 @@ class ClientReturnRecordSerializer(serializers.ModelSerializer):
             "reason",
             "resolution",
             "repair_vendor",
+            "repair_vendor_name_input",
             "notes",
             "status",
             "cancel_reason",
@@ -1496,9 +1510,10 @@ class ClientReturnRecordSerializer(serializers.ModelSerializer):
         if (
             attrs.get("resolution") == ClientReturnRecord.RESOLUTION_REPAIR
             and not attrs.get("repair_vendor")
+            and not (attrs.get("repair_vendor_name_input") or "").strip()
         ):
             raise serializers.ValidationError(
-                {"repair_vendor": "Choose the repair vendor for units going to repair."}
+                {"repair_vendor": "Choose the supplier for units going to repair."}
             )
         return attrs
 

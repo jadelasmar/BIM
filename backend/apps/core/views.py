@@ -103,7 +103,7 @@ def _pending_actions_detail(reservations, issues, repairs, overdue_issues=0, rep
     if repairs:
         repair_part = f"{_format_count(repairs)} {_plural(repairs, 'repair')}"
         if repairs_no_vendor:
-            repair_part += f" ({_format_count(repairs_no_vendor)} without vendor)"
+            repair_part += f" ({_format_count(repairs_no_vendor)} without supplier)"
         parts.append(repair_part)
 
     return ", ".join(parts) if parts else "Nothing awaiting action"
