@@ -92,6 +92,7 @@ export const iconComponents = {
   "package-plus": PackagePlus,
   "package-x": PackageX,
   plus: Plus,
+  "refresh-cw": RefreshCw,
   receiving: Download,
   reset: RotateCcw,
   settings: Settings,

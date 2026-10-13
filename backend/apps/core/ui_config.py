@@ -176,6 +176,11 @@ UI_TOKENS = {
         "icon": "package-x",
         "tone": "danger",
     },
+    "create_client_upgrade": {
+        "label": "Add Client Upgrade",
+        "icon": "refresh-cw",
+        "tone": "cyan",
+    },
 }
 
 

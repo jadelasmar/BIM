@@ -13,6 +13,7 @@ from .models import (
     Category,
     Client,
     ClientReturnRecord,
+    ClientUpgradeRecord,
     DeliveryRecord,
     InternalParty,
     IssueRecord,
@@ -60,6 +61,9 @@ from .serializers import (
     ReservationRecordCorrectionSerializer,
     ReservationRecordSerializer,
     ReservationReleaseSerializer,
+    ClientUpgradeRecordCancelSerializer,
+    ClientUpgradeRecordCorrectionSerializer,
+    ClientUpgradeRecordSerializer,
     StockMovementSerializer,
     SupplierSerializer,
 )
@@ -1240,3 +1244,67 @@ class RecentActivityAPIView(APIView):
 
         results, has_more = recent_activity_page(request.user, limit=limit, offset=offset)
         return Response({"results": results, "hasMore": has_more})
+
+
+class ClientUpgradeRecordListCreateAPIView(WritePermissionRequiredMixin, generics.ListCreateAPIView):
+    serializer_class = ClientUpgradeRecordSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+    write_permissions = {"POST": (stock_constants.ADD_CLIENT_UPGRADE_RECORD,)}
+
+    def get_queryset(self):
+        _require_perm(self.request.user, stock_constants.VIEW_CLIENT_UPGRADE_RECORD)
+        queryset = ClientUpgradeRecord.objects.all().select_related(
+            "created_by", "cancelled_by"
+        )
+        query = self.request.query_params.get("q", "").strip()
+
+        if query:
+            queryset = queryset.filter(
+                Q(upgrade_number__icontains=query)
+                | Q(client_name__icontains=query)
+                | Q(updater__icontains=query)
+                | Q(notes__icontains=query)
+            )
+
+        return queryset
+
+    def perform_create(self, serializer):
+        _require_perm(self.request.user, stock_constants.ADD_CLIENT_UPGRADE_RECORD)
+        serializer.save()
+
+
+class ClientUpgradeRecordDetailAPIView(WritePermissionRequiredMixin, generics.RetrieveUpdateAPIView):
+    serializer_class = ClientUpgradeRecordSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+    write_permissions = {
+        "PUT": (stock_constants.CHANGE_CLIENT_UPGRADE_RECORD,),
+        "PATCH": (stock_constants.CHANGE_CLIENT_UPGRADE_RECORD,),
+    }
+
+    def get_serializer_class(self):
+        if self.request.method in ("PUT", "PATCH"):
+            return ClientUpgradeRecordCorrectionSerializer
+        return ClientUpgradeRecordSerializer
+
+    def get_queryset(self):
+        _require_perm(self.request.user, stock_constants.VIEW_CLIENT_UPGRADE_RECORD)
+        return ClientUpgradeRecord.objects.all().select_related("created_by", "cancelled_by")
+
+    def perform_update(self, serializer):
+        _require_perm(self.request.user, stock_constants.CHANGE_CLIENT_UPGRADE_RECORD)
+        serializer.save()
+
+
+class ClientUpgradeRecordCancelAPIView(APIView):
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def post(self, request, pk):
+        _require_perm(request.user, stock_constants.CHANGE_CLIENT_UPGRADE_RECORD)
+        upgrade = get_object_or_404(ClientUpgradeRecord, pk=pk)
+        serializer = ClientUpgradeRecordCancelSerializer(
+            data=request.data,
+            context={"request": request, "upgrade": upgrade},
+        )
+        serializer.is_valid(raise_exception=True)
+        upgrade = serializer.save()
+        return Response(ClientUpgradeRecordSerializer(upgrade).data)

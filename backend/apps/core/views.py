@@ -64,6 +64,7 @@ WRITE_PAGE_PERMISSIONS = {
         stock_constants.ADD_CLIENT_RETURN_RECORD,
         stock_constants.CHANGE_PRODUCT_UNIT,
     ),
+    "operations_create_client_upgrade": (stock_constants.ADD_CLIENT_UPGRADE_RECORD,),
     "supplier_new": (stock_constants.ADD_SUPPLIER,),
     "client_new": (stock_constants.ADD_CLIENT,),
 }
@@ -236,6 +237,9 @@ def _command_center_initial_data(
             and can_change_product_unit,
             "canCreateRemoval": can_create_removal,
             "canCreateClientReturn": can_create_client_return,
+            "canCreateClientUpgrade": user.has_perm(stock_constants.ADD_CLIENT_UPGRADE_RECORD),
+            "canEditClientUpgrade": user.has_perm(stock_constants.CHANGE_CLIENT_UPGRADE_RECORD),
+            "canCancelClientUpgrade": user.has_perm(stock_constants.CHANGE_CLIENT_UPGRADE_RECORD),
             "canEditClientReturn": user.has_perm(stock_constants.CHANGE_CLIENT_RETURN_RECORD),
             "canCancelClientReturn": user.has_perm(
                 stock_constants.CHANGE_CLIENT_RETURN_RECORD
@@ -274,6 +278,8 @@ def _command_center_initial_data(
             "repairDetail": "/api/stock/repairs/{id}/",
             "removals": "/api/stock/removals/",
             "removalDetail": "/api/stock/removals/{id}/",
+            "clientUpgrades": "/api/stock/client-upgrades/",
+            "clientUpgradeDetail": "/api/stock/client-upgrades/{id}/",
             "clientReturns": "/api/stock/client-returns/",
             "clientReturnDetail": "/api/stock/client-returns/{id}/",
             "receivingRecords": "/api/stock/receiving-records/",
@@ -299,6 +305,7 @@ def _command_center_initial_data(
             "createRepair": reverse("operations_create_repair"),
             "createRemoval": reverse("operations_create_removal"),
             "createClientReturn": reverse("operations_create_client_return"),
+            "createClientUpgrade": reverse("operations_create_client_upgrade"),
             "suppliers": reverse("suppliers"),
             "supplierNew": reverse("supplier_new"),
             "receivingRecords": reverse("operations_receiving"),
@@ -308,6 +315,7 @@ def _command_center_initial_data(
             "repairRecords": reverse("operations_repairs"),
             "removalRecords": reverse("operations_removals"),
             "clientReturnRecords": reverse("operations_client_returns"),
+            "clientUpgradeRecords": reverse("operations_client_upgrades"),
             "clients": reverse("clients"),
             "clientNew": reverse("client_new"),
             "assets": reverse("assets"),
@@ -445,6 +453,7 @@ def _build_command_center_initial_data(request, current_path=None):
     can_create_client_return = user.has_perm(
         stock_constants.ADD_CLIENT_RETURN_RECORD
     ) and user.has_perm(stock_constants.CHANGE_PRODUCT_UNIT)
+    can_create_client_upgrade = user.has_perm(stock_constants.ADD_CLIENT_UPGRADE_RECORD)
     can_receive_stock = user.has_perm(
         stock_constants.ADD_RECEIVING_RECORD
     ) and user.has_perm(stock_constants.ADD_PRODUCT_UNIT)
@@ -538,6 +547,14 @@ def _build_command_center_initial_data(request, current_path=None):
             "enabled": can_create_client_return,
             "description": "Record sold stock returned by a client",
             **ui_item("create_client_return"),
+        },
+        {
+            "href": reverse("operations_create_client_upgrade")
+            if can_create_client_upgrade
+            else None,
+            "enabled": can_create_client_upgrade,
+            "description": "Record a software upgrade done at a client site",
+            **ui_item("create_client_upgrade"),
         },
         {
             "href": reverse("operations_receive_stock")

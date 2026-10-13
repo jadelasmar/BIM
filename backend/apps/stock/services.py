@@ -6,6 +6,7 @@ from .models import (
     Client,
     ClientReturnItem,
     ClientReturnRecord,
+    ClientUpgradeRecord,
     DeliveryItem,
     DeliveryRecord,
     InternalParty,
@@ -1820,3 +1821,118 @@ def cancel_delivery_record(delivery, *, cancelled_by=None, cancel_reason=""):
         )
 
     return delivery
+
+
+def _resolve_upgrade_client(client, client_name_input):
+    """An existing client, or one created from a typed name (the picker's inline
+    "create" option), the same way a Delivery creates a new client."""
+    if client is None and (client_name_input or "").strip():
+        client, _created = Client.objects.get_or_create(name=client_name_input.strip())
+    if client is None:
+        raise ValidationError("Choose the client this upgrade was done for.")
+    return client
+
+
+def _validate_upgrade_state(status, upgrade_date, updater):
+    if status not in (
+        ClientUpgradeRecord.STATUS_NEEDS_UPGRADE,
+        ClientUpgradeRecord.STATUS_UPGRADED,
+    ):
+        raise ValidationError("Status must be needs upgrade or upgraded.")
+    if status == ClientUpgradeRecord.STATUS_UPGRADED:
+        if upgrade_date is None:
+            raise ValidationError("Choose the date the upgrade was done.")
+        if not updater:
+            raise ValidationError("Enter the updater number that was used.")
+
+
+@transaction.atomic
+def create_client_upgrade_record(
+    *,
+    client=None,
+    client_name_input="",
+    status=ClientUpgradeRecord.STATUS_NEEDS_UPGRADE,
+    updater="",
+    upgrade_date=None,
+    notes="",
+    created_by=None,
+):
+    client = _resolve_upgrade_client(client, client_name_input)
+    updater = (updater or "").strip()
+    _validate_upgrade_state(status, upgrade_date, updater)
+
+    return ClientUpgradeRecord.objects.create(
+        client=client,
+        client_name=client.name,
+        status=status,
+        upgrade_date=upgrade_date,
+        updater=updater,
+        notes=notes or "",
+        created_by=created_by,
+    )
+
+
+@transaction.atomic
+def update_client_upgrade_record(
+    upgrade,
+    *,
+    client=None,
+    client_name_input="",
+    status=None,
+    updater=None,
+    upgrade_date=None,
+    clear_upgrade_date=False,
+    notes=None,
+):
+    if upgrade.status == ClientUpgradeRecord.STATUS_CANCELLED:
+        raise ValidationError("Cancelled client upgrade records cannot be edited.")
+
+    if client is not None or (client_name_input or "").strip():
+        client = _resolve_upgrade_client(client, client_name_input)
+        upgrade.client = client
+        upgrade.client_name = client.name
+    if status is not None:
+        upgrade.status = status
+    if updater is not None:
+        upgrade.updater = updater.strip()
+    if upgrade_date is not None:
+        upgrade.upgrade_date = upgrade_date
+    elif clear_upgrade_date:
+        upgrade.upgrade_date = None
+    if notes is not None:
+        upgrade.notes = notes
+
+    _validate_upgrade_state(upgrade.status, upgrade.upgrade_date, upgrade.updater)
+    upgrade.save(
+        update_fields=(
+            "client",
+            "client_name",
+            "status",
+            "upgrade_date",
+            "updater",
+            "notes",
+        )
+    )
+    return upgrade
+
+
+@transaction.atomic
+def cancel_client_upgrade_record(upgrade, *, cancelled_by=None, cancel_reason=""):
+    if upgrade.status == ClientUpgradeRecord.STATUS_CANCELLED:
+        return upgrade
+
+    upgrade.status = ClientUpgradeRecord.STATUS_CANCELLED
+    upgrade.isactive = False
+    upgrade.cancel_reason = (cancel_reason or "").strip()
+    upgrade.cancelled_at = timezone.now()
+    upgrade.cancelled_by = cancelled_by
+    upgrade.save(
+        update_fields=(
+            "status",
+            "isactive",
+            "cancel_reason",
+            "cancelled_at",
+            "cancelled_by",
+        )
+    )
+    return upgrade

@@ -8,6 +8,7 @@ from .models import (
     Client,
     ClientReturnItem,
     ClientReturnRecord,
+    ClientUpgradeRecord,
     DeliveryItem,
     DeliveryRecord,
     InternalParty,
@@ -945,3 +946,25 @@ class ReceivingRecordAdmin(admin.ModelAdmin):
             },
         ),
     )
+
+
+@admin.register(ClientUpgradeRecord)
+class ClientUpgradeRecordAdmin(admin.ModelAdmin):
+    list_display = (
+        "upgrade_number",
+        "client_name",
+        "status",
+        "updater",
+        "upgrade_date",
+        "created_by",
+    )
+    search_fields = (
+        "upgrade_number",
+        "client_name",
+        "updater",
+        "notes",
+    )
+    list_filter = ("status", "upgrade_date")
+    readonly_fields = ("upgrade_number", "crdate")
+    autocomplete_fields = ("created_by", "cancelled_by")
+    ordering = ("-upgrade_date", "-upgrade_number")

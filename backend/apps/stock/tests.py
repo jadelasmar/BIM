@@ -64,6 +64,7 @@ from .models import (
     RepairItem,
     RepairRecord,
     ReservationItem,
+    ClientUpgradeRecord,
     ReservationRecord,
     StockMovement,
     Supplier,
@@ -1845,6 +1846,7 @@ class BIMPOSAccessTests(TestCase):
                 "Create Repair",
                 "Remove Unit",
                 "Create Client Return",
+                "Add Client Upgrade",
                 "Receive Stock",
                 "Add Unit",
                 "Add Supplier",
@@ -2085,6 +2087,7 @@ class BIMPOSAccessTests(TestCase):
                 "Create Repair",
                 "Remove Unit",
                 "Create Client Return",
+                "Add Client Upgrade",
                 "Receive Stock",
                 "Add Unit",
                 "Add Supplier",
@@ -4427,6 +4430,149 @@ class InventoryApiTests(TestCase):
         self.assertEqual(item.sale_price, 125.50)
         self.assertEqual(response.json()["invoice_number"], "INV-2026-0007")
         self.assertEqual(response.json()["items"][0]["sale_price"], "125.50")
+
+    def test_client_upgrade_api_tracks_needs_upgrade_then_upgraded_then_cancel(self):
+        user = self._user_with_permissions(
+            "view_clientupgraderecord",
+            "add_clientupgraderecord",
+            "change_clientupgraderecord",
+        )
+        self.client.force_login(user)
+
+        # A brand-new client that still needs an upgrade: no date, no updater yet.
+        response = self.client.post(
+            "/api/stock/client-upgrades/",
+            {"client_name_input": "Waiting Client", "status": "needs_upgrade"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        body = response.json()
+        self.assertEqual(body["status"], "needs_upgrade")
+        self.assertIsNone(body["upgrade_date"])
+        self.assertEqual(body["client_name"], "Waiting Client")
+        self.assertTrue(body["upgrade_number"].startswith("UPG-"))
+        record = ClientUpgradeRecord.objects.get(pk=body["id"])
+        self.assertTrue(Client.objects.filter(name="Waiting Client").exists())
+
+        # A planned date is optional but allowed.
+        planned = self.client.patch(
+            f"/api/stock/client-upgrades/{record.pk}/",
+            {"upgrade_date": "2026-11-01", "updater": "741"},
+            content_type="application/json",
+        )
+        self.assertEqual(planned.status_code, 200, planned.content)
+
+        # Marking it upgraded needs the date done and the updater number.
+        no_updater = self.client.patch(
+            f"/api/stock/client-upgrades/{record.pk}/",
+            {"status": "upgraded", "updater": ""},
+            content_type="application/json",
+        )
+        self.assertEqual(no_updater.status_code, 400)
+        no_date = self.client.patch(
+            f"/api/stock/client-upgrades/{record.pk}/",
+            {"status": "upgraded", "upgrade_date": None},
+            content_type="application/json",
+        )
+        self.assertEqual(no_date.status_code, 400)
+        record.refresh_from_db()
+        self.assertEqual(record.status, ClientUpgradeRecord.STATUS_NEEDS_UPGRADE)
+
+        done = self.client.patch(
+            f"/api/stock/client-upgrades/{record.pk}/",
+            {"status": "upgraded", "upgrade_date": "2026-10-12", "updater": "741"},
+            content_type="application/json",
+        )
+        self.assertEqual(done.status_code, 200, done.content)
+        record.refresh_from_db()
+        self.assertEqual(record.status, ClientUpgradeRecord.STATUS_UPGRADED)
+        self.assertEqual(str(record.upgrade_date), "2026-10-12")
+        self.assertEqual(record.updater, "741")
+
+        listing = self.client.get("/api/stock/client-upgrades/?q=741")
+        self.assertEqual([row["id"] for row in listing.json()], [record.pk])
+
+        cancel = self.client.post(
+            f"/api/stock/client-upgrades/{record.pk}/cancel/",
+            {"cancel_reason": "Added twice"},
+            content_type="application/json",
+        )
+        self.assertEqual(cancel.status_code, 200, cancel.content)
+        record.refresh_from_db()
+        self.assertEqual(record.status, ClientUpgradeRecord.STATUS_CANCELLED)
+        blocked = self.client.patch(
+            f"/api/stock/client-upgrades/{record.pk}/",
+            {"notes": "too late"},
+            content_type="application/json",
+        )
+        self.assertEqual(blocked.status_code, 400)
+
+    def test_client_upgrade_api_can_log_an_already_upgraded_client(self):
+        user = self._user_with_permissions(
+            "view_clientupgraderecord",
+            "add_clientupgraderecord",
+        )
+        existing_client = Client.objects.create(name="Done Client")
+        self.client.force_login(user)
+
+        missing_date = self.client.post(
+            "/api/stock/client-upgrades/",
+            {"client": existing_client.pk, "status": "upgraded", "updater": "740"},
+            content_type="application/json",
+        )
+        self.assertEqual(missing_date.status_code, 400)
+
+        response = self.client.post(
+            "/api/stock/client-upgrades/",
+            {
+                "client": existing_client.pk,
+                "status": "upgraded",
+                "upgrade_date": "2026-10-05",
+                "updater": "740",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(response.json()["status_label"], "Upgraded")
+        self.assertEqual(response.json()["updater"], "740")
+
+    def test_client_upgrade_api_requires_client_and_permissions(self):
+        viewer = self._user_with_permissions("view_clientupgraderecord")
+        self.client.force_login(viewer)
+        denied = self.client.post(
+            "/api/stock/client-upgrades/",
+            {"client_name_input": "Someone"},
+            content_type="application/json",
+        )
+        self.assertEqual(denied.status_code, 403)
+        self.assertEqual(self.client.get("/operations/upgrades/new/").status_code, 403)
+        self.assertEqual(self.client.get("/operations/upgrades/").status_code, 200)
+
+        viewer.user_permissions.add(Permission.objects.get(codename="add_clientupgraderecord"))
+        self.client.force_login(viewer)
+        no_client = self.client.post(
+            "/api/stock/client-upgrades/",
+            {"status": "needs_upgrade"},
+            content_type="application/json",
+        )
+        self.assertEqual(no_client.status_code, 400)
+        self.assertEqual(ClientUpgradeRecord.objects.count(), 0)
+
+    def test_global_search_finds_client_upgrades(self):
+        client_obj = Client.objects.create(name="Searchable Upgrade Client")
+        ClientUpgradeRecord.objects.create(
+            client=client_obj,
+            client_name=client_obj.name,
+            updater="ZetaUpdater",
+        )
+        viewer = self._user_with_permissions("view_clientupgraderecord")
+        self.client.force_login(viewer)
+
+        found = self.client.get("/api/stock/search/", {"q": "ZetaUpdater"}).json()
+        groups = {group["key"]: group for group in found["groups"]}
+
+        self.assertIn("client_upgrades", groups)
+        self.assertEqual(groups["client_upgrades"]["results"][0]["title"][:4], "UPG-")
 
     def test_delivery_api_edits_invoice_number(self):
         user = self._user_with_permissions(

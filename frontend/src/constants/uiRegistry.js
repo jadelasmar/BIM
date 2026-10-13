@@ -27,6 +27,7 @@ export const workflowMeta = {
   create_repair: { icon: "wrench", tone: "danger" },
   create_removal: { icon: "package-x", tone: "danger" },
   create_client_return: { icon: "reset", tone: "green" },
+  create_client_upgrade: { icon: "refresh-cw", tone: "cyan" },
   add_supplier: { icon: "suppliers", tone: "purple" },
   add_client: { icon: "clients", tone: "blue" }
 };

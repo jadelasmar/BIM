@@ -12,6 +12,7 @@ from .services import (
 from .models import (
     Client,
     ClientReturnRecord,
+    ClientUpgradeRecord,
     DeliveryRecord,
     IssueRecord,
     Product,
@@ -707,6 +708,27 @@ def global_search(user, query, limit=GLOBAL_SEARCH_RESULT_LIMIT):
                 "title": reservation.reservation_number,
                 "subtitle": reservation.reserved_for,
                 "href": reverse("operations_reservation_detail", kwargs={"pk": reservation.pk}),
+            },
+            limit,
+        )
+        if group:
+            groups.append(group)
+
+    if user.has_perm(stock_constants.VIEW_CLIENT_UPGRADE_RECORD):
+        matches = ClientUpgradeRecord.objects.filter(
+            Q(upgrade_number__icontains=query)
+            | Q(client_name__icontains=query)
+            | Q(updater__icontains=query)
+        ).order_by("-upgrade_date", "-upgrade_number")
+        group = _search_group(
+            "client_upgrades",
+            "Client Upgrades",
+            matches,
+            lambda upgrade: {
+                "id": upgrade.pk,
+                "title": upgrade.upgrade_number,
+                "subtitle": f"{upgrade.client_name} - {upgrade.get_status_display()}",
+                "href": reverse("operations_client_upgrade_detail", kwargs={"pk": upgrade.pk}),
             },
             limit,
         )

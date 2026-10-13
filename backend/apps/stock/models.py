@@ -1323,3 +1323,91 @@ class StockMovement(models.Model):
 
     def __str__(self):
         return f"{self.get_movement_type_display()} - {self.product_unit}"
+
+
+class ClientUpgradeRecord(models.Model):
+    """Where a client stands on a software upgrade: it still needs one (with an
+    optional planned date) or it has been upgraded (with the date it was done and
+    the updater number used, e.g. 740 or 741). It does not touch stock units, so
+    it has no items and writes no StockMovement."""
+
+    STATUS_NEEDS_UPGRADE = "needs_upgrade"
+    STATUS_UPGRADED = "upgraded"
+    STATUS_CANCELLED = "cancelled"
+
+    STATUS_CHOICES = [
+        (STATUS_NEEDS_UPGRADE, "Needs Upgrade"),
+        (STATUS_UPGRADED, "Upgraded"),
+        (STATUS_CANCELLED, "Cancelled"),
+    ]
+
+    upgrade_number = models.CharField(
+        max_length=32,
+        unique=True,
+        blank=True,
+        editable=False,
+    )
+    client = models.ForeignKey(
+        Client,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="upgrades",
+    )
+    # Name snapshot written by the service from the client, the same way
+    # DeliveryRecord.customer_name mirrors DeliveryRecord.client. Search and
+    # list pages read it directly.
+    client_name = models.CharField(max_length=150)
+    # Planned date while the client still needs the upgrade (optional), the date
+    # it was done once upgraded (required).
+    upgrade_date = models.DateField(blank=True, null=True)
+    # The updater number, e.g. "740" or "741".
+    updater = models.CharField(max_length=50, blank=True)
+    notes = models.TextField(blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_NEEDS_UPGRADE,
+    )
+    cancel_reason = models.TextField(blank=True)
+    cancelled_at = models.DateTimeField(blank=True, null=True)
+    cancelled_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="cancelled_stock_client_upgrade_records",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="stock_client_upgrade_records",
+    )
+    crdate = models.DateTimeField(auto_now_add=True)
+    isactive = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("-upgrade_date", "-upgrade_number")
+
+    def save(self, *args, **kwargs):
+        if not self.upgrade_number:
+            year = (self.upgrade_date or timezone.localdate()).year
+            prefix = f"UPG-{year}-"
+            latest = (
+                ClientUpgradeRecord.objects.filter(upgrade_number__startswith=prefix)
+                .order_by("-upgrade_number")
+                .first()
+            )
+            next_number = 1
+            if latest:
+                try:
+                    next_number = int(latest.upgrade_number.rsplit("-", 1)[1]) + 1
+                except (IndexError, ValueError):
+                    next_number = latest.pk + 1
+            self.upgrade_number = f"{prefix}{next_number:04d}"
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.upgrade_number or "Client upgrade"

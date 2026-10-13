@@ -8,6 +8,7 @@ from .models import (
     Client,
     ClientReturnItem,
     ClientReturnRecord,
+    ClientUpgradeRecord,
     DeliveryItem,
     DeliveryRecord,
     InternalParty,
@@ -28,6 +29,9 @@ from .models import (
     Supplier,
 )
 from .services import (
+    cancel_client_upgrade_record,
+    create_client_upgrade_record,
+    update_client_upgrade_record,
     cancel_client_return_record,
     cancel_delivery_record,
     cancel_receiving_record,
@@ -1996,6 +2000,148 @@ class ReceivingRecordCancelSerializer(serializers.Serializer):
         try:
             return cancel_receiving_record(
                 receiving,
+                cancelled_by=request.user if request else None,
+                cancel_reason=self.validated_data["cancel_reason"],
+            )
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc
+
+
+class ClientUpgradeRecordSerializer(serializers.ModelSerializer):
+    client = serializers.PrimaryKeyRelatedField(
+        queryset=Client.objects.filter(isactive=True),
+        required=False,
+        allow_null=True,
+    )
+    client_name_input = serializers.CharField(
+        required=False,
+        write_only=True,
+        allow_blank=True,
+    )
+    created_by_name = serializers.CharField(
+        source="created_by.get_username",
+        read_only=True,
+        default="",
+    )
+    cancelled_by_name = serializers.CharField(
+        source="cancelled_by.get_username",
+        read_only=True,
+        default="",
+    )
+    status = serializers.ChoiceField(
+        choices=(
+            (ClientUpgradeRecord.STATUS_NEEDS_UPGRADE, "Needs Upgrade"),
+            (ClientUpgradeRecord.STATUS_UPGRADED, "Upgraded"),
+        ),
+        required=False,
+    )
+    status_label = serializers.CharField(source="get_status_display", read_only=True)
+
+    class Meta:
+        model = ClientUpgradeRecord
+        fields = (
+            "id",
+            "upgrade_number",
+            "client",
+            "client_name",
+            "client_name_input",
+            "upgrade_date",
+            "updater",
+            "notes",
+            "status",
+            "status_label",
+            "cancel_reason",
+            "cancelled_at",
+            "cancelled_by",
+            "cancelled_by_name",
+            "created_by",
+            "created_by_name",
+            "crdate",
+            "isactive",
+        )
+        read_only_fields = (
+            "upgrade_number",
+            "client_name",
+            "status_label",
+            "cancel_reason",
+            "cancelled_at",
+            "cancelled_by",
+            "cancelled_by_name",
+            "created_by",
+            "created_by_name",
+            "crdate",
+        )
+        extra_kwargs = {
+            "updater": {"required": False, "allow_blank": True},
+            "notes": {"required": False, "allow_blank": True},
+            "upgrade_date": {"required": False, "allow_null": True},
+        }
+
+    def create(self, validated_data):
+        request = self.context.get("request")
+        try:
+            return create_client_upgrade_record(
+                created_by=request.user if request else None,
+                **validated_data,
+            )
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc
+
+
+class ClientUpgradeRecordCorrectionSerializer(serializers.ModelSerializer):
+    client = serializers.PrimaryKeyRelatedField(
+        queryset=Client.objects.filter(isactive=True),
+        required=False,
+        allow_null=True,
+    )
+    client_name_input = serializers.CharField(required=False, allow_blank=True)
+    status = serializers.ChoiceField(
+        choices=(
+            (ClientUpgradeRecord.STATUS_NEEDS_UPGRADE, "Needs Upgrade"),
+            (ClientUpgradeRecord.STATUS_UPGRADED, "Upgraded"),
+        ),
+        required=False,
+    )
+
+    class Meta:
+        model = ClientUpgradeRecord
+        fields = (
+            "client",
+            "client_name_input",
+            "status",
+            "upgrade_date",
+            "updater",
+            "notes",
+        )
+        extra_kwargs = {
+            "upgrade_date": {"required": False, "allow_null": True},
+            "updater": {"required": False, "allow_blank": True},
+            "notes": {"required": False, "allow_blank": True},
+        }
+
+    def update(self, instance, validated_data):
+        # An explicit null clears the planned date (e.g. back to "needs upgrade").
+        if "upgrade_date" in validated_data and validated_data["upgrade_date"] is None:
+            validated_data.pop("upgrade_date")
+            validated_data["clear_upgrade_date"] = True
+        try:
+            return update_client_upgrade_record(instance, **validated_data)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc
+
+    def to_representation(self, instance):
+        return ClientUpgradeRecordSerializer(instance, context=self.context).data
+
+
+class ClientUpgradeRecordCancelSerializer(serializers.Serializer):
+    cancel_reason = serializers.CharField(required=True, allow_blank=False)
+
+    def save(self, **kwargs):
+        upgrade = self.context["upgrade"]
+        request = self.context.get("request")
+        try:
+            return cancel_client_upgrade_record(
+                upgrade,
                 cancelled_by=request.user if request else None,
                 cancel_reason=self.validated_data["cancel_reason"],
             )

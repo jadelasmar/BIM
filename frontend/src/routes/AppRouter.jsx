@@ -901,6 +901,15 @@ function OperationsPage({ data }) {
       enabled: data.quickActions.some((action) => action.label === "Remove Unit" && action.enabled),
       icon: workflowMeta.create_removal.icon,
       tone: workflowMeta.create_removal.tone
+    },
+    {
+      title: "Add Client Upgrade",
+      detail: "Track clients that need an upgrade and those already upgraded.",
+      href: data.routes.createClientUpgrade,
+      recordsHref: data.routes.clientUpgradeRecords,
+      enabled: data.quickActions.some((action) => action.label === "Add Client Upgrade" && action.enabled),
+      icon: workflowMeta.create_client_upgrade.icon,
+      tone: workflowMeta.create_client_upgrade.tone
     }
   ];
   const visibleWorkflows = workflows.filter((workflow) => workflow.enabled || !workflow.href);
@@ -4076,6 +4085,774 @@ const REMOVAL_REASON_OPTIONS = [
   ["other", "Other"]
 ];
 
+// Where each client stands on a software upgrade: still needs one (optionally
+// with a planned date) or has been upgraded (date done + updater number such as
+// 740 or 741). Not a stock workflow -- no units move.
+const UPGRADE_STATUS_OPTIONS = [
+  ["needs_upgrade", "Needs Upgrade"],
+  ["upgraded", "Upgraded"]
+];
+
+function upgradeStatusLabel(record) {
+  if (record.status === "cancelled") return "Cancelled";
+  return record.status === "upgraded" ? "Upgraded" : "Needs Upgrade";
+}
+
+function isUpgradeOverdue(record) {
+  return record.status === "needs_upgrade" && Boolean(record.upgrade_date) && record.upgrade_date < todayLocal();
+}
+
+// Needs-upgrade rows first (planned date soonest, undated last), then upgraded
+// (newest first), then cancelled.
+function sortUpgradeRecords(records) {
+  const rank = { needs_upgrade: 0, upgraded: 1, cancelled: 2 };
+  return [...records].sort((a, b) => {
+    if (rank[a.status] !== rank[b.status]) return rank[a.status] - rank[b.status];
+    if (a.status === "needs_upgrade") {
+      if (!a.upgrade_date && !b.upgrade_date) return 0;
+      if (!a.upgrade_date) return 1;
+      if (!b.upgrade_date) return -1;
+      return a.upgrade_date.localeCompare(b.upgrade_date);
+    }
+    return (b.upgrade_date || "").localeCompare(a.upgrade_date || "");
+  });
+}
+
+// Updater numbers already used, newest number first, for the picker's suggestions.
+function knownUpdaterNumbers(records) {
+  return [...new Set(records.map((record) => record.updater).filter(Boolean))].sort(
+    (a, b) => b.localeCompare(a, undefined, { numeric: true })
+  );
+}
+
+function ClientUpgradeRecordsPage({ data }) {
+  const canCreateUpgrade = Boolean(data.permissions?.canCreateClientUpgrade);
+  const canEditUpgrade = Boolean(data.permissions?.canEditClientUpgrade);
+  const [records, setRecords] = useState([]);
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState("all");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadUpgrades() {
+      setLoading(true);
+      setError("");
+      try {
+        const params = new URLSearchParams();
+        if (query.trim()) params.set("q", query.trim());
+        const endpoint = params.toString()
+          ? `${data.api.clientUpgrades}?${params.toString()}`
+          : data.api.clientUpgrades;
+        const response = await fetch(endpoint, { signal: controller.signal });
+        if (!response.ok) {
+          throw new Error("Could not load client upgrade records.");
+        }
+        setRecords(await response.json());
+      } catch (loadError) {
+        if (loadError.name !== "AbortError") {
+          setError(loadError.message);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadUpgrades();
+    return () => controller.abort();
+  }, [data.api.clientUpgrades, query]);
+
+  const needsCount = records.filter((record) => record.status === "needs_upgrade").length;
+  const upgradedCount = records.filter((record) => record.status === "upgraded").length;
+  const scheduledCount = records.filter((record) => record.status === "needs_upgrade" && record.upgrade_date).length;
+  const overdueCount = records.filter(isUpgradeOverdue).length;
+  const upgradeKpis = [
+    {
+      label: "Needs Upgrade",
+      value: formatCount(needsCount),
+      detail: "clients waiting for an upgrade",
+      icon: "clock-3",
+      tone: needsCount > 0 ? "warning" : "neutral"
+    },
+    {
+      label: "Upgraded",
+      value: formatCount(upgradedCount),
+      detail: "clients already upgraded",
+      icon: "check-circle-2",
+      tone: "green"
+    },
+    {
+      label: "Scheduled",
+      value: formatCount(scheduledCount),
+      detail: "waiting clients with a planned date",
+      icon: "refresh-cw",
+      tone: "cyan"
+    },
+    {
+      label: "Overdue",
+      value: formatCount(overdueCount),
+      detail: "planned date has passed",
+      icon: "triangle-alert",
+      tone: overdueCount > 0 ? "danger" : "neutral"
+    }
+  ];
+
+  const filters = [
+    ["all", "All", records.filter((record) => record.status !== "cancelled").length],
+    ["needs_upgrade", "Needs Upgrade", needsCount],
+    ["upgraded", "Upgraded", upgradedCount],
+    ["cancelled", "Cancelled", records.filter((record) => record.status === "cancelled").length]
+  ];
+  const visibleRecords = sortUpgradeRecords(
+    records.filter((record) => (filter === "all" ? record.status !== "cancelled" : record.status === filter))
+  );
+
+  return (
+    <Shell data={data}>
+      <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h1 className="bim-page-title">Client Upgrades</h1>
+          <p className="bim-page-description">Which clients still need an upgrade and which have been upgraded, with the updater number and date.</p>
+        </div>
+        {canCreateUpgrade ? (
+          <Button as="a" href={data.routes.createClientUpgrade} variant="primary">
+            <Plus className="h-4 w-4" />
+            Add Client Upgrade
+          </Button>
+        ) : null}
+      </header>
+
+      <KpiGrid items={upgradeKpis} />
+
+      <section className="mt-4 rounded-lg border border-nexus-line bg-nexus-panel p-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <SearchBar
+            className="flex-1"
+            inputClassName="placeholder:text-zinc-500"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search client, updater number, upgrade number, or notes..."
+          />
+          <div className="flex flex-wrap gap-2">
+            {filters.map(([value, label, count]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setFilter(value)}
+                className={`rounded border px-3 py-1.5 text-xs font-semibold ${
+                  filter === value
+                    ? "border-[var(--bim-orange-focus)] text-[var(--bim-orange-text)]"
+                    : "border-nexus-line text-zinc-400 hover:text-white"
+                }`}
+              >
+                {label} ({formatCount(count)})
+              </button>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <ClientUpgradeRecordsTable records={visibleRecords} loading={loading} error={error} canEdit={canEditUpgrade} />
+    </Shell>
+  );
+}
+
+function ClientUpgradeRecordsTable({ records, loading, error, canEdit }) {
+  return (
+    <section className="mt-4 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-left text-sm">
+          <thead className="bg-zinc-800/80 text-zinc-400">
+            <tr>
+              <th className="px-4 py-3 font-medium">Client</th>
+              <th className="px-4 py-3 font-medium">Status</th>
+              <th className="px-4 py-3 font-medium">Updater</th>
+              <th className="px-4 py-3 font-medium">Date</th>
+              <th className="px-4 py-3 font-medium">Notes</th>
+              <th className="px-4 py-3 font-medium">Record</th>
+              <th className="px-4 py-3 font-medium"><span className="sr-only">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <TableMessage message="Loading client upgrade records..." />
+            ) : error ? (
+              <TableMessage message={error} />
+            ) : records.length ? (
+              records.map((record) => (
+                <tr key={record.id} className="border-t border-nexus-line hover:bg-zinc-900/70">
+                  <td className="px-4 py-4 font-semibold text-white">
+                    {record.client ? (
+                      <a href={`/clients/${record.client}/`} className="text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
+                        {record.client_name}
+                      </a>
+                    ) : (
+                      record.client_name
+                    )}
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Status status={upgradeStatusLabel(record)} statusClass={record.status} />
+                      {isUpgradeOverdue(record) ? <Status status="Overdue" statusClass="overdue" /> : null}
+                    </div>
+                  </td>
+                  <td className="px-4 py-4 font-mono text-zinc-200">{record.updater || "-"}</td>
+                  <td className="px-4 py-4 text-zinc-300">
+                    {record.upgrade_date ? formatDate(record.upgrade_date) : "-"}
+                    {record.upgrade_date && record.status !== "cancelled" ? (
+                      <p className="mt-1 text-xs text-zinc-500">{record.status === "upgraded" ? "done" : "planned"}</p>
+                    ) : null}
+                  </td>
+                  <td className="px-4 py-4 text-zinc-300">{record.notes || "-"}</td>
+                  <td className="px-4 py-4">
+                    <a href={`/operations/upgrades/${record.id}/`} className="font-mono text-xs font-bold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
+                      {record.upgrade_number}
+                    </a>
+                    <p className="mt-1 text-xs text-zinc-500">by {record.created_by_name || "-"}</p>
+                  </td>
+                  <td className="px-4 py-4 text-right">
+                    {canEdit && record.status === "needs_upgrade" ? (
+                      <Button as="a" href={`/operations/upgrades/${record.id}/?upgraded=1`} variant="outline">
+                        <Icon name="check-circle-2" className="h-4 w-4" />
+                        Mark Upgraded
+                      </Button>
+                    ) : null}
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan="7">
+                  <EmptyState
+                    className="border-t border-nexus-line"
+                    title="No client upgrades here yet."
+                    description="Add Client Upgrade records a client that needs an upgrade, or one that has already been upgraded."
+                  />
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
+// A client typed into a picker's "create" option is held locally (not saved to
+// the server) until the record itself saves, same as a new Client on
+// CreateDeliveryPage.
+function clientUpgradeClientPayload(value, clients) {
+  if (!value) return {};
+  const selected = clients.find((client) => String(client.id) === String(value));
+  if (!selected) return {};
+  return selected.__pending ? { client_name_input: selected.name } : { client: selected.id };
+}
+
+// Type a new updater number, or pick one that was used before (740, 741, ...).
+function UpdaterInput({ value, onChange, suggestions, placeholder = "e.g. 741" }) {
+  return (
+    <>
+      <Input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} list="client-upgrade-updaters" className="" />
+      <datalist id="client-upgrade-updaters">
+        {suggestions.map((number) => (
+          <option key={number} value={number} />
+        ))}
+      </datalist>
+    </>
+  );
+}
+
+function clientUpgradeValidation(form) {
+  if (!form.client) return "Choose the client.";
+  if (form.status === "upgraded") {
+    if (!form.upgradeDate) return "Choose the date the upgrade was done.";
+    if (!form.updater.trim()) return "Enter the updater number that was used.";
+  }
+  return "";
+}
+
+function useKnownUpdaters(data) {
+  const [updaters, setUpdaters] = useState([]);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(data.api.clientUpgrades, { signal: controller.signal })
+      .then((response) => (response.ok ? response.json() : []))
+      .then((records) => setUpdaters(knownUpdaterNumbers(records)))
+      .catch(() => {});
+    return () => controller.abort();
+  }, [data.api.clientUpgrades]);
+  return updaters;
+}
+
+function CreateClientUpgradePage({ data }) {
+  const [form, setForm] = useState({
+    status: "needs_upgrade",
+    upgradeDate: "",
+    client: "",
+    updater: "",
+    notes: ""
+  });
+  const partyLookups = usePartyLookups(data, { clients: true });
+  const knownUpdaters = useKnownUpdaters(data);
+  const [saving, setSaving] = useState(false);
+  const { showSuccess, showError } = useToast();
+  const isUpgraded = form.status === "upgraded";
+
+  function updateField(name, value) {
+    setForm((current) => ({ ...current, [name]: value }));
+  }
+
+  function changeStatus(status) {
+    // Done upgrades need a date: default to today. A waiting client's planned
+    // date is optional, so leave it empty unless one was typed.
+    setForm((current) => ({
+      ...current,
+      status,
+      upgradeDate: status === "upgraded" && !current.upgradeDate ? todayLocal() : current.upgradeDate
+    }));
+  }
+
+  async function saveUpgrade() {
+    setSaving(true);
+    try {
+      const problem = clientUpgradeValidation(form);
+      if (problem) throw new Error(problem);
+
+      const response = await fetch(data.api.clientUpgrades, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": data.csrfToken
+        },
+        body: JSON.stringify({
+          ...clientUpgradeClientPayload(form.client, partyLookups.clients),
+          status: form.status,
+          upgrade_date: form.upgradeDate || null,
+          updater: form.updater.trim(),
+          notes: form.notes
+        })
+      });
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        throw new Error(firstApiError(details) || "Could not save client upgrade.");
+      }
+
+      showSuccess(isUpgraded ? "Upgrade recorded." : "Client added to the upgrade list.");
+      navigateAfterDelay(data.routes.clientUpgradeRecords);
+    } catch (saveError) {
+      showError(saveError.message);
+      setSaving(false);
+    }
+  }
+
+  const clientName = partyLookups.clients.find((client) => String(client.id) === String(form.client))?.name;
+
+  return (
+    <Shell data={data}>
+      <SavingOverlay active={saving} />
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_300px]">
+        <div className="min-w-0">
+          <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h1 className="bim-page-title">Add Client Upgrade</h1>
+              <p className="bim-page-description">Add a client that needs an upgrade, or one that has already been upgraded.</p>
+            </div>
+            <div className="flex flex-wrap gap-3 text-sm">
+              <a href="/operations/upgrades/" className="inline-flex h-9 items-center gap-2 rounded-md px-3 font-semibold text-zinc-200 hover:bg-nexus-panel">
+                <X className="h-4 w-4" />
+                Cancel
+              </a>
+              <button disabled={saving} onClick={saveUpgrade} type="button" className="inline-flex h-9 items-center gap-2 rounded-md bg-nexus-orange px-4 font-semibold text-black">
+                <Icon name="refresh-cw" className="h-4 w-4" />
+                Save
+              </button>
+            </div>
+          </header>
+
+          <FormSection icon="refresh-cw" title="Upgrade Information" subtitle="Needs an upgrade (planned date is optional) or already upgraded (date and updater are required).">
+            <div className="grid gap-5 md:grid-cols-2">
+              <Field label="Status" required>
+                <SelectInput value={form.status} onChange={changeStatus} options={UPGRADE_STATUS_OPTIONS} placeholder="Select status" />
+              </Field>
+              <Field label={isUpgraded ? "Upgrade Date" : "Planned Date (optional)"} required={isUpgraded}>
+                <DateInput value={form.upgradeDate} onChange={(value) => updateField("upgradeDate", value)} />
+              </Field>
+              <SearchableCreatableSelect
+                label="Client"
+                required
+                value={form.client}
+                onChange={(value) => updateField("client", value)}
+                options={partyLookups.clients}
+                onCreate={pendingNamedPartyCreator(partyLookups.clients, partyLookups.setClients)}
+                placeholder="Search or create client..."
+              />
+              <Field label={isUpgraded ? "Updater" : "Updater (optional)"} required={isUpgraded}>
+                <UpdaterInput value={form.updater} onChange={(value) => updateField("updater", value)} suggestions={knownUpdaters} />
+              </Field>
+            </div>
+            <div className="mt-5">
+              <Field label="Notes">
+                <TextInput value={form.notes} onChange={(value) => updateField("notes", value)} placeholder="Anything worth remembering" />
+              </Field>
+            </div>
+          </FormSection>
+        </div>
+
+        <aside className="space-y-4">
+          <section className="rounded-lg border border-nexus-line bg-nexus-panel">
+            <div className="border-b border-nexus-line px-4 py-4">
+              <h2 className="bim-section-title">Upgrade Summary</h2>
+            </div>
+            <dl className="divide-y divide-nexus-line p-4">
+              <DetailRow label="Status" value={isUpgraded ? "Upgraded" : "Needs Upgrade"} highlight />
+              <DetailRow label={isUpgraded ? "Upgrade Date" : "Planned Date"} value={form.upgradeDate ? formatDate(form.upgradeDate) : "-"} />
+              <DetailRow label="Client" value={clientName || "-"} strong />
+              <DetailRow label="Updater" value={form.updater || "-"} />
+              <DetailRow label="Notes" value={form.notes || "-"} />
+            </dl>
+          </section>
+        </aside>
+      </div>
+    </Shell>
+  );
+}
+
+function ClientUpgradeRecordDetailPage({ data }) {
+  const upgradeId = (data.currentPath || window.location.pathname).match(/\/operations\/upgrades\/(\d+)\//)?.[1];
+  const [record, setRecord] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+  const [message, setMessage] = useState("");
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [form, setForm] = useState({ status: "needs_upgrade", upgradeDate: "", client: "", updater: "", notes: "" });
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelling, setCancelling] = useState(false);
+  const { showError } = useToast();
+  const canEdit = Boolean(data.permissions?.canEditClientUpgrade);
+  const canCancel = Boolean(data.permissions?.canCancelClientUpgrade);
+  const partyLookups = usePartyLookups(data, { clients: true, enabled: editing });
+  const knownUpdaters = useKnownUpdaters(data);
+  const wantsMarkUpgraded = new URLSearchParams(window.location.search).get("upgraded") === "1";
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadUpgrade() {
+      setLoading(true);
+      setError("");
+      try {
+        const response = await fetch(data.api.clientUpgradeDetail.replace("{id}", upgradeId), {
+          signal: controller.signal
+        });
+        if (!response.ok) {
+          throw new Error(response.status === 404 ? "Client upgrade record was not found." : "Could not load client upgrade record.");
+        }
+        setRecord(await response.json());
+      } catch (loadError) {
+        if (loadError.name !== "AbortError") {
+          setError(loadError.message);
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadUpgrade();
+    return () => controller.abort();
+  }, [data.api.clientUpgradeDetail, upgradeId, reloadKey]);
+
+  useEffect(() => {
+    if (!record) return;
+    setForm({
+      status: record.status === "cancelled" ? "needs_upgrade" : record.status,
+      upgradeDate: record.upgrade_date || "",
+      client: record.client ? String(record.client) : "",
+      updater: record.updater || "",
+      notes: record.notes || ""
+    });
+  }, [record]);
+
+  // "Mark Upgraded" in the list lands here with the edit panel already open and
+  // set to Upgraded, dated today.
+  useEffect(() => {
+    if (record && wantsMarkUpgraded && canEdit && record.status === "needs_upgrade") {
+      setEditing(true);
+      setForm((current) => ({
+        ...current,
+        status: "upgraded",
+        upgradeDate: current.upgradeDate || todayLocal()
+      }));
+    }
+  }, [record, wantsMarkUpgraded, canEdit]);
+
+  function updateField(name, value) {
+    setForm((current) => ({ ...current, [name]: value }));
+  }
+
+  function changeStatus(status) {
+    setForm((current) => ({
+      ...current,
+      status,
+      upgradeDate: status === "upgraded" && !current.upgradeDate ? todayLocal() : current.upgradeDate
+    }));
+  }
+
+  async function saveEdit() {
+    if (!canEdit) return;
+    setSaving(true);
+    setEditError("");
+    try {
+      const problem = clientUpgradeValidation(form);
+      if (problem) throw new Error(problem);
+      const response = await fetch(data.api.clientUpgradeDetail.replace("{id}", upgradeId), {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": data.csrfToken
+        },
+        body: JSON.stringify({
+          ...clientUpgradeClientPayload(form.client, partyLookups.clients),
+          status: form.status,
+          upgrade_date: form.upgradeDate || null,
+          updater: form.updater.trim(),
+          notes: form.notes
+        })
+      });
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        throw new Error(firstApiError(details) || "Could not update client upgrade.");
+      }
+      setEditing(false);
+      setMessage("Client upgrade updated.");
+      setReloadKey((current) => current + 1);
+    } catch (saveError) {
+      setEditError(saveError.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function cancelUpgrade() {
+    if (!canCancel) return;
+    setCancelling(true);
+    setMessage("");
+    try {
+      if (!cancelReason.trim()) throw new Error("Enter a cancellation reason.");
+      const endpoint = data.api.clientUpgradeDetail.replace("{id}", upgradeId).replace(/\/$/, "/cancel/");
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": data.csrfToken
+        },
+        body: JSON.stringify({ cancel_reason: cancelReason })
+      });
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        throw new Error(firstApiError(details) || "Could not cancel client upgrade.");
+      }
+      setCancelOpen(false);
+      setCancelReason("");
+      setMessage("Client upgrade record cancelled.");
+      setReloadKey((current) => current + 1);
+    } catch (cancelError) {
+      showError(cancelError.message);
+    } finally {
+      setCancelling(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <Shell data={data}>
+        <div className="rounded-lg border border-nexus-line bg-nexus-panel p-6 text-zinc-400">
+          Loading client upgrade record...
+        </div>
+      </Shell>
+    );
+  }
+
+  if (error || !record) {
+    return (
+      <Shell data={data}>
+        <div className="rounded-lg border border-[rgb(var(--bim-red-rgb)/60%)] bg-red-500/10 p-6 text-[var(--tone-red-text)]">
+          {error || "Client upgrade record was not found."}
+        </div>
+      </Shell>
+    );
+  }
+
+  const isOpen = record.status !== "cancelled";
+  const isUpgraded = record.status === "upgraded";
+  const formUpgraded = form.status === "upgraded";
+
+  return (
+    <Shell data={data}>
+      <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <a href="/operations/upgrades/" className="mb-2 inline-flex text-sm font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
+            Back to client upgrades
+          </a>
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="bim-page-title">{record.client_name}</h1>
+            <Status status={upgradeStatusLabel(record)} statusClass={record.status} />
+            {isUpgradeOverdue(record) ? <Status status="Overdue" statusClass="overdue" /> : null}
+          </div>
+          <p className="bim-page-description">{record.upgrade_number}</p>
+        </div>
+        {isOpen && (canEdit || canCancel) ? (
+          <div className="flex flex-wrap items-center gap-3">
+            {canEdit && !isUpgraded ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setEditing(true);
+                  changeStatus("upgraded");
+                }}
+              >
+                <Icon name="check-circle-2" className="h-4 w-4" />
+                Mark as Upgraded
+              </Button>
+            ) : null}
+            {canEdit ? (
+              <Button type="button" variant="outline" onClick={() => setEditing((current) => !current)}>
+                <Edit3 className="h-4 w-4" />
+                Edit Details
+              </Button>
+            ) : null}
+            {canCancel ? (
+              <Button type="button" variant="secondary" onClick={() => setCancelOpen((current) => !current)}>
+                <RotateCcw className="h-4 w-4" />
+                Cancel Record
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+      </header>
+
+      {message ? (
+        <div className="mb-4 rounded-lg border border-[rgb(var(--bim-green-rgb)/60%)] bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-200">
+          {message}
+        </div>
+      ) : null}
+
+      {editing && canEdit && isOpen ? (
+        <section className="mb-5 rounded-lg border border-nexus-line bg-nexus-panel p-5">
+          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h2 className="text-sm font-bold text-white">Edit upgrade details</h2>
+              <p className="bim-page-description">Every field on this record can be corrected.</p>
+            </div>
+            <Button type="button" variant="ghost" onClick={() => { setEditing(false); setEditError(""); }}>
+              <X className="h-4 w-4" />
+              Close
+            </Button>
+          </div>
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <Field label="Status" required>
+              <SelectInput value={form.status} onChange={changeStatus} options={UPGRADE_STATUS_OPTIONS} placeholder="Select status" />
+            </Field>
+            <Field label={formUpgraded ? "Upgrade Date" : "Planned Date (optional)"} required={formUpgraded}>
+              <DateInput value={form.upgradeDate} onChange={(value) => updateField("upgradeDate", value)} />
+            </Field>
+            <SearchableCreatableSelect
+              label="Client"
+              required
+              value={form.client}
+              onChange={(value) => updateField("client", value)}
+              options={partyLookups.clients}
+              onCreate={pendingNamedPartyCreator(partyLookups.clients, partyLookups.setClients)}
+              placeholder="Search or create client..."
+            />
+            <Field label={formUpgraded ? "Updater" : "Updater (optional)"} required={formUpgraded}>
+              <UpdaterInput value={form.updater} onChange={(value) => updateField("updater", value)} suggestions={knownUpdaters} />
+            </Field>
+            <Field label="Notes">
+              <TextInput value={form.notes} onChange={(value) => updateField("notes", value)} />
+            </Field>
+          </div>
+          {editError ? <p className="mt-4 text-sm font-semibold text-[var(--tone-red-text)]">{editError}</p> : null}
+          <div className="mt-5 flex flex-wrap gap-3">
+            <Button type="button" variant="primary" loading={saving} onClick={saveEdit}>
+              <Save className="h-4 w-4" />
+              Save Details
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => { setEditing(false); setEditError(""); }}>
+              Cancel
+            </Button>
+          </div>
+        </section>
+      ) : null}
+
+      {cancelOpen && canCancel && isOpen ? (
+        <section className="mb-5 rounded-lg border border-[rgb(var(--bim-red-rgb)/60%)] bg-red-500/10 p-5">
+          <h2 className="text-sm font-bold text-[var(--tone-red-text)]">Cancel upgrade record</h2>
+          <p className="mt-1 text-sm text-[rgb(var(--bim-red-rgb)/80%)]">
+            Cancel only if this entry was added by mistake. The record is kept, marked as cancelled.
+          </p>
+          <div className="mt-4">
+            <Field label="Cancellation reason" required>
+              <TextInput value={cancelReason} onChange={setCancelReason} placeholder="Why is this record being cancelled?" />
+            </Field>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Button type="button" variant="danger" loading={cancelling} onClick={cancelUpgrade}>
+              <RotateCcw className="h-4 w-4" />
+              Confirm Cancel
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => setCancelOpen(false)}>
+              Keep Record
+            </Button>
+          </div>
+        </section>
+      ) : null}
+
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
+          <SectionTitle title="Upgrade Details" />
+          <dl className="mt-4 divide-y divide-nexus-line">
+            <DetailRow label="Status" value={upgradeStatusLabel(record)} highlight />
+            <DetailRow label={isUpgraded ? "Upgrade Date" : "Planned Date"} value={record.upgrade_date ? formatDate(record.upgrade_date) : "-"} />
+            <DetailRow
+              label="Client"
+              strong
+              value={
+                record.client ? (
+                  <a href={`/clients/${record.client}/`} className="font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
+                    {record.client_name}
+                  </a>
+                ) : (
+                  record.client_name
+                )
+              }
+            />
+            <DetailRow label="Updater" value={record.updater || "-"} />
+            <DetailRow label="Notes" value={record.notes || "-"} />
+            {!isOpen ? <DetailRow label="Cancelled" value={formatDate(record.cancelled_at)} /> : null}
+            {!isOpen ? <DetailRow label="Cancel Reason" value={record.cancel_reason || "-"} /> : null}
+          </dl>
+        </section>
+
+        <aside className="rounded-lg border border-nexus-line bg-nexus-panel p-4 xl:self-start">
+          <h2 className="bim-section-title">Activity</h2>
+          <dl className="divide-y divide-nexus-line pt-2">
+            <DetailRow label="Reference" value={record.upgrade_number} />
+            <DetailRow label="Added By" value={record.created_by_name || "-"} />
+            <DetailRow label="Added On" value={formatDate(record.crdate)} />
+          </dl>
+        </aside>
+      </div>
+    </Shell>
+  );
+}
+
 function RemovalRecordsPage({ data }) {
   const canCreateRemoval = Boolean(data.permissions?.canCreateRemoval);
   const [records, setRecords] = useState([]);
@@ -6780,12 +7557,11 @@ function ProductDetailsPage({ data }) {
   const stockPercent = product.total_units
     ? Math.round((product.available_units / product.total_units) * 100)
     : 0;
-  const receiveStockAction = data.quickActions.find((action) => action.label === "Receive Stock");
-  const addStockUnitAction = data.quickActions.find((action) => action.label === "Add Unit");
-  const createDeliveryAction = data.quickActions.find((action) => action.label === "Create Delivery");
-  const detailActions = [receiveStockAction, addStockUnitAction, createDeliveryAction].filter(
-    (action) => action?.enabled && action.href
-  );
+  // Every stock operation is available from a product, in the same order as
+  // the Operations page: stock in first, then the ways stock leaves or changes.
+  const detailActions = PRODUCT_DETAIL_ACTION_LABELS.map((label) =>
+    data.quickActions.find((action) => action.label === label)
+  ).filter((action) => action?.enabled && action.href);
   const recentActivity = movements.slice(0, 6);
 
   return (
@@ -6801,9 +7577,9 @@ function ProductDetailsPage({ data }) {
               </div>
               <p className="mt-2 text-sm text-zinc-400">
                 <span className="font-mono font-bold text-[var(--bim-orange-text)]">{product.sku}</span>
-                <span className="mx-2">â€¢</span>
+                <span className="mx-2">•</span>
                 {product.category_name}
-                <span className="mx-2">â€¢</span>
+                <span className="mx-2">•</span>
                 {product.brand_name} {product.model_name}
               </p>
             </div>
@@ -6817,11 +7593,7 @@ function ProductDetailsPage({ data }) {
               </a>
             ) : null}
             {detailActions.map((action) => (
-              <ProductDetailActionLink
-                key={action.label}
-                action={action}
-                primary={action.label === "Receive Stock" || action.label === "Add Unit"}
-              />
+              <ProductDetailActionLink key={action.label} action={action} />
             ))}
           </div>
         </div>
@@ -7102,9 +7874,21 @@ function ProductMovementHistory({ movements, accessDenied, limit = 10 }) {
   );
 }
 
-function ProductDetailActionLink({ action, primary = false }) {
+const PRODUCT_DETAIL_ACTION_LABELS = [
+  "Receive Stock",
+  "Add Unit",
+  "Create Delivery",
+  "Create Reservation",
+  "Create Temporary Assignment",
+  "Create Repair",
+  "Create Client Return",
+  "Remove Unit"
+];
+
+// All operation buttons share one style: none is more important than another.
+function ProductDetailActionLink({ action }) {
   return (
-    <Button as="a" href={action.href} variant={primary ? "primary" : "secondary"}>
+    <Button as="a" href={action.href} variant="secondary">
       <Icon name={action.icon} className="h-4 w-4" />
       {action.label}
     </Button>
@@ -8696,27 +9480,28 @@ function InternalPartyPicker({ label, required = false, value, onChange, parties
 
 // "Reserved for" type + the matching record dropdown. Changing the type clears
 // the picked record, since an id only makes sense within one list.
-function ReservedForPicker({ type, onTypeChange, value, onValueChange, clients, suppliers, internalParties, setInternalParties, setClients, setSuppliers }) {
-  // A client/supplier created here is held locally (not saved to the server)
-  // until the record itself saves, same as a new Client on CreateDeliveryPage.
-  function createNamedParty(list, setList) {
-    return (name) => {
-      const trimmed = name.trim();
-      if (!trimmed) {
-        throw new Error("Enter a name before creating it.");
-      }
-      const existing = list.find((party) => party.name.trim().toLowerCase() === trimmed.toLowerCase());
-      if (existing) return existing;
-      const pending = {
-        id: `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        name: trimmed,
-        __pending: true
-      };
-      setList((current) => [...current, pending].sort((a, b) => a.name.localeCompare(b.name)));
-      return pending;
+// A client/supplier created in a picker is held locally (not saved to the
+// server) until the record itself saves, same as a new Client on
+// CreateDeliveryPage.
+function pendingNamedPartyCreator(list, setList) {
+  return (name) => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      throw new Error("Enter a name before creating it.");
+    }
+    const existing = list.find((party) => party.name.trim().toLowerCase() === trimmed.toLowerCase());
+    if (existing) return existing;
+    const pending = {
+      id: `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      name: trimmed,
+      __pending: true
     };
-  }
+    setList((current) => [...current, pending].sort((a, b) => a.name.localeCompare(b.name)));
+    return pending;
+  };
+}
 
+function ReservedForPicker({ type, onTypeChange, value, onValueChange, clients, suppliers, internalParties, setInternalParties, setClients, setSuppliers }) {
   return (
     <>
       <Field label="Reserved For Type" required>
@@ -8737,7 +9522,7 @@ function ReservedForPicker({ type, onTypeChange, value, onValueChange, clients, 
           value={value}
           onChange={onValueChange}
           options={clients}
-          onCreate={setClients ? createNamedParty(clients, setClients) : undefined}
+          onCreate={setClients ? pendingNamedPartyCreator(clients, setClients) : undefined}
           placeholder="Search or create client..."
         />
       ) : null}
@@ -8748,7 +9533,7 @@ function ReservedForPicker({ type, onTypeChange, value, onValueChange, clients, 
           value={value}
           onChange={onValueChange}
           options={suppliers}
-          onCreate={setSuppliers ? createNamedParty(suppliers, setSuppliers) : undefined}
+          onCreate={setSuppliers ? pendingNamedPartyCreator(suppliers, setSuppliers) : undefined}
           placeholder="Search or create supplier..."
         />
       ) : null}
@@ -9706,6 +10491,18 @@ const appRoutes = [
   {
     match: (path) => path === "/operations/reservations/",
     render: (data) => <ReservationRecordsPage data={data} />
+  },
+  {
+    match: (path) => /^\/operations\/upgrades\/\d+\//.test(path),
+    render: (data) => <ClientUpgradeRecordDetailPage data={data} />
+  },
+  {
+    match: (path) => path.startsWith("/operations/upgrades/new"),
+    render: (data) => <CreateClientUpgradePage data={data} />
+  },
+  {
+    match: (path) => path === "/operations/upgrades/",
+    render: (data) => <ClientUpgradeRecordsPage data={data} />
   },
   {
     match: (path) => path === "/operations/pending/",

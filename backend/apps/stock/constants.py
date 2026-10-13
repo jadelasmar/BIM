@@ -36,6 +36,10 @@ VIEW_REMOVAL_RECORD = f"{APP_LABEL}.view_removalrecord"
 ADD_REMOVAL_RECORD = f"{APP_LABEL}.add_removalrecord"
 CHANGE_REMOVAL_RECORD = f"{APP_LABEL}.change_removalrecord"
 
+VIEW_CLIENT_UPGRADE_RECORD = f"{APP_LABEL}.view_clientupgraderecord"
+ADD_CLIENT_UPGRADE_RECORD = f"{APP_LABEL}.add_clientupgraderecord"
+CHANGE_CLIENT_UPGRADE_RECORD = f"{APP_LABEL}.change_clientupgraderecord"
+
 VIEW_STOCK_MOVEMENT = f"{APP_LABEL}.view_stockmovement"
 
 ADD_CATEGORY = f"{APP_LABEL}.add_category"

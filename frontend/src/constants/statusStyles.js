@@ -7,6 +7,7 @@ const statusStyles = {
   inactive: TONE_COLORS.zincSoft15,
   issued: TONE_COLORS.indigoSoft15,
   low_stock: TONE_COLORS.amberSoft15Amber,
+  needs_upgrade: TONE_COLORS.amberSoft15Amber,
   out_of_stock: TONE_COLORS.redSoft15,
   no_vendor: TONE_COLORS.amberSoft15Amber,
   overdue: TONE_COLORS.redSoft15,
@@ -17,6 +18,7 @@ const statusStyles = {
   reserved: TONE_COLORS.amberSoft15Amber,
   sold: TONE_COLORS.purpleSoft15,
   transfer: TONE_COLORS.skySoft15,
+  upgraded: TONE_COLORS.greenSoft15,
   warranty: TONE_COLORS.cyanSoft15
 };
 
@@ -28,6 +30,7 @@ export const statusMeta = {
   inactive: { icon: "package-x", className: statusStyles.inactive },
   issued: { icon: "user-check", className: statusStyles.issued },
   low_stock: { icon: "triangle-alert", className: statusStyles.low_stock },
+  needs_upgrade: { icon: "clock-3", className: statusStyles.needs_upgrade },
   out_of_stock: { icon: "package-x", className: statusStyles.out_of_stock },
   no_vendor: { icon: "triangle-alert", className: statusStyles.no_vendor },
   overdue: { icon: "triangle-alert", className: statusStyles.overdue },
@@ -38,5 +41,6 @@ export const statusMeta = {
   reserved: { icon: "clock-3", className: statusStyles.reserved },
   sold: { icon: "shopping-bag", className: statusStyles.sold },
   transfer: { icon: "arrow-right-left", className: statusStyles.transfer },
+  upgraded: { icon: "check-circle-2", className: statusStyles.upgraded },
   warranty: { icon: "reset", className: statusStyles.warranty }
 };

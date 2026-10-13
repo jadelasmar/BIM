@@ -105,6 +105,21 @@ urlpatterns = [
         name="removal-detail",
     ),
     path(
+        "client-upgrades/",
+        api_views.ClientUpgradeRecordListCreateAPIView.as_view(),
+        name="client-upgrades",
+    ),
+    path(
+        "client-upgrades/<int:pk>/cancel/",
+        api_views.ClientUpgradeRecordCancelAPIView.as_view(),
+        name="client-upgrade-cancel",
+    ),
+    path(
+        "client-upgrades/<int:pk>/",
+        api_views.ClientUpgradeRecordDetailAPIView.as_view(),
+        name="client-upgrade-detail",
+    ),
+    path(
         "client-returns/",
         api_views.ClientReturnRecordListCreateAPIView.as_view(),
         name="client-returns",
