@@ -14,6 +14,7 @@ from .models import (
     Client,
     ClientReturnRecord,
     ClientUpgradeRecord,
+    RecordChange,
     DeliveryRecord,
     InternalParty,
     IssueRecord,
@@ -62,6 +63,7 @@ from .serializers import (
     ReservationRecordSerializer,
     ReservationReleaseSerializer,
     ClientUpgradeRecordCancelSerializer,
+    RecordChangeSerializer,
     ClientUpgradeRecordCorrectionSerializer,
     ClientUpgradeRecordSerializer,
     StockMovementSerializer,
@@ -85,7 +87,7 @@ class WritePermissionRequiredMixin:
 
 
 def _active_unit_filter(status=None):
-    filters = Q(units__isactive=True)
+    filters = Q(units__isactive=True, units__owner_client__isnull=True)
     if status:
         filters &= Q(units__status=status)
     return filters
@@ -100,7 +102,11 @@ def _product_queryset():
             # permanently left inventory. See ProductUnit.IN_STOCK_STATUSES.
             api_total_units=Count(
                 "units",
-                filter=Q(units__isactive=True, units__status__in=ProductUnit.IN_STOCK_STATUSES),
+                filter=Q(
+                    units__isactive=True,
+                    units__owner_client__isnull=True,
+                    units__status__in=ProductUnit.IN_STOCK_STATUSES,
+                ),
                 distinct=True,
             ),
             api_available_units=Count(
@@ -1014,7 +1020,7 @@ class InventorySummaryAPIView(APIView):
 
     def get(self, request):
         _require_perm(request.user, stock_constants.VIEW_PRODUCT)
-        active_units = ProductUnit.objects.filter(isactive=True)
+        active_units = ProductUnit.objects.filter(isactive=True, owner_client__isnull=True)
         products = _product_queryset()
         return Response(
             {
@@ -1308,3 +1314,35 @@ class ClientUpgradeRecordCancelAPIView(APIView):
         serializer.is_valid(raise_exception=True)
         upgrade = serializer.save()
         return Response(ClientUpgradeRecordSerializer(upgrade).data)
+
+
+class RecordHistoryAPIView(APIView):
+    """Edit history of one record: GET ?type=delivery&id=4 -> newest edits first.
+    The caller needs the view permission of the record's own type."""
+
+    permission_classes = (permissions.IsAuthenticated,)
+    view_permissions = {
+        "receiving": stock_constants.VIEW_RECEIVING_RECORD,
+        "delivery": stock_constants.VIEW_DELIVERY_RECORD,
+        "reservation": stock_constants.VIEW_RESERVATION_RECORD,
+        "issue": stock_constants.VIEW_ISSUE_RECORD,
+        "repair": stock_constants.VIEW_REPAIR_RECORD,
+        "client_return": stock_constants.VIEW_CLIENT_RETURN_RECORD,
+        "client_upgrade": stock_constants.VIEW_CLIENT_UPGRADE_RECORD,
+    }
+
+    def get(self, request):
+        record_type = request.query_params.get("type", "")
+        permission = self.view_permissions.get(record_type)
+        if permission is None:
+            return Response({"detail": "Unknown record type."}, status=400)
+        _require_perm(request.user, permission)
+        try:
+            record_id = int(request.query_params.get("id", ""))
+        except (TypeError, ValueError):
+            return Response({"detail": "A record id is required."}, status=400)
+
+        changes = RecordChange.objects.filter(
+            record_type=record_type, record_id=record_id
+        ).select_related("changed_by")
+        return Response(RecordChangeSerializer(changes, many=True).data)

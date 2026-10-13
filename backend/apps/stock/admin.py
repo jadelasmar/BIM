@@ -9,6 +9,7 @@ from .models import (
     ClientReturnItem,
     ClientReturnRecord,
     ClientUpgradeRecord,
+    RecordChange,
     DeliveryItem,
     DeliveryRecord,
     InternalParty,
@@ -89,48 +90,48 @@ class ProductAdmin(admin.ModelAdmin):
             # permanently left inventory. See ProductUnit.IN_STOCK_STATUSES.
             total_unit_count=Count(
                 "units",
-                filter=Q(units__isactive=True, units__status__in=ProductUnit.IN_STOCK_STATUSES),
+                filter=Q(units__isactive=True, units__owner_client__isnull=True, units__status__in=ProductUnit.IN_STOCK_STATUSES),
             ),
             available_unit_count=Count(
                 "units",
                 filter=Q(
                     units__status=ProductUnit.STATUS_AVAILABLE,
-                    units__isactive=True,
+                    units__isactive=True, units__owner_client__isnull=True,
                 ),
             ),
             reserved_unit_count=Count(
                 "units",
                 filter=Q(
                     units__status=ProductUnit.STATUS_RESERVED,
-                    units__isactive=True,
+                    units__isactive=True, units__owner_client__isnull=True,
                 ),
             ),
             issued_unit_count=Count(
                 "units",
                 filter=Q(
                     units__status=ProductUnit.STATUS_ISSUED,
-                    units__isactive=True,
+                    units__isactive=True, units__owner_client__isnull=True,
                 ),
             ),
             sold_unit_count=Count(
                 "units",
                 filter=Q(
                     units__status=ProductUnit.STATUS_SOLD,
-                    units__isactive=True,
+                    units__isactive=True, units__owner_client__isnull=True,
                 ),
             ),
             repair_unit_count=Count(
                 "units",
                 filter=Q(
                     units__status=ProductUnit.STATUS_REPAIR,
-                    units__isactive=True,
+                    units__isactive=True, units__owner_client__isnull=True,
                 ),
             ),
             removed_unit_count=Count(
                 "units",
                 filter=Q(
                     units__status=ProductUnit.STATUS_REMOVED,
-                    units__isactive=True,
+                    units__isactive=True, units__owner_client__isnull=True,
                 ),
             ),
         )
@@ -968,3 +969,22 @@ class ClientUpgradeRecordAdmin(admin.ModelAdmin):
     readonly_fields = ("upgrade_number", "crdate")
     autocomplete_fields = ("created_by", "cancelled_by")
     ordering = ("-upgrade_date", "-upgrade_number")
+
+
+@admin.register(RecordChange)
+class RecordChangeAdmin(admin.ModelAdmin):
+    """Read-only: the edit history is a log and is never changed by hand."""
+
+    list_display = ("changed_at", "record_number", "field_label", "old_value", "new_value", "changed_by")
+    list_filter = ("record_type", "changed_at")
+    search_fields = ("record_number", "field_label", "old_value", "new_value")
+    ordering = ("-changed_at", "-id")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

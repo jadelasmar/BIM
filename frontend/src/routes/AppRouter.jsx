@@ -1493,6 +1493,7 @@ function ReceivingRecordDetailPage({ data }) {
         </div>
         </>
       ) : null}
+      <RecordHistory data={data} type="receiving" id={receivingId} refreshKey={reloadKey} />
     </Shell>
   );
 }
@@ -2178,6 +2179,7 @@ function ReservationRecordDetailPage({ data }) {
           ) : null}
         </aside>
       </div>
+      <RecordHistory data={data} type="reservation" id={reservationId} refreshKey={reloadKey} />
     </Shell>
   );
 }
@@ -2930,6 +2932,7 @@ function IssueRecordDetailPage({ data }) {
           ) : null}
         </aside>
       </div>
+      <RecordHistory data={data} type="issue" id={issueId} refreshKey={reloadKey} />
     </Shell>
   );
 }
@@ -3449,6 +3452,11 @@ function RepairRecordDetailPage({ data }) {
   const canResolveRepair = Boolean(data.permissions?.canResolveRepair);
   const canEditRepair = Boolean(data.permissions?.canEditRepair);
   const partyLookups = usePartyLookups(data, { suppliers: true, enabled: editing });
+  // A client's own item can only be closed by handing it back to the client.
+  const hasClientOwnedItems = (record?.items || []).some((item) => item.is_client_owned);
+  useEffect(() => {
+    if (hasClientOwnedItems) setResolution("sold");
+  }, [hasClientOwnedItems]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -3717,11 +3725,15 @@ function RepairRecordDetailPage({ data }) {
                 <SelectInput
                   value={resolution}
                   onChange={setResolution}
-                  options={[
-                    ["available", record.client_return_number ? "Return to stock" : "Return to available"],
-                    ["inactive", "Deactivate unit"],
-                    ...(record.client_return_number ? [["sold", "Return to original client"]] : [])
-                  ]}
+                  options={
+                    hasClientOwnedItems
+                      ? [["sold", "Return to client"]]
+                      : [
+                          ["available", record.client_return_number ? "Return to stock" : "Return to available"],
+                          ["inactive", "Deactivate unit"],
+                          ...(record.client_return_number ? [["sold", "Return to original client"]] : [])
+                        ]
+                  }
                   disabled={!isActive}
                 />
               </Field>
@@ -3742,6 +3754,7 @@ function RepairRecordDetailPage({ data }) {
           ) : null}
         </aside>
       </div>
+      <RecordHistory data={data} type="repair" id={repairId} refreshKey={reloadKey} />
     </Shell>
   );
 }
@@ -3817,7 +3830,14 @@ function RepairItemsTable({ items }) {
             <tbody>
               {items.map((item) => (
                 <tr key={item.id} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
-                  <td className="px-4 py-3 font-semibold text-white">{item.product_name}</td>
+                  <td className="px-4 py-3 font-semibold text-white">
+                    {item.product_name}
+                    {item.is_client_owned ? (
+                      <span className="ml-2 rounded border border-nexus-line px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
+                        Client item
+                      </span>
+                    ) : null}
+                  </td>
                   <td className="px-4 py-3 font-mono text-xs text-[var(--bim-orange-text)]">{item.product_sku || "-"}</td>
                   <td className="px-4 py-3 text-zinc-400">#{item.product_unit}</td>
                   <td className="px-4 py-3 font-mono text-xs text-zinc-300">{item.serial_number || "-"}</td>
@@ -3851,6 +3871,31 @@ function CreateRepairPage({ data }) {
     notes: ""
   });
   const partyLookups = usePartyLookups(data, { clients: true, suppliers: true, internalParties: true });
+  // Items a client brought in that are not in the system yet (source "client_item").
+  const [clientItems, setClientItems] = useState([{ product: "", serial: "" }]);
+  const [productOptions, setProductOptions] = useState([]);
+  const isClientItem = form.source === "client_item";
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(data.api.products, { signal: controller.signal })
+      .then((response) => (response.ok ? response.json() : []))
+      .then((products) =>
+        setProductOptions(
+          products.map((product) => ({
+            id: product.id,
+            name: `${product.display_name || product.descript || product.name || "Product"} (${product.sku})`
+          }))
+        )
+      )
+      .catch(() => {});
+    return () => controller.abort();
+  }, [data.api.products]);
+
+  function updateClientItem(index, field, value) {
+    setClientItems((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, [field]: value } : item)));
+  }
+
   const [units, setUnits] = useState([]);
   const [query, setQuery] = useState("");
   const [selectedUnits, setSelectedUnits] = useState([]);
@@ -3902,7 +3947,17 @@ function CreateRepairPage({ data }) {
   async function saveRepair() {
     setSaving(true);
     try {
-      if (!form.vendorValue || !form.repairReason.trim() || !selectedUnits.length) {
+      if (isClientItem) {
+        if (!form.vendorValue || !form.repairReason.trim()) {
+          throw new Error("Supplier and repair reason are required.");
+        }
+        if (!form.sourceClientValue) {
+          throw new Error("Choose the client this item belongs to.");
+        }
+        if (clientItems.some((item) => !item.product || !item.serial.trim())) {
+          throw new Error("Choose the product and enter the serial number for every item.");
+        }
+      } else if (!form.vendorValue || !form.repairReason.trim() || !selectedUnits.length) {
         throw new Error("Supplier, repair reason, and at least one available stock unit are required.");
       }
       if (form.source === "client_return" && !form.sourceClientValue) {
@@ -3925,11 +3980,20 @@ function CreateRepairPage({ data }) {
             form.source,
             form.sourceClientValue,
             form.sourceInternalValue,
-            partyLookups.internalParties
+            partyLookups.internalParties,
+            partyLookups.clients
           ),
           repair_date: form.repairDate || null,
           notes: form.notes,
-          unit_ids: selectedUnits.map((unit) => unit.id)
+          ...(isClientItem
+            ? {
+                client_items: clientItems.map((item) => ({
+                  product: Number(item.product),
+                  serial_number: item.serial.trim()
+                })),
+                unit_ids: []
+              }
+            : { unit_ids: selectedUnits.map((unit) => unit.id) })
         })
       });
 
@@ -3955,7 +4019,11 @@ function CreateRepairPage({ data }) {
           <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
             <div>
               <h1 className="bim-page-title">Create Repair</h1>
-              <p className="bim-page-description">Move active available stock into repair, testing, or diagnosis.</p>
+              <p className="bim-page-description">
+                {isClientItem
+                  ? "Take in an item that belongs to a client and send it for repair. It is not part of your stock."
+                  : "Move active available stock into repair, testing, or diagnosis."}
+              </p>
             </div>
             <div className="flex flex-wrap gap-3 text-sm">
               <a href="/operations/repairs/" className="inline-flex h-9 items-center gap-2 rounded-md px-3 font-semibold text-zinc-200 hover:bg-nexus-panel">
@@ -4008,6 +4076,45 @@ function CreateRepairPage({ data }) {
               </div>
             </FormSection>
 
+            {isClientItem ? (
+            <FormSection icon="box" title="Client's Items" subtitle="Each item the client brought in: choose its product and enter its serial number.">
+              <div className="space-y-4">
+                {clientItems.map((item, index) => (
+                  <div key={index} className="grid gap-3 rounded-lg border border-nexus-line bg-black/30 p-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
+                    <SearchableCreatableSelect
+                      label="Product"
+                      required
+                      value={item.product}
+                      onChange={(value) => updateClientItem(index, "product", value)}
+                      options={productOptions}
+                      placeholder="Search product..."
+                    />
+                    <Field label="Serial Number" required>
+                      <TextInput value={item.serial} onChange={(value) => updateClientItem(index, "serial", value)} placeholder="Serial number on the item" />
+                    </Field>
+                    {clientItems.length > 1 ? (
+                      <button
+                        type="button"
+                        onClick={() => setClientItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                        className="mb-2 text-zinc-500 hover:text-nexus-red"
+                        aria-label="Remove item"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    ) : null}
+                  </div>
+                ))}
+                <Button type="button" variant="secondary" onClick={() => setClientItems((current) => [...current, { product: "", serial: "" }])}>
+                  <Plus className="h-4 w-4" />
+                  Add another item
+                </Button>
+                <p className="text-xs text-zinc-500">
+                  If the serial number is already in the system, use that unit instead: Create Client Return for a sold unit.
+                  The product must already exist in the catalogue (Add Product first if it does not).
+                </p>
+              </div>
+            </FormSection>
+            ) : (
             <FormSection icon="box" title="Available Units" subtitle="Only active available units can be sent to repair. Reserved, issued, and sold units must use their own workflows before repair.">
               <SearchBar
                 value={query}
@@ -4035,6 +4142,7 @@ function CreateRepairPage({ data }) {
 
               <SelectedUnitsTable units={selectedUnits} onRemove={removeUnit} emptyText="No units selected for repair yet." />
             </FormSection>
+            )}
           </div>
         </div>
 
@@ -4052,7 +4160,7 @@ function CreateRepairPage({ data }) {
                 value={REPAIR_SOURCE_OPTIONS.find(([source]) => source === form.source)?.[1] || "-"}
               />
               <DetailRow label="Reason" value={form.repairReason || "-"} />
-              <DetailRow label="Selected Units" value={selectedUnits.length} strong />
+              <DetailRow label={isClientItem ? "Items" : "Selected Units"} value={isClientItem ? clientItems.length : selectedUnits.length} strong />
             </dl>
           </section>
         </aside>
@@ -4912,6 +5020,7 @@ function ClientUpgradeRecordDetailPage({ data }) {
           </dl>
         </aside>
       </div>
+      <RecordHistory data={data} type="client_upgrade" id={upgradeId} refreshKey={reloadKey} />
     </Shell>
   );
 }
@@ -5891,6 +6000,7 @@ function ClientReturnRecordDetailPage({ data }) {
           </div>
         </>
       ) : null}
+      <RecordHistory data={data} type="client_return" id={returnId} refreshKey={reloadKey} />
     </Shell>
   );
 }
@@ -6780,6 +6890,7 @@ function DeliveryRecordDetailPage({ data }) {
         </div>
         </>
       ) : null}
+      <RecordHistory data={data} type="delivery" id={deliveryId} refreshKey={reloadKey} />
     </Shell>
   );
 }
@@ -7990,7 +8101,14 @@ function ProductUnitRegister({ units, accessDenied, canAccessAdmin = false }) {
               <tbody>
                 {visibleUnits.map((unit) => (
                   <tr key={unit.id} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
-                    <td className="px-4 py-3 font-mono text-xs text-[var(--bim-orange-text)]">{unit.serial_number}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-[var(--bim-orange-text)]">
+                      {unit.serial_number}
+                      {unit.owner_client_name ? (
+                        <span className="ml-2 rounded border border-nexus-line px-1.5 py-0.5 font-sans text-[10px] font-semibold uppercase tracking-wide text-zinc-400" title={`Belongs to ${unit.owner_client_name}`}>
+                          Client item
+                        </span>
+                      ) : null}
+                    </td>
                     <td className="px-4 py-3">
                       <Status status={unit.status_label || unit.status} statusClass={unit.status} />
                     </td>
@@ -9400,7 +9518,8 @@ const RESERVED_FOR_TYPE_OPTIONS = [
 const REPAIR_SOURCE_OPTIONS = [
   ["internal_stock", "Internal stock"],
   ["client_return", "Client return (warranty)"],
-  ["internal_party", "Employee"]
+  ["internal_party", "Employee"],
+  ["client_item", "Client's item (not in system)"]
 ];
 
 // Loads the lookup lists the party pickers need. Failed/forbidden requests just
@@ -9640,15 +9759,22 @@ function RepairSourcePicker({ source, onSourceChange, clientValue, onClientChang
           placeholder="Select source"
         />
       </Field>
-      {source === "client_return" ? (
+      {source === "client_return" || source === "client_item" ? (
         <SearchableCreatableSelect
           label="Client"
           required
           value={clientValue}
           onChange={onClientChange}
           options={lookups.clients}
-          placeholder="Search clients"
+          onCreate={pendingNamedPartyCreator(lookups.clients, lookups.setClients)}
+          placeholder="Search or create client..."
         />
+      ) : null}
+      {source === "client_item" ? (
+        <p className="-mt-2 text-xs text-zinc-500">
+          For an item the client owns that was never entered here (for example sold before the system was used). It is
+          added in Repair, belongs to the client, and is not counted in your stock. It can only go back to the client.
+        </p>
       ) : null}
       {source === "internal_party" ? (
         <InternalPartyPicker
@@ -9664,8 +9790,10 @@ function RepairSourcePicker({ source, onSourceChange, clientValue, onClientChang
   );
 }
 
-function repairSourcePayload(source, clientValue, internalValue, internalParties) {
-  if (source === "client_return") {
+function repairSourcePayload(source, clientValue, internalValue, internalParties, clients = []) {
+  if (source === "client_return" || source === "client_item") {
+    const client = clients.find((candidate) => String(candidate.id) === String(clientValue));
+    if (client?.__pending) return { source, source_client_name_input: client.name };
     return { source, ...(clientValue ? { source_client: Number(clientValue) } : {}) };
   }
   if (source === "internal_party") {
@@ -10447,6 +10575,65 @@ function PanelHeader({ title, action, actionHref, badge }) {
         <button className="text-xs font-semibold text-[var(--bim-orange-text)]">{action}</button>
       ) : null}
     </div>
+  );
+}
+
+// Edit history of one record (who changed which field, from what to what, when).
+// Written by the backend whenever a record's details are edited; reloads when the
+// page does (refreshKey) so a just-saved edit shows up straight away.
+function RecordHistory({ data, type, id, refreshKey = 0 }) {
+  const [changes, setChanges] = useState(null);
+
+  useEffect(() => {
+    if (!id) return undefined;
+    const controller = new AbortController();
+    fetch(`${data.api.recordHistory}?type=${type}&id=${id}`, { signal: controller.signal })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((rows) => setChanges(rows))
+      .catch(() => {});
+    return () => controller.abort();
+  }, [data.api.recordHistory, type, id, refreshKey]);
+
+  if (!changes) return null;
+
+  const valueText = (value) => (value ? value : <span className="text-zinc-600">(empty)</span>);
+
+  return (
+    <section className="mt-5 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel" aria-label="Edit history">
+      <PanelHeader title="Edit History" badge={changes.length ? formatCount(changes.length) : null} />
+      {changes.length ? (
+        <div className="overflow-x-auto border-t border-nexus-line">
+          <table className="min-w-full text-left text-sm">
+            <thead className="bg-zinc-800/80 text-zinc-400">
+              <tr>
+                <th className="px-4 py-3 font-medium">When</th>
+                <th className="px-4 py-3 font-medium">Field</th>
+                <th className="px-4 py-3 font-medium">From</th>
+                <th className="px-4 py-3 font-medium">To</th>
+                <th className="px-4 py-3 font-medium">By</th>
+              </tr>
+            </thead>
+            <tbody>
+              {changes.map((change) => (
+                <tr key={change.id} className="border-t border-nexus-line align-top">
+                  <td className="whitespace-nowrap px-4 py-3 text-zinc-300">
+                    {new Date(change.changed_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
+                  </td>
+                  <td className="px-4 py-3 font-semibold text-white">{change.field_label}</td>
+                  <td className="whitespace-pre-wrap break-words px-4 py-3 text-zinc-400">{valueText(change.old_value)}</td>
+                  <td className="whitespace-pre-wrap break-words px-4 py-3 text-zinc-200">{valueText(change.new_value)}</td>
+                  <td className="px-4 py-3 text-zinc-300">{change.changed_by_name || "-"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="border-t border-nexus-line px-4 py-5 text-sm text-zinc-500">
+          No edits recorded yet. Changes made to this record's details from now on are listed here.
+        </p>
+      )}
+    </section>
   );
 }
 

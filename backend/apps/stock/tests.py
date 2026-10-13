@@ -65,6 +65,7 @@ from .models import (
     RepairRecord,
     ReservationItem,
     ClientUpgradeRecord,
+    RecordChange,
     ReservationRecord,
     StockMovement,
     Supplier,
@@ -3885,6 +3886,165 @@ class InventoryApiTests(TestCase):
         self.assertEqual(response.json()[0]["issue"], issue.pk)
         self.assertEqual(response.json()[0]["issue_number"], issue.issue_number)
 
+    def _client_item_payload(self, **overrides):
+        payload = {
+            "source": "client_item",
+            "source_client_name_input": "Walk-in Client",
+            "client_items": [{"product": self.product.pk, "serial_number": "CLIENT-SN-1"}],
+            "repair_reason": "Screen not working",
+            "vendor": self.supplier.pk,
+        }
+        payload.update(overrides)
+        return payload
+
+    def test_clients_own_item_can_be_repaired_without_being_in_stock(self):
+        user = self._user_with_permissions(
+            "view_repairrecord",
+            "add_repairrecord",
+            "change_repairrecord",
+            "view_deliveryrecord",
+            "change_productunit",
+        )
+        self.client.force_login(user)
+        stock_before = (
+            self.product.total_units,
+            self.product.available_units,
+            self.product.repair_units,
+        )
+
+        response = self.client.post(
+            "/api/stock/repairs/", self._client_item_payload(), content_type="application/json"
+        )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        repair = RepairRecord.objects.get(pk=response.json()["id"])
+        self.assertEqual(repair.source, RepairRecord.SOURCE_CLIENT_ITEM)
+        self.assertEqual(repair.source_client.name, "Walk-in Client")
+        unit = ProductUnit.objects.get(serial_number="CLIENT-SN-1")
+        self.assertEqual(unit.status, ProductUnit.STATUS_REPAIR)
+        self.assertEqual(unit.owner_client, repair.source_client)
+        self.assertTrue(response.json()["items"][0]["is_client_owned"])
+        movement = StockMovement.objects.get(product_unit=unit)
+        self.assertEqual(movement.movement_type, StockMovement.TYPE_CLIENT_ITEM_RECEIVED)
+        self.assertEqual(movement.from_status, "")
+        self.assertEqual(movement.to_status, ProductUnit.STATUS_REPAIR)
+
+        # It is the client's item, not our stock: no count moves.
+        self.assertEqual(
+            (
+                self.product.total_units,
+                self.product.available_units,
+                self.product.repair_units,
+            ),
+            stock_before,
+        )
+        listing = self.client.get("/api/stock/products/").json()
+        listed = next(row for row in listing if row["id"] == self.product.pk)
+        self.assertEqual(listed["total_units"], stock_before[0])
+
+        # The only way to close it is back to the client.
+        wrong = self.client.post(
+            f"/api/stock/repairs/{repair.pk}/resolve/",
+            {"resolution": "available", "resolution_notes": "Fixed"},
+            content_type="application/json",
+        )
+        self.assertEqual(wrong.status_code, 400)
+        back = self.client.post(
+            f"/api/stock/repairs/{repair.pk}/resolve/",
+            {"resolution": "sold", "resolution_notes": "Fixed"},
+            content_type="application/json",
+        )
+        self.assertEqual(back.status_code, 200, back.content)
+        unit.refresh_from_db()
+        self.assertEqual(unit.status, ProductUnit.STATUS_SOLD)
+        delivery = DeliveryRecord.objects.get(from_repair=repair)
+        self.assertTrue(delivery.is_warranty_return)
+        self.assertEqual(delivery.client, repair.source_client)
+        self.assertEqual(self.product.total_units, stock_before[0])
+
+    def test_clients_item_serial_must_be_new_and_entered_correctly(self):
+        user = self._user_with_permissions(
+            "view_repairrecord",
+            "add_repairrecord",
+            "change_productunit",
+        )
+        self.client.force_login(user)
+
+        existing = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        in_system = self.client.post(
+            "/api/stock/repairs/",
+            self._client_item_payload(
+                client_items=[{"product": self.product.pk, "serial_number": existing.serial_number}]
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(in_system.status_code, 400)
+        self.assertIn("already in the system", str(in_system.json()))
+
+        twice = self.client.post(
+            "/api/stock/repairs/",
+            self._client_item_payload(
+                client_items=[
+                    {"product": self.product.pk, "serial_number": "DUP-1"},
+                    {"product": self.product.pk, "serial_number": "dup-1"},
+                ]
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(twice.status_code, 400)
+
+        no_items = self.client.post(
+            "/api/stock/repairs/",
+            self._client_item_payload(client_items=[]),
+            content_type="application/json",
+        )
+        self.assertEqual(no_items.status_code, 400)
+
+        picked_too = self.client.post(
+            "/api/stock/repairs/",
+            self._client_item_payload(unit_ids=[existing.pk]),
+            content_type="application/json",
+        )
+        self.assertEqual(picked_too.status_code, 400)
+
+        stock_repair_with_items = self.client.post(
+            "/api/stock/repairs/",
+            {
+                "repair_reason": "Mixed",
+                "vendor": self.supplier.pk,
+                "unit_ids": [existing.pk],
+                "client_items": [{"product": self.product.pk, "serial_number": "X-1"}],
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(stock_repair_with_items.status_code, 400)
+        self.assertFalse(ProductUnit.objects.filter(serial_number__in=["DUP-1", "dup-1", "X-1"]).exists())
+        self.assertEqual(RepairRecord.objects.count(), 0)
+
+    def test_clients_own_item_cannot_be_removed_from_inventory(self):
+        user = self._user_with_permissions(
+            "view_repairrecord",
+            "add_repairrecord",
+            "add_removalrecord",
+            "change_productunit",
+        )
+        self.client.force_login(user)
+        created = self.client.post(
+            "/api/stock/repairs/", self._client_item_payload(), content_type="application/json"
+        )
+        self.assertEqual(created.status_code, 201, created.content)
+        unit = ProductUnit.objects.get(serial_number="CLIENT-SN-1")
+
+        response = self.client.post(
+            "/api/stock/removals/",
+            {"reason": "lost", "unit_ids": [unit.pk]},
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        unit.refresh_from_db()
+        self.assertEqual(unit.status, ProductUnit.STATUS_REPAIR)
+
     def test_repair_api_can_create_and_change_to_a_new_supplier(self):
         user = self._user_with_permissions(
             "view_repairrecord",
@@ -4637,6 +4797,137 @@ class InventoryApiTests(TestCase):
 
         self.assertIn("client_upgrades", groups)
         self.assertEqual(groups["client_upgrades"]["results"][0]["title"][:4], "UPG-")
+
+    def test_edits_are_logged_in_record_history_with_old_and_new_values(self):
+        user = self._user_with_permissions(
+            "change_deliveryrecord",
+            "view_deliveryrecord",
+        )
+        client_obj = Client.objects.create(name="History Client")
+        delivery = DeliveryRecord.objects.create(
+            client=client_obj,
+            customer_name=client_obj.name,
+            invoice_number="75638/244",
+        )
+        self.client.force_login(user)
+
+        response = self.client.patch(
+            f"/api/stock/deliveries/{delivery.pk}/",
+            {"invoice_number": "75638/224", "receiver_name": "New Receiver"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+
+        changes = {change.field_label: change for change in RecordChange.objects.all()}
+        self.assertEqual(set(changes), {"Invoice number", "Receiver"})
+        invoice = changes["Invoice number"]
+        self.assertEqual((invoice.old_value, invoice.new_value), ("75638/244", "75638/224"))
+        self.assertEqual(invoice.changed_by, user)
+        self.assertEqual(invoice.record_type, "delivery")
+        self.assertEqual(invoice.record_id, delivery.pk)
+        self.assertEqual(invoice.record_number, delivery.delivery_number)
+
+        # Saving again with the same values changes nothing, so logs nothing.
+        again = self.client.patch(
+            f"/api/stock/deliveries/{delivery.pk}/",
+            {"invoice_number": "75638/224"},
+            content_type="application/json",
+        )
+        self.assertEqual(again.status_code, 200)
+        self.assertEqual(RecordChange.objects.count(), 2)
+
+        history = self.client.get(
+            "/api/stock/record-history/", {"type": "delivery", "id": delivery.pk}
+        )
+        self.assertEqual(history.status_code, 200)
+        rows = history.json()
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]["changed_by_name"], user.get_username())
+        self.assertEqual(
+            {(row["field_label"], row["old_value"], row["new_value"]) for row in rows},
+            {
+                ("Invoice number", "75638/244", "75638/224"),
+                ("Receiver", "", "New Receiver"),
+            },
+        )
+
+        # History is per record, and the type is validated.
+        other = self.client.get("/api/stock/record-history/", {"type": "delivery", "id": delivery.pk + 99})
+        self.assertEqual(other.json(), [])
+        self.assertEqual(
+            self.client.get("/api/stock/record-history/", {"type": "nonsense", "id": 1}).status_code, 400
+        )
+
+    def test_every_record_type_logs_its_edits(self):
+        user = self._user_with_permissions(
+            "change_receivingrecord",
+            "change_reservationrecord",
+            "change_issuerecord",
+            "change_repairrecord",
+            "change_clientreturnrecord",
+            "change_clientupgraderecord",
+        )
+        today = timezone.localdate()
+        cases = [
+            (
+                "receiving",
+                "/api/stock/receiving-records/",
+                ReceivingRecord.objects.create(po_number="PO-1"),
+                {"po_number": "PO-2"},
+                ("Purchase Order", "PO-1", "PO-2"),
+            ),
+            (
+                "reservation",
+                "/api/stock/reservations/",
+                ReservationRecord.objects.create(reserved_for="Front Desk", reason="old reason"),
+                {"reason": "new reason"},
+                ("Reason", "old reason", "new reason"),
+            ),
+            (
+                "issue",
+                "/api/stock/issues/",
+                IssueRecord.objects.create(issued_to="Field Tech", reason="old"),
+                {"reason": "new"},
+                ("Reason", "old", "new"),
+            ),
+            (
+                "repair",
+                "/api/stock/repairs/",
+                RepairRecord.objects.create(repair_reason="Screen crack"),
+                {"repair_reason": "Cracked glass"},
+                ("Reason", "Screen crack", "Cracked glass"),
+            ),
+            (
+                "client_return",
+                "/api/stock/client-returns/",
+                ClientReturnRecord.objects.create(
+                    customer_name="Acme Co",
+                    resolution=ClientReturnRecord.RESOLUTION_AVAILABLE,
+                    reason="old",
+                ),
+                {"reason": "new"},
+                ("Reason", "old", "new"),
+            ),
+            (
+                "client_upgrade",
+                "/api/stock/client-upgrades/",
+                ClientUpgradeRecord.objects.create(client_name="Upgrade Co", updater="740"),
+                {"updater": "741"},
+                ("Updater", "740", "741"),
+            ),
+        ]
+        self.client.force_login(user)
+
+        for record_type, base_url, record, payload, expected in cases:
+            response = self.client.patch(
+                f"{base_url}{record.pk}/", payload, content_type="application/json"
+            )
+            self.assertEqual(response.status_code, 200, (record_type, response.content))
+            change = RecordChange.objects.get(record_type=record_type, record_id=record.pk)
+            self.assertEqual(
+                (change.field_label, change.old_value, change.new_value), expected, record_type
+            )
+            self.assertEqual(change.changed_by, user, record_type)
 
     def test_delivery_api_edits_invoice_number(self):
         user = self._user_with_permissions(

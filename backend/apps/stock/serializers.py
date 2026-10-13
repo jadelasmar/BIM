@@ -9,6 +9,7 @@ from .models import (
     ClientReturnItem,
     ClientReturnRecord,
     ClientUpgradeRecord,
+    RecordChange,
     DeliveryItem,
     DeliveryRecord,
     InternalParty,
@@ -370,6 +371,9 @@ class ProductUnitSerializer(serializers.ModelSerializer):
     model_name = serializers.CharField(source="product.model.modelname", read_only=True)
     supplier_name = serializers.SerializerMethodField()
     status_label = serializers.SerializerMethodField()
+    owner_client_name = serializers.CharField(
+        source="owner_client.name", read_only=True, default=""
+    )
 
     class Meta:
         model = ProductUnit
@@ -389,6 +393,8 @@ class ProductUnitSerializer(serializers.ModelSerializer):
             "status_label",
             "supplier",
             "supplier_name",
+            "owner_client",
+            "owner_client_name",
             "cost",
             "selling_price",
             "purchase_date",
@@ -397,7 +403,7 @@ class ProductUnitSerializer(serializers.ModelSerializer):
             "crdate",
             "isactive",
         )
-        read_only_fields = ("crdate", "sold_date")
+        read_only_fields = ("crdate", "sold_date", "owner_client", "owner_client_name")
 
     def get_product_name(self, obj):
         return str(obj.product)
@@ -794,7 +800,11 @@ class ReservationRecordCorrectionSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         try:
-            return update_reservation_record_header(instance, **validated_data)
+            return update_reservation_record_header(
+                instance,
+                changed_by=getattr(self.context.get("request"), "user", None),
+                **validated_data,
+            )
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.messages) from exc
 
@@ -989,7 +999,11 @@ class IssueRecordCorrectionSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         try:
-            return update_issue_record_header(instance, **validated_data)
+            return update_issue_record_header(
+                instance,
+                changed_by=getattr(self.context.get("request"), "user", None),
+                **validated_data,
+            )
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.messages) from exc
 
@@ -998,6 +1012,7 @@ class IssueRecordCorrectionSerializer(serializers.ModelSerializer):
 
 
 class RepairItemSerializer(serializers.ModelSerializer):
+    is_client_owned = serializers.SerializerMethodField()
     product_name = serializers.SerializerMethodField()
     product_sku = serializers.CharField(source="product.sku", read_only=True)
     serial_number = serializers.CharField(
@@ -1024,6 +1039,7 @@ class RepairItemSerializer(serializers.ModelSerializer):
             "serial_number",
             "product_unit_status",
             "product_unit_status_label",
+            "is_client_owned",
             "notes",
             "resolution_notes",
             "crdate",
@@ -1031,8 +1047,18 @@ class RepairItemSerializer(serializers.ModelSerializer):
         )
         read_only_fields = fields
 
+    def get_is_client_owned(self, obj):
+        return bool(obj.product_unit_id and obj.product_unit.owner_client_id)
+
     def get_product_name(self, obj):
         return str(obj.product)
+
+
+class ClientItemInputSerializer(serializers.Serializer):
+    """One item a client brought in that is not in the system yet."""
+
+    product = serializers.PrimaryKeyRelatedField(queryset=Product.objects.filter(isactive=True))
+    serial_number = serializers.CharField(max_length=150)
 
 
 class RepairRecordSerializer(serializers.ModelSerializer):
@@ -1041,8 +1067,15 @@ class RepairRecordSerializer(serializers.ModelSerializer):
     unit_ids = serializers.ListField(
         child=serializers.IntegerField(),
         write_only=True,
-        required=True,
-        allow_empty=False,
+        required=False,
+        allow_empty=True,
+        default=list,
+    )
+    client_items = ClientItemInputSerializer(many=True, write_only=True, required=False)
+    source_client_name_input = serializers.CharField(
+        required=False,
+        write_only=True,
+        allow_blank=True,
     )
     vendor = serializers.PrimaryKeyRelatedField(
         queryset=Supplier.objects.filter(isactive=True),
@@ -1134,6 +1167,8 @@ class RepairRecordSerializer(serializers.ModelSerializer):
             "client_return_number",
             "total_units",
             "unit_ids",
+            "client_items",
+            "source_client_name_input",
             "items",
             "crdate",
             "isactive",
@@ -1177,14 +1212,14 @@ class RepairRecordSerializer(serializers.ModelSerializer):
         return delivery.delivery_number if delivery else ""
 
     def get_source_party(self, obj):
-        if obj.source == RepairRecord.SOURCE_CLIENT_RETURN:
+        if obj.source in (RepairRecord.SOURCE_CLIENT_RETURN, RepairRecord.SOURCE_CLIENT_ITEM):
             return _party_payload("client", obj.source_client)
         if obj.source == RepairRecord.SOURCE_INTERNAL_PARTY:
             return _party_payload("internal", obj.source_internal)
         return None
 
     def create(self, validated_data):
-        unit_ids = validated_data.pop("unit_ids")
+        unit_ids = validated_data.pop("unit_ids", [])
         request = self.context.get("request")
         try:
             return create_repair_record(
@@ -1221,7 +1256,11 @@ class RepairRecordCorrectionSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         try:
-            return update_repair_record_header(instance, **validated_data)
+            return update_repair_record_header(
+                instance,
+                changed_by=getattr(self.context.get("request"), "user", None),
+                **validated_data,
+            )
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.messages) from exc
 
@@ -1567,7 +1606,11 @@ class ClientReturnRecordCorrectionSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         try:
-            return update_client_return_record_header(instance, **validated_data)
+            return update_client_return_record_header(
+                instance,
+                changed_by=getattr(self.context.get("request"), "user", None),
+                **validated_data,
+            )
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.messages) from exc
 
@@ -1774,6 +1817,7 @@ class DeliveryRecordCorrectionSerializer(serializers.ModelSerializer):
                 if "notes" in validated_data
                 else instance.notes,
                 items=item_updates,
+                changed_by=getattr(self.context.get("request"), "user", None),
             )
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.messages) from exc
@@ -1998,6 +2042,7 @@ class ReceivingRecordCorrectionSerializer(serializers.ModelSerializer):
                 if "notes" in validated_data
                 else instance.notes,
                 items=item_updates,
+                changed_by=getattr(self.context.get("request"), "user", None),
             )
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.messages) from exc
@@ -2140,7 +2185,11 @@ class ClientUpgradeRecordCorrectionSerializer(serializers.ModelSerializer):
             validated_data.pop("upgrade_date")
             validated_data["clear_upgrade_date"] = True
         try:
-            return update_client_upgrade_record(instance, **validated_data)
+            return update_client_upgrade_record(
+                instance,
+                changed_by=getattr(self.context.get("request"), "user", None),
+                **validated_data,
+            )
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.messages) from exc
 
@@ -2162,3 +2211,25 @@ class ClientUpgradeRecordCancelSerializer(serializers.Serializer):
             )
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.messages) from exc
+
+
+class RecordChangeSerializer(serializers.ModelSerializer):
+    changed_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RecordChange
+        fields = (
+            "id",
+            "record_type",
+            "record_id",
+            "record_number",
+            "field_label",
+            "old_value",
+            "new_value",
+            "changed_by_name",
+            "changed_at",
+        )
+        read_only_fields = fields
+
+    def get_changed_by_name(self, obj):
+        return obj.changed_by.get_username() if obj.changed_by_id else ""

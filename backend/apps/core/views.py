@@ -278,6 +278,7 @@ def _command_center_initial_data(
             "repairDetail": "/api/stock/repairs/{id}/",
             "removals": "/api/stock/removals/",
             "removalDetail": "/api/stock/removals/{id}/",
+            "recordHistory": "/api/stock/record-history/",
             "clientUpgrades": "/api/stock/client-upgrades/",
             "clientUpgradeDetail": "/api/stock/client-upgrades/{id}/",
             "clientReturns": "/api/stock/client-returns/",

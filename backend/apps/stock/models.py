@@ -88,7 +88,7 @@ class Product(models.Model):
         return self.descript
 
     def active_unit_count(self, status=None):
-        units = self.units.filter(isactive=True)
+        units = self.units.filter(isactive=True, owner_client__isnull=True)
         if status:
             units = units.filter(status=status)
 
@@ -98,6 +98,7 @@ class Product(models.Model):
     def total_units(self):
         return self.units.filter(
             isactive=True,
+            owner_client__isnull=True,
             status__in=ProductUnit.IN_STOCK_STATUSES,
         ).count()
 
@@ -243,6 +244,17 @@ class ProductUnit(models.Model):
 
     supplier = models.ForeignKey(
         Supplier, on_delete=models.SET_NULL, blank=True, null=True
+    )
+    # Set when the unit belongs to a client: they handed it to us for repair and we
+    # never bought or sold it. It is tracked through the repair like any unit, but
+    # it is not our stock, so it is left out of every stock count (see
+    # Product.total_units and the other aggregates) and cannot be removed.
+    owner_client = models.ForeignKey(
+        Client,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="owned_units",
     )
 
     cost = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -822,11 +834,13 @@ class RepairRecord(models.Model):
     SOURCE_INTERNAL_STOCK = "internal_stock"
     SOURCE_CLIENT_RETURN = "client_return"
     SOURCE_INTERNAL_PARTY = "internal_party"
+    SOURCE_CLIENT_ITEM = "client_item"
 
     SOURCE_CHOICES = [
         (SOURCE_INTERNAL_STOCK, "Internal stock"),
         (SOURCE_CLIENT_RETURN, "Client return (warranty)"),
-        (SOURCE_INTERNAL_PARTY, "Employee or department"),
+        (SOURCE_INTERNAL_PARTY, "Employee"),
+        (SOURCE_CLIENT_ITEM, "Client's item (not in system)"),
     ]
 
     client_return = models.ForeignKey(
@@ -1210,6 +1224,7 @@ class StockMovement(models.Model):
     TYPE_CLIENT_RETURN_CANCELLED = "client_return_cancelled"
     TYPE_REPAIR_RETURNED_TO_CLIENT = "repair_returned_to_client"
     TYPE_REMOVED = "removed"
+    TYPE_CLIENT_ITEM_RECEIVED = "client_item_received"
 
     MOVEMENT_TYPE_CHOICES = [
         (TYPE_RECEIVED, "Received"),
@@ -1230,6 +1245,7 @@ class StockMovement(models.Model):
         (TYPE_CLIENT_RETURN_CANCELLED, "Client Return Cancelled"),
         (TYPE_REPAIR_RETURNED_TO_CLIENT, "Repair Returned To Client"),
         (TYPE_REMOVED, "Removed"),
+        (TYPE_CLIENT_ITEM_RECEIVED, "Client Item Received"),
     ]
 
     product_unit = models.ForeignKey(
@@ -1411,3 +1427,34 @@ class ClientUpgradeRecord(models.Model):
 
     def __str__(self):
         return self.upgrade_number or "Client upgrade"
+
+
+class RecordChange(models.Model):
+    """Append-only history of edits made to a record's details (invoice number,
+    dates, client, notes, ...). Written by the update_* functions in services.py
+    through log_record_changes(); never edited or deleted by the app. Stock-unit
+    status changes have their own log (StockMovement)."""
+
+    record_type = models.CharField(max_length=30)
+    record_id = models.PositiveIntegerField()
+    # Record number at the time of the edit (e.g. DLV-2026-0001), so history
+    # stays readable in the admin even if the record is later removed.
+    record_number = models.CharField(max_length=32, blank=True)
+    field_label = models.CharField(max_length=100)
+    old_value = models.TextField(blank=True)
+    new_value = models.TextField(blank=True)
+    changed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="stock_record_changes",
+    )
+    changed_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ("-changed_at", "-id")
+        indexes = [models.Index(fields=["record_type", "record_id"])]
+
+    def __str__(self):
+        return f"{self.record_number or self.record_type} {self.field_label}"

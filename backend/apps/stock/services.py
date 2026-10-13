@@ -7,6 +7,7 @@ from .models import (
     ClientReturnItem,
     ClientReturnRecord,
     ClientUpgradeRecord,
+    RecordChange,
     DeliveryItem,
     DeliveryRecord,
     InternalParty,
@@ -101,15 +102,26 @@ def _resolve_repair_source(
     *,
     source,
     source_client=None,
+    source_client_name_input="",
     source_internal=None,
     source_internal_name_input="",
     source_internal_kind_input="",
 ):
     if source == RepairRecord.SOURCE_INTERNAL_STOCK:
         return source, None, None
-    if source == RepairRecord.SOURCE_CLIENT_RETURN:
+    if source in (RepairRecord.SOURCE_CLIENT_RETURN, RepairRecord.SOURCE_CLIENT_ITEM):
+        # A client typed into the picker's "create" option is created here, the
+        # same way a Delivery creates a new client.
+        if source_client is None and (source_client_name_input or "").strip():
+            source_client, _created = Client.objects.get_or_create(
+                name=source_client_name_input.strip()
+            )
         if source_client is None:
-            raise ValidationError("Choose the client this repair came from.")
+            raise ValidationError(
+                "Choose the client this item belongs to."
+                if source == RepairRecord.SOURCE_CLIENT_ITEM
+                else "Choose the client this repair came from."
+            )
         return source, source_client, None
     if source == RepairRecord.SOURCE_INTERNAL_PARTY:
         party = _resolve_internal_party(
@@ -129,6 +141,94 @@ def _clean_serial_numbers(serial_numbers):
     if len(cleaned) != len(set(cleaned)):
         raise ValidationError("Serial numbers must be unique within a receiving item.")
     return cleaned
+
+
+# Fields shown in a record's edit history, as (attribute, label). Every update_*
+# function below snapshots these before and after its changes and logs the
+# difference with log_record_changes() -- add new editable fields here.
+RECEIVING_HISTORY_FIELDS = (
+    ("supplier", "Supplier"),
+    ("po_number", "Purchase Order"),
+    ("supplier_invoice_number", "Supplier invoice number"),
+    ("received_date", "Received date"),
+    ("notes", "Notes"),
+)
+DELIVERY_HISTORY_FIELDS = (
+    ("customer_name", "Client"),
+    ("receiver_name", "Receiver"),
+    ("invoice_number", "Invoice number"),
+    ("delivery_date", "Delivery date"),
+    ("notes", "Notes"),
+)
+RESERVATION_HISTORY_FIELDS = (
+    ("reserved_for", "Reserved for"),
+    ("reason", "Reason"),
+    ("notes", "Notes"),
+)
+ISSUE_HISTORY_FIELDS = (
+    ("issued_to", "Assigned to"),
+    ("reason", "Reason"),
+    ("issue_date", "Assignment date"),
+    ("expected_return_date", "Expected return date"),
+    ("notes", "Notes"),
+)
+REPAIR_HISTORY_FIELDS = (
+    ("vendor", "Supplier"),
+    ("repair_reason", "Reason"),
+    ("repair_date", "Repair date"),
+    ("notes", "Notes"),
+)
+CLIENT_RETURN_HISTORY_FIELDS = (
+    ("received_from", "Received from"),
+    ("return_date", "Return date"),
+    ("reason", "Reason"),
+    ("notes", "Notes"),
+)
+CLIENT_UPGRADE_HISTORY_FIELDS = (
+    ("client_name", "Client"),
+    ("status", "Status"),
+    ("upgrade_date", "Date"),
+    ("updater", "Updater"),
+    ("notes", "Notes"),
+)
+
+
+def _snapshot(obj, fields):
+    """{label: readable text} for the given (attribute, label) pairs."""
+    values = {}
+    for attr, label in fields:
+        value = getattr(obj, attr)
+        display = getattr(obj, f"get_{attr}_display", None)
+        if value is None:
+            text = ""
+        elif display is not None:
+            text = display()
+        elif hasattr(value, "isoformat"):
+            text = value.isoformat()
+        else:
+            text = str(value)
+        values[label] = text
+    return values
+
+
+def log_record_changes(record_type, record, number, before, after, changed_by=None):
+    """Write one RecordChange row for every label whose value differs between the
+    two snapshots. Nothing is written when nothing actually changed."""
+    rows = [
+        RecordChange(
+            record_type=record_type,
+            record_id=record.pk,
+            record_number=number or "",
+            field_label=label,
+            old_value=before.get(label, ""),
+            new_value=value,
+            changed_by=changed_by,
+        )
+        for label, value in after.items()
+        if before.get(label, "") != value
+    ]
+    if rows:
+        RecordChange.objects.bulk_create(rows)
 
 
 def create_stock_movement(
@@ -755,9 +855,12 @@ def update_client_return_record_header(
     received_from=None,
     reason=None,
     notes=None,
+    changed_by=None,
 ):
     if client_return.status == ClientReturnRecord.STATUS_CANCELLED:
         raise ValidationError("Cancelled client return records cannot be edited.")
+
+    before = _snapshot(client_return, CLIENT_RETURN_HISTORY_FIELDS)
 
     if received_from is not None:
         client_return.received_from = received_from.strip()
@@ -774,6 +877,14 @@ def update_client_return_record_header(
             "reason",
             "notes",
         )
+    )
+    log_record_changes(
+        "client_return",
+        client_return,
+        client_return.return_number,
+        before,
+        _snapshot(client_return, CLIENT_RETURN_HISTORY_FIELDS),
+        changed_by,
     )
 
     return client_return
@@ -887,9 +998,12 @@ def update_reservation_record_header(
     supplier_name_input="",
     reason=None,
     notes=None,
+    changed_by=None,
 ):
     if reservation.status != ReservationRecord.STATUS_ACTIVE:
         raise ValidationError("Only active reservation records can be edited.")
+
+    before = _snapshot(reservation, RESERVATION_HISTORY_FIELDS)
 
     if reserved_for_type is not None:
         party_type, party_client, party_supplier, party_internal, party_name = (
@@ -923,6 +1037,14 @@ def update_reservation_record_header(
             "reason",
             "notes",
         )
+    )
+    log_record_changes(
+        "reservation",
+        reservation,
+        reservation.reservation_number,
+        before,
+        _snapshot(reservation, RESERVATION_HISTORY_FIELDS),
+        changed_by,
     )
 
     return reservation
@@ -1111,9 +1233,12 @@ def update_issue_record_header(
     issue_date=None,
     expected_return_date=_UNSET,
     notes=None,
+    changed_by=None,
 ):
     if issue.status != IssueRecord.STATUS_ACTIVE:
         raise ValidationError("Only active issue records can be edited.")
+
+    before = _snapshot(issue, ISSUE_HISTORY_FIELDS)
 
     assignee = _resolve_internal_party(
         assigned_to, assigned_to_name_input, assigned_to_kind_input
@@ -1144,6 +1269,14 @@ def update_issue_record_header(
             "expected_return_date",
             "notes",
         )
+    )
+    log_record_changes(
+        "issue",
+        issue,
+        issue.issue_number,
+        before,
+        _snapshot(issue, ISSUE_HISTORY_FIELDS),
+        changed_by,
     )
 
     return issue
@@ -1236,15 +1369,60 @@ def _active_repair_item_for_unit(unit):
     return unit.repair_items.filter(isactive=True).first()
 
 
+def _create_client_owned_units(client_items, client):
+    """Create the units for items a client brought in that were never in the
+    system (sold before it was used). They are born in Repair, owned by the
+    client, and counted nowhere in our stock."""
+    if not client_items:
+        raise ValidationError("Enter at least one item: its product and serial number.")
+
+    seen = set()
+    units = []
+    for entry in client_items:
+        product = entry.get("product")
+        serial = (entry.get("serial_number") or "").strip()
+        if product is None:
+            raise ValidationError("Choose the product for every item.")
+        if not serial:
+            raise ValidationError("Enter the serial number for every item.")
+        if serial.lower() in seen:
+            raise ValidationError(f"Serial number {serial} is entered twice.")
+        seen.add(serial.lower())
+
+        existing = ProductUnit.objects.filter(serial_number__iexact=serial).first()
+        if existing is not None:
+            hint = (
+                " Use Create Client Return for it."
+                if existing.status == ProductUnit.STATUS_SOLD
+                else ""
+            )
+            raise ValidationError(
+                f"Serial number {serial} is already in the system "
+                f"({existing.get_status_display()}).{hint}"
+            )
+
+        units.append(
+            ProductUnit.objects.create(
+                product=product,
+                serial_number=serial,
+                status=ProductUnit.STATUS_REPAIR,
+                owner_client=client,
+            )
+        )
+    return units
+
+
 @transaction.atomic
 def create_repair_record(
     *,
-    unit_ids,
+    unit_ids=None,
+    client_items=None,
     repair_reason,
     vendor=None,
     vendor_name_input="",
     source=RepairRecord.SOURCE_INTERNAL_STOCK,
     source_client=None,
+    source_client_name_input="",
     source_internal=None,
     source_internal_name_input="",
     source_internal_kind_input="",
@@ -1252,8 +1430,18 @@ def create_repair_record(
     notes="",
     sent_by=None,
 ):
+    is_client_item = source == RepairRecord.SOURCE_CLIENT_ITEM
+    if is_client_item and unit_ids:
+        raise ValidationError(
+            "A client's item is entered by product and serial number, not picked from stock."
+        )
+    if not is_client_item and client_items:
+        raise ValidationError(
+            "Items can only be entered by serial number when the source is the client's item."
+        )
+
     unique_ids = list(dict.fromkeys(unit_ids or []))
-    if not unique_ids:
+    if not is_client_item and not unique_ids:
         raise ValidationError("At least one stock unit is required.")
     vendor = _resolve_supplier(vendor, vendor_name_input)
     if vendor is None:
@@ -1262,32 +1450,38 @@ def create_repair_record(
     source, source_client, source_internal = _resolve_repair_source(
         source=source,
         source_client=source_client,
+        source_client_name_input=source_client_name_input,
         source_internal=source_internal,
         source_internal_name_input=source_internal_name_input,
         source_internal_kind_input=source_internal_kind_input,
     )
 
-    units = list(
-        ProductUnit.objects.select_for_update()
-        .select_related("product")
-        .filter(pk__in=unique_ids)
-        .order_by("product__descript", "serial_number")
-    )
-    units_by_id = {unit.pk: unit for unit in units}
-    missing_ids = [unit_id for unit_id in unique_ids if unit_id not in units_by_id]
-    if missing_ids:
-        raise ValidationError("One or more stock units were not found.")
-
-    unavailable_units = [
-        unit.serial_number
-        for unit in units
-        if not unit.isactive or unit.status != ProductUnit.STATUS_AVAILABLE
-    ]
-    if unavailable_units:
-        raise ValidationError(
-            "Only active available stock units can be sent to repair: "
-            + ", ".join(sorted(unavailable_units))
+    new_client_unit_ids = set()
+    if is_client_item:
+        units = _create_client_owned_units(client_items, source_client)
+        new_client_unit_ids = {unit.pk for unit in units}
+    else:
+        units = list(
+            ProductUnit.objects.select_for_update()
+            .select_related("product")
+            .filter(pk__in=unique_ids)
+            .order_by("product__descript", "serial_number")
         )
+        units_by_id = {unit.pk: unit for unit in units}
+        missing_ids = [unit_id for unit_id in unique_ids if unit_id not in units_by_id]
+        if missing_ids:
+            raise ValidationError("One or more stock units were not found.")
+
+        unavailable_units = [
+            unit.serial_number
+            for unit in units
+            if not unit.isactive or unit.status != ProductUnit.STATUS_AVAILABLE
+        ]
+        if unavailable_units:
+            raise ValidationError(
+                "Only active available stock units can be sent to repair: "
+                + ", ".join(sorted(unavailable_units))
+            )
 
     repair = RepairRecord.objects.create(
         repair_reason=(repair_reason or "").strip(),
@@ -1301,17 +1495,23 @@ def create_repair_record(
     )
 
     for unit in units:
-        from_status = unit.status
+        is_new_client_unit = unit.pk in new_client_unit_ids
+        from_status = "" if is_new_client_unit else unit.status
         RepairItem.objects.create(
             repair=repair,
             product_unit=unit,
             product=unit.product,
         )
-        unit.status = ProductUnit.STATUS_REPAIR
-        unit.save(update_fields=("status", "sold_date"))
+        if not is_new_client_unit:
+            unit.status = ProductUnit.STATUS_REPAIR
+            unit.save(update_fields=("status", "sold_date"))
         create_stock_movement(
             product_unit=unit,
-            movement_type=StockMovement.TYPE_SENT_TO_REPAIR,
+            movement_type=(
+                StockMovement.TYPE_CLIENT_ITEM_RECEIVED
+                if is_new_client_unit
+                else StockMovement.TYPE_SENT_TO_REPAIR
+            ),
             from_status=from_status,
             to_status=ProductUnit.STATUS_REPAIR,
             reason=repair.repair_reason,
@@ -1333,10 +1533,12 @@ def update_repair_record_header(
     vendor_name_input="",
     repair_date=None,
     notes=None,
+    changed_by=None,
 ):
     if repair.status != RepairRecord.STATUS_ACTIVE:
         raise ValidationError("Only active repair records can be edited.")
 
+    before = _snapshot(repair, REPAIR_HISTORY_FIELDS)
     vendor = _resolve_supplier(vendor, vendor_name_input)
     if repair_reason is not None:
         repair.repair_reason = repair_reason.strip()
@@ -1347,6 +1549,14 @@ def update_repair_record_header(
     if notes is not None:
         repair.notes = notes
     repair.save(update_fields=("repair_reason", "vendor", "repair_date", "notes"))
+    log_record_changes(
+        "repair",
+        repair,
+        repair.repair_number,
+        before,
+        _snapshot(repair, REPAIR_HISTORY_FIELDS),
+        changed_by,
+    )
 
     return repair
 
@@ -1382,17 +1592,31 @@ def resolve_repair_record(
         ProductUnit.STATUS_SOLD,
     ):
         raise ValidationError("Repair resolution must be available, inactive, or returned to client.")
-    if resolution == ProductUnit.STATUS_SOLD and (
-        not repair.client_return_id
-        or repair.client_return.status == ClientReturnRecord.STATUS_CANCELLED
+    if (
+        resolution != ProductUnit.STATUS_SOLD
+        and repair.items.filter(product_unit__owner_client__isnull=False).exists()
     ):
         raise ValidationError(
-            "Returned to Client is only available for repairs created from a client return."
+            "This item belongs to the client, so the repair can only be closed as Returned to Client."
+        )
+    if (
+        resolution == ProductUnit.STATUS_SOLD
+        and repair.source != RepairRecord.SOURCE_CLIENT_ITEM
+        and (
+            not repair.client_return_id
+            or repair.client_return.status == ClientReturnRecord.STATUS_CANCELLED
+        )
+    ):
+        raise ValidationError(
+            "Returned to Client is only available for repairs created from a client return "
+            "or for a client's own item."
         )
 
     return_client = None
     if resolution == ProductUnit.STATUS_SOLD:
-        return_client = repair.source_client or repair.client_return.client
+        return_client = repair.source_client or (
+            repair.client_return.client if repair.client_return_id else None
+        )
         if return_client is None:
             raise ValidationError(
                 "This repair has no client to return the units to. Fix the client first."
@@ -1522,6 +1746,12 @@ def create_removal_record(
     # issued, repair) is eligible -- unlike the other five workflows, this one
     # isn't restricted to "available" only, since a unit can turn out lost,
     # stolen, or damaged beyond repair while reserved, issued, or in repair.
+    client_owned = [unit.serial_number for unit in units if unit.owner_client_id]
+    if client_owned:
+        raise ValidationError(
+            "These items belong to a client and cannot be removed from inventory: "
+            + ", ".join(sorted(client_owned))
+        )
     ineligible_units = [
         unit.serial_number
         for unit in units
@@ -1602,10 +1832,12 @@ def update_receiving_record_header(
     received_date=None,
     notes=None,
     items=None,
+    changed_by=None,
 ):
     if receiving.status == ReceivingRecord.STATUS_CANCELLED:
         raise ValidationError("Cancelled receiving records cannot be edited.")
 
+    before = _snapshot(receiving, RECEIVING_HISTORY_FIELDS)
     if supplier is not None:
         receiving.supplier = supplier
     if po_number is not None:
@@ -1625,6 +1857,14 @@ def update_receiving_record_header(
             "notes",
         )
     )
+    log_record_changes(
+        "receiving",
+        receiving,
+        receiving.receiving_number,
+        before,
+        _snapshot(receiving, RECEIVING_HISTORY_FIELDS),
+        changed_by,
+    )
 
     for item_data in items or []:
         item_id = item_data.get("id")
@@ -1635,6 +1875,9 @@ def update_receiving_record_header(
         except ReceivingItem.DoesNotExist:
             continue
 
+        line = item.product_unit.serial_number if item.product_unit_id else str(item.product)
+        line_fields = (("cost", f"Line cost ({line})"), ("notes", f"Line notes ({line})"))
+        line_before = _snapshot(item, line_fields)
         update_fields = []
         if "cost" in item_data:
             item.cost = item_data["cost"]
@@ -1644,6 +1887,14 @@ def update_receiving_record_header(
             update_fields.append("notes")
         if update_fields:
             item.save(update_fields=update_fields)
+            log_record_changes(
+                "receiving",
+                receiving,
+                receiving.receiving_number,
+                line_before,
+                _snapshot(item, line_fields),
+                changed_by,
+            )
 
     for item in receiving.items.select_related("product_unit"):
         unit = item.product_unit
@@ -1725,9 +1976,12 @@ def update_delivery_record_header(
     delivery_date=None,
     notes=None,
     items=None,
+    changed_by=None,
 ):
     if delivery.status == DeliveryRecord.STATUS_CANCELLED:
         raise ValidationError("Cancelled delivery records cannot be edited.")
+
+    before = _snapshot(delivery, DELIVERY_HISTORY_FIELDS)
 
     item_rows = list(delivery.items.select_related("product_unit"))
     if delivery_date is not None:
@@ -1761,18 +2015,37 @@ def update_delivery_record_header(
             "notes",
         )
     )
+    log_record_changes(
+        "delivery",
+        delivery,
+        delivery.delivery_number,
+        before,
+        _snapshot(delivery, DELIVERY_HISTORY_FIELDS),
+        changed_by,
+    )
 
     for item_data in items or []:
         item_id = item_data.get("id")
         if not item_id:
             continue
         try:
-            item = delivery.items.get(pk=item_id)
+            item = delivery.items.select_related("product_unit").get(pk=item_id)
         except DeliveryItem.DoesNotExist:
             continue
         if "notes" in item_data:
+            line = item.product_unit.serial_number if item.product_unit_id else str(item.product)
+            line_fields = (("notes", f"Line notes ({line})"),)
+            line_before = _snapshot(item, line_fields)
             item.notes = item_data["notes"]
             item.save(update_fields=("notes",))
+            log_record_changes(
+                "delivery",
+                delivery,
+                delivery.delivery_number,
+                line_before,
+                _snapshot(item, line_fields),
+                changed_by,
+            )
 
     if delivery_date is not None:
         for item in item_rows:
@@ -1905,9 +2178,12 @@ def update_client_upgrade_record(
     upgrade_date=None,
     clear_upgrade_date=False,
     notes=None,
+    changed_by=None,
 ):
     if upgrade.status == ClientUpgradeRecord.STATUS_CANCELLED:
         raise ValidationError("Cancelled client upgrade records cannot be edited.")
+
+    before = _snapshot(upgrade, CLIENT_UPGRADE_HISTORY_FIELDS)
 
     if client is not None or (client_name_input or "").strip():
         client = _resolve_upgrade_client(client, client_name_input)
@@ -1934,6 +2210,14 @@ def update_client_upgrade_record(
             "updater",
             "notes",
         )
+    )
+    log_record_changes(
+        "client_upgrade",
+        upgrade,
+        upgrade.upgrade_number,
+        before,
+        _snapshot(upgrade, CLIENT_UPGRADE_HISTORY_FIELDS),
+        changed_by,
     )
     return upgrade
 
