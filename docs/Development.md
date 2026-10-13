@@ -178,3 +178,12 @@ For first office testing, take a copy of `db.sqlite3` before entering real test 
 - Configure static and media serving for production.
 - Replace SQLite if production requires a server database.
 - Use [Office Testing](OfficeTesting.md) for the first internal deployment checklist, user roles, database backups, and stock workflow smoke tests.
+
+### Production deploy scripts
+
+The scripts live in `deploy/` and are run on the production server (see `backend/run_production.py` for how the app itself runs):
+
+- `deploy\deploy.ps1` backs up `db_prod.sqlite3`, runs `git pull --ff-only`, rebuilds the frontend, runs `collectstatic` and `migrate`, restarts the `BIMNexus` service, then checks that the site answers and serves the new frontend build. It stops on the first failure and prints which step failed.
+- `deployollback.ps1` stops the service, lets you pick a commit and/or a database backup to go back to, and starts it again.
+- `deploy\grant-restart-permission.ps1` is a **one-time** setup, run in an Administrator PowerShell. It lets the deploying Windows account start and stop only the `BIMNexus` service, so `deploy.ps1` finishes without an elevated prompt. Without it the deploy completes every step except the restart, which then needs an Administrator window.
+
