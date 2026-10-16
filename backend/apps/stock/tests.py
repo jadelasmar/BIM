@@ -157,21 +157,21 @@ class UIRegistryTests(SimpleTestCase):
         create_client_return = UI_TOKENS["create_client_return"]
 
         self.assertEqual(create_delivery["icon"], delivery_records["icon"])
-        self.assertEqual(delivery_records["tone"], "yellow")
+        self.assertEqual(delivery_records["tone"], "indigo")
         self.assertEqual(create_delivery["icon"], "delivery")
         self.assertEqual(create_delivery["tone"], "indigo")
         self.assertEqual(create_reservation["icon"], reservation_records["icon"])
         self.assertEqual(create_reservation["tone"], reservation_records["tone"])
         self.assertEqual(create_reservation["icon"], "clock-3")
-        self.assertEqual(create_reservation["tone"], "warning")
+        self.assertEqual(create_reservation["tone"], "purple")
         self.assertEqual(create_repair["icon"], repair_records["icon"])
         self.assertEqual(create_repair["tone"], repair_records["tone"])
         self.assertEqual(create_repair["icon"], "wrench")
-        self.assertEqual(create_repair["tone"], "danger")
+        self.assertEqual(create_repair["tone"], "pink")
         self.assertEqual(create_client_return["icon"], client_return_records["icon"])
         self.assertEqual(create_client_return["tone"], client_return_records["tone"])
         self.assertEqual(create_client_return["icon"], "reset")
-        self.assertEqual(create_client_return["tone"], "green")
+        self.assertEqual(create_client_return["tone"], "yellow")
 
     def test_frontend_uses_registry_for_workflow_icons(self):
         app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
@@ -397,8 +397,8 @@ class UIRegistryTests(SimpleTestCase):
         self.assertIn("fetch(data.api.productUnits", stock_entry_source)
         self.assertIn("item_inputs: itemInputs", stock_entry_source)
         self.assertIn("serial_numbers: buildReceivingSerialNumbers(line, lineIndex)", stock_entry_source)
-        self.assertIn('label="Purchase Order"', stock_entry_source)
-        self.assertIn('label="Supplier Invoice Number"', stock_entry_source)
+        self.assertIn('label="Purchase Order #"', stock_entry_source)
+        self.assertIn('label="Supplier Invoice #"', stock_entry_source)
         self.assertNotIn('label="Reference Number"', stock_entry_source)
         self.assertNotIn('label="Delivery Note Number"', stock_entry_source)
         self.assertIn("if (isReceiving) {", stock_entry_source)
@@ -457,7 +457,6 @@ class UIRegistryTests(SimpleTestCase):
         self.assertIn("Delivery Records", delivery_source)
         self.assertIn("record.total_units", delivery_source)
         self.assertIn("customer_name", delivery_source)
-        self.assertIn("receiver_name", delivery_source)
         self.assertIn("<EmptyState", delivery_source)
         self.assertIn("<DeliveryRecordsPage data={data}", app_source)
         self.assertNotIn('<PlaceholderPage data={data} title="Delivery Records"', app_source)
@@ -487,7 +486,6 @@ class UIRegistryTests(SimpleTestCase):
         self.assertIn("Edit Details", detail_source)
         self.assertIn("Cancel Record", detail_source)
         self.assertIn("customer_name", detail_source)
-        self.assertIn("receiver_name", detail_source)
         self.assertIn("delivery_date", detail_source)
         self.assertIn("cancel_reason", detail_source)
         self.assertIn("Wrong unit, product, or serial entries should be cancelled and recreated when safe.", detail_source)
@@ -1427,9 +1425,9 @@ class BIMPOSAccessTests(TestCase):
         self.assertTrue(all(item.get("icon") for item in overview))
         overview_by_label = {item["label"]: item for item in overview}
         self.assertEqual(overview_by_label["Suppliers"]["href"], "/suppliers/")
-        self.assertEqual(overview_by_label["Receiving Records"]["tone"], "sky")
+        self.assertEqual(overview_by_label["Receiving Records"]["tone"], "teal")
         self.assertEqual(overview_by_label["Receiving Records"]["href"], "/operations/receiving/")
-        self.assertEqual(overview_by_label["Delivery Records"]["tone"], "yellow")
+        self.assertEqual(overview_by_label["Delivery Records"]["tone"], "indigo")
         self.assertEqual(overview_by_label["Delivery Records"]["href"], "/operations/deliveries/")
         self.assertEqual(overview_by_label["Clients"]["href"], "/clients/")
         self.assertTrue(overview_by_label["Clients"]["enabled"])
@@ -1873,11 +1871,11 @@ class BIMPOSAccessTests(TestCase):
         self.assertEqual(actions_by_label["Create Delivery"]["icon"], "delivery")
         self.assertEqual(actions_by_label["Create Delivery"]["tone"], "indigo")
         self.assertEqual(actions_by_label["Create Temporary Assignment"]["icon"], "user-check")
-        self.assertEqual(actions_by_label["Create Temporary Assignment"]["tone"], "indigo")
+        self.assertEqual(actions_by_label["Create Temporary Assignment"]["tone"], "cyan")
         self.assertEqual(actions_by_label["Create Repair"]["icon"], "wrench")
-        self.assertEqual(actions_by_label["Create Repair"]["tone"], "danger")
+        self.assertEqual(actions_by_label["Create Repair"]["tone"], "pink")
         self.assertEqual(actions_by_label["Create Client Return"]["icon"], "reset")
-        self.assertEqual(actions_by_label["Create Client Return"]["tone"], "green")
+        self.assertEqual(actions_by_label["Create Client Return"]["tone"], "yellow")
         self.assertFalse(actions_by_label["Add Supplier"]["enabled"])
         self.assertIsNone(actions_by_label["Add Supplier"]["href"])
         self.assertFalse(actions_by_label["Add Client"]["enabled"])
@@ -1988,7 +1986,7 @@ class BIMPOSAccessTests(TestCase):
         )
 
         self.assertEqual(pending_actions_kpi["value"], "3")
-        self.assertEqual(pending_actions_kpi["tone"], "cyan")
+        self.assertEqual(pending_actions_kpi["tone"], "blue")
         self.assertEqual(
             pending_actions_kpi["detail"],
             "1 reservation, 1 temporary assignment, 1 repair",
@@ -2055,7 +2053,7 @@ class BIMPOSAccessTests(TestCase):
         )
 
         self.assertEqual(pending_actions_kpi["value"], "0")
-        self.assertEqual(pending_actions_kpi["tone"], "cyan")
+        self.assertEqual(pending_actions_kpi["tone"], "blue")
         self.assertEqual(pending_actions_kpi["detail"], "Nothing awaiting action")
 
     def test_command_center_quick_add_includes_disabled_supplier_action(self):
@@ -3911,6 +3909,7 @@ class InventoryApiTests(TestCase):
             self.product.available_units,
             self.product.repair_units,
         )
+        sold_before = self.product.sold_units
 
         response = self.client.post(
             "/api/stock/repairs/", self._client_item_payload(), content_type="application/json"
@@ -3929,18 +3928,18 @@ class InventoryApiTests(TestCase):
         self.assertEqual(movement.from_status, "")
         self.assertEqual(movement.to_status, ProductUnit.STATUS_REPAIR)
 
-        # It is the client's item, not our stock: no count moves.
+        # While we hold it, it counts as stock in Repair.
         self.assertEqual(
             (
                 self.product.total_units,
                 self.product.available_units,
                 self.product.repair_units,
             ),
-            stock_before,
+            (stock_before[0] + 1, stock_before[1], stock_before[2] + 1),
         )
         listing = self.client.get("/api/stock/products/").json()
         listed = next(row for row in listing if row["id"] == self.product.pk)
-        self.assertEqual(listed["total_units"], stock_before[0])
+        self.assertEqual(listed["total_units"], stock_before[0] + 1)
 
         # The only way to close it is back to the client.
         wrong = self.client.post(
@@ -3960,7 +3959,10 @@ class InventoryApiTests(TestCase):
         delivery = DeliveryRecord.objects.get(from_repair=repair)
         self.assertTrue(delivery.is_warranty_return)
         self.assertEqual(delivery.client, repair.source_client)
+        # Handed back, so it leaves stock again and is not counted as a sale.
         self.assertEqual(self.product.total_units, stock_before[0])
+        self.assertEqual(self.product.repair_units, stock_before[2])
+        self.assertEqual(self.product.sold_units, sold_before)
 
     def test_clients_item_serial_must_be_new_and_entered_correctly(self):
         user = self._user_with_permissions(
@@ -4423,7 +4425,6 @@ class InventoryApiTests(TestCase):
             "/api/stock/deliveries/",
             {
                 "customer_name": "Internal Department",
-                "receiver_name": "Receiver Name",
                 "unit_ids": [unit.pk],
             },
             content_type="application/json",
@@ -4594,7 +4595,6 @@ class InventoryApiTests(TestCase):
             {
                 "client_name_input": "Internal Department",
                 "customer_name": "Internal Department",
-                "receiver_name": "Receiver Name",
                 "delivery_date": str(timezone.localdate()),
                 "notes": "For staff handover",
                 "unit_ids": [unit.pk],
@@ -4638,7 +4638,6 @@ class InventoryApiTests(TestCase):
             {
                 "client_name_input": "Internal Department",
                 "customer_name": "Internal Department",
-                "receiver_name": "Receiver Name",
                 "invoice_number": "INV-2026-0007",
                 "delivery_date": str(timezone.localdate()),
                 "unit_ids": [unit.pk],
@@ -4813,13 +4812,13 @@ class InventoryApiTests(TestCase):
 
         response = self.client.patch(
             f"/api/stock/deliveries/{delivery.pk}/",
-            {"invoice_number": "75638/224", "receiver_name": "New Receiver"},
+            {"invoice_number": "75638/224", "notes": "New note"},
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 200, response.content)
 
         changes = {change.field_label: change for change in RecordChange.objects.all()}
-        self.assertEqual(set(changes), {"Invoice number", "Receiver"})
+        self.assertEqual(set(changes), {"Invoice number", "Notes"})
         invoice = changes["Invoice number"]
         self.assertEqual((invoice.old_value, invoice.new_value), ("75638/244", "75638/224"))
         self.assertEqual(invoice.changed_by, user)
@@ -4847,7 +4846,7 @@ class InventoryApiTests(TestCase):
             {(row["field_label"], row["old_value"], row["new_value"]) for row in rows},
             {
                 ("Invoice number", "75638/244", "75638/224"),
-                ("Receiver", "", "New Receiver"),
+                ("Notes", "", "New note"),
             },
         )
 
@@ -4874,7 +4873,7 @@ class InventoryApiTests(TestCase):
                 "/api/stock/receiving-records/",
                 ReceivingRecord.objects.create(po_number="PO-1"),
                 {"po_number": "PO-2"},
-                ("Purchase Order", "PO-1", "PO-2"),
+                ("Purchase Order #", "PO-1", "PO-2"),
             ),
             (
                 "reservation",
@@ -5075,7 +5074,6 @@ class InventoryApiTests(TestCase):
             "/api/stock/deliveries/",
             {
                 "client_name_input": "Coastal Retail Group",
-                "receiver_name": "Receiver Name",
                 "delivery_date": str(timezone.localdate()),
                 "unit_ids": [unit.pk],
             },
@@ -5122,7 +5120,6 @@ class InventoryApiTests(TestCase):
         unit.save(update_fields=("status", "sold_date"))
         delivery = DeliveryRecord.objects.create(
             customer_name="Internal Department",
-            receiver_name="Receiver Name",
             notes="For staff handover",
             created_by=user,
         )
@@ -5140,7 +5137,6 @@ class InventoryApiTests(TestCase):
         self.assertEqual(response.json()["id"], delivery.pk)
         self.assertEqual(response.json()["delivery_number"], delivery.delivery_number)
         self.assertEqual(response.json()["customer_name"], "Internal Department")
-        self.assertEqual(response.json()["receiver_name"], "Receiver Name")
         self.assertEqual(response.json()["created_by_name"], user.username)
         self.assertEqual(response.json()["total_units"], 1)
         self.assertEqual(response.json()["items"][0]["product"], self.product.pk)
@@ -5163,7 +5159,6 @@ class InventoryApiTests(TestCase):
         unit.save(update_fields=("status", "sold_date"))
         delivery = DeliveryRecord.objects.create(
             customer_name="Old Customer",
-            receiver_name="Old Receiver",
             notes="Old notes",
             created_by=user,
         )
@@ -5179,7 +5174,6 @@ class InventoryApiTests(TestCase):
             f"/api/stock/deliveries/{delivery.pk}/",
             {
                 "customer_name": "New Customer",
-                "receiver_name": "New Receiver",
                 "delivery_date": "2026-07-05",
                 "notes": "Updated notes",
                 "delivery_number": "DLV-1999-9999",
@@ -5201,7 +5195,6 @@ class InventoryApiTests(TestCase):
         item.refresh_from_db()
         unit.refresh_from_db()
         self.assertEqual(delivery.customer_name, "New Customer")
-        self.assertEqual(delivery.receiver_name, "New Receiver")
         self.assertEqual(str(delivery.delivery_date), "2026-07-05")
         self.assertEqual(delivery.notes, "Updated notes")
         self.assertNotEqual(delivery.delivery_number, "DLV-1999-9999")
@@ -5341,7 +5334,6 @@ class InventoryApiTests(TestCase):
             "/api/stock/deliveries/",
             {
                 "customer_name": "Internal Department",
-                "receiver_name": "Receiver Name",
                 "unit_ids": [unit.pk],
             },
             content_type="application/json",
@@ -5366,7 +5358,6 @@ class InventoryApiTests(TestCase):
             "/api/stock/deliveries/",
             {
                 "customer_name": "Internal Department",
-                "receiver_name": "Receiver Name",
                 "unit_ids": [unit.pk],
             },
             content_type="application/json",
@@ -5616,7 +5607,6 @@ class InventoryApiTests(TestCase):
         warranty = DeliveryRecord.objects.get(from_repair=repair)
         self.assertTrue(warranty.is_warranty_return)
         self.assertEqual(warranty.client, original_delivery.client)
-        self.assertEqual(warranty.receiver_name, "")
         self.assertEqual(warranty.invoice_number, "")
         self.assertEqual(warranty.status, DeliveryRecord.STATUS_COMPLETED)
         line = warranty.items.get()
@@ -5982,6 +5972,99 @@ class InventoryApiTests(TestCase):
             movements_response.json()[0]["client_return_number"],
             client_return.return_number,
         )
+
+    def test_receiving_api_can_reserve_received_units_for_a_client(self):
+        user = self._user_with_permissions(
+            "view_productunit",
+            "add_productunit",
+            "change_productunit",
+            "view_receivingrecord",
+            "add_receivingrecord",
+            "add_reservationrecord",
+        )
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/api/stock/receiving-records/",
+            {
+                "supplier": self.supplier.pk,
+                "received_date": str(timezone.localdate()),
+                "reserve_client_name_input": "Reserve On Receipt Client",
+                "item_inputs": [
+                    {
+                        "product": self.product.pk,
+                        "quantity": 2,
+                        "serial_numbers": ["RSV-RCV-1", "RSV-RCV-2"],
+                        "cost": "55.00",
+                    },
+                    {
+                        "product": self.product.pk,
+                        "quantity": 1,
+                        "serial_numbers": ["RSV-RCV-STOCK"],
+                        "cost": "55.00",
+                        "reserve": False,
+                    },
+                ],
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        reservation = ReservationRecord.objects.get(
+            pk=response.json()["reservation"]["id"]
+        )
+        self.assertEqual(reservation.reserved_for, "Reserve On Receipt Client")
+        self.assertEqual(reservation.reserved_for_type, ReservationRecord.TYPE_CLIENT)
+        self.assertEqual(reservation.total_units, 2)
+        statuses = dict(
+            ProductUnit.objects.filter(
+                serial_number__in=["RSV-RCV-1", "RSV-RCV-2", "RSV-RCV-STOCK"]
+            ).values_list("serial_number", "status")
+        )
+        self.assertEqual(
+            statuses,
+            {
+                "RSV-RCV-1": ProductUnit.STATUS_RESERVED,
+                "RSV-RCV-2": ProductUnit.STATUS_RESERVED,
+                "RSV-RCV-STOCK": ProductUnit.STATUS_AVAILABLE,
+            },
+        )
+        self.assertTrue(
+            StockMovement.objects.filter(
+                product_unit__serial_number="RSV-RCV-1",
+                movement_type=StockMovement.TYPE_RESERVED,
+                reservation_record=reservation,
+            ).exists()
+        )
+
+    def test_receiving_api_reserving_needs_reservation_permission(self):
+        user = self._user_with_permissions(
+            "view_productunit",
+            "add_productunit",
+            "view_receivingrecord",
+            "add_receivingrecord",
+        )
+        self.client.force_login(user)
+
+        response = self.client.post(
+            "/api/stock/receiving-records/",
+            {
+                "supplier": self.supplier.pk,
+                "received_date": str(timezone.localdate()),
+                "reserve_client_name_input": "No Permission Client",
+                "item_inputs": [
+                    {
+                        "product": self.product.pk,
+                        "quantity": 1,
+                        "serial_numbers": ["RSV-NOPERM-1"],
+                    }
+                ],
+            },
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 403, response.content)
+        self.assertFalse(ProductUnit.objects.filter(serial_number="RSV-NOPERM-1").exists())
 
     def test_receiving_api_creates_supplier_record_and_stock_units(self):
         user = self._user_with_permissions(

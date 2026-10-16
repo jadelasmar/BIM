@@ -45,7 +45,6 @@ def available_unit_count():
     return ProductUnit.objects.filter(
         status=ProductUnit.STATUS_AVAILABLE,
         isactive=True,
-        owner_client__isnull=True,
     ).count()
 
 
@@ -53,7 +52,6 @@ def reserved_unit_count():
     return ProductUnit.objects.filter(
         status=ProductUnit.STATUS_RESERVED,
         isactive=True,
-        owner_client__isnull=True,
     ).count()
 
 
@@ -134,7 +132,7 @@ def stock_status_breakdown():
     here same as everywhere else total_units is computed."""
     counts = {
         row["status"]: row["count"]
-        for row in ProductUnit.objects.filter(isactive=True, owner_client__isnull=True)
+        for row in ProductUnit.objects.filter(isactive=True)
         .values("status")
         .annotate(count=Count("id"))
     }

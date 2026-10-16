@@ -1098,7 +1098,7 @@ function ReceivingRecordsTable({ records, loading, error }) {
               <th className="px-4 py-3 font-medium">Receiving</th>
               <th className="px-4 py-3 font-medium">Source</th>
               <th className="px-4 py-3 font-medium">Received Date</th>
-              <th className="px-4 py-3 font-medium">Purchase Order / Invoice</th>
+              <th className="px-4 py-3 font-medium">Purchase Order # / Supplier Invoice #</th>
               <th className="px-4 py-3 font-medium">Items</th>
               <th className="px-4 py-3 font-medium">Status</th>
             </tr>
@@ -1123,8 +1123,8 @@ function ReceivingRecordsTable({ records, loading, error }) {
                   </td>
                   <td className="px-4 py-4 text-zinc-300">{formatDate(record.received_date)}</td>
                   <td className="px-4 py-4 font-mono text-xs text-zinc-400">
-                    {record.po_number ? <p>Purchase Order: {record.po_number}</p> : null}
-                    {record.supplier_invoice_number ? <p className="mt-1 text-zinc-500">Inv: {record.supplier_invoice_number}</p> : null}
+                    {record.po_number ? <p>Purchase Order #: {record.po_number}</p> : null}
+                    {record.supplier_invoice_number ? <p className="mt-1 text-zinc-500">Supplier Invoice #: {record.supplier_invoice_number}</p> : null}
                     {!record.po_number && !record.supplier_invoice_number ? <p>-</p> : null}
                   </td>
                   <td className="px-4 py-4">
@@ -1440,7 +1440,7 @@ function ReceivingRecordDetailPage({ data }) {
                     <p className="mt-1 text-zinc-300">{formatDate(record.received_date)}</p>
                   </div>
                   <div>
-                    <p className="bim-helper-text">Purchase Order</p>
+                    <p className="bim-helper-text">Purchase Order #</p>
                     <p className="mt-1 font-mono text-xs text-zinc-300">{record.po_number || "No purchase order"}</p>
                   </div>
                 </div>
@@ -1449,8 +1449,8 @@ function ReceivingRecordDetailPage({ data }) {
               <dl className="mt-5 grid gap-4 md:grid-cols-2">
                 <DetailRow label="Source" value={record.supplier_name || "Manual source"} strong />
                 <DetailRow label="Received Date" value={formatDate(record.received_date)} />
-                <DetailRow label="Purchase Order" value={record.po_number || "-"} />
-                <DetailRow label="Supplier Invoice Number" value={record.supplier_invoice_number || "-"} />
+                <DetailRow label="Purchase Order #" value={record.po_number || "-"} />
+                <DetailRow label="Supplier Invoice #" value={record.supplier_invoice_number || "-"} />
                 <DetailRow label="Created By" value={record.created_by_name || "-"} />
                 <DetailRow label="Total Quantity" value={formatCount(record.total_quantity || 0)} highlight />
                 <DetailRow label="Status" value={isCancelled ? "Cancelled" : "Recorded"} />
@@ -1515,7 +1515,7 @@ function ReceivingCorrectionPanel({
         <div>
           <h2 className="text-sm font-bold text-white">Edit receiving details</h2>
           <p className="bim-page-description">
-            Safe edits are limited to supplier, purchase order, supplier invoice number, date, notes, line cost, and line notes. For wrong product, quantity, or serial, cancel and recreate the record when the linked units are still unused.
+            Safe edits are limited to supplier, purchase order #, supplier invoice #, date, notes, line cost, and line notes. For wrong product, quantity, or serial, cancel and recreate the record when the linked units are still unused.
           </p>
         </div>
         <Button type="button" variant="ghost" onClick={onCancel}>
@@ -1536,11 +1536,11 @@ function ReceivingCorrectionPanel({
         <Field label="Received Date">
           <DateInput value={form.receivedDate} onChange={(value) => onFieldChange("receivedDate", value)} />
         </Field>
-        <Field label="Purchase Order">
-          <TextInput value={form.poNumber} onChange={(value) => onFieldChange("poNumber", value)} placeholder="Purchase order number" />
+        <Field label="Purchase Order #">
+          <TextInput value={form.poNumber} onChange={(value) => onFieldChange("poNumber", value)} placeholder="Purchase order #" />
         </Field>
-        <Field label="Supplier Invoice Number">
-          <TextInput value={form.supplierInvoiceNumber} onChange={(value) => onFieldChange("supplierInvoiceNumber", value)} placeholder="Supplier invoice number" />
+        <Field label="Supplier Invoice #">
+          <TextInput value={form.supplierInvoiceNumber} onChange={(value) => onFieldChange("supplierInvoiceNumber", value)} placeholder="Supplier invoice #" />
         </Field>
         <Field label="Notes">
           <TextInput value={form.notes} onChange={(value) => onFieldChange("notes", value)} placeholder="Receiving notes" />
@@ -4021,7 +4021,7 @@ function CreateRepairPage({ data }) {
               <h1 className="bim-page-title">Create Repair</h1>
               <p className="bim-page-description">
                 {isClientItem
-                  ? "Take in an item that belongs to a client and send it for repair. It is not part of your stock."
+                  ? "Take in an item that belongs to a client and send it for repair. It counts in your stock while it is in Repair."
                   : "Move active available stock into repair, testing, or diagnosis."}
               </p>
             </div>
@@ -6449,7 +6449,7 @@ function DeliveryRecordsPage({ data }) {
             inputClassName="placeholder:text-zinc-500"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search delivery number, client, receiver, invoice, product, or serial..."
+            placeholder="Search delivery number, client, invoice, product, or serial..."
           />
           <span className="text-xs text-zinc-500">{records.length} records</span>
         </div>
@@ -6469,7 +6469,6 @@ function DeliveryRecordsTable({ records, loading, error }) {
             <tr>
               <th className="px-4 py-3 font-medium">Delivery</th>
               <th className="px-4 py-3 font-medium">Client</th>
-              <th className="px-4 py-3 font-medium">Receiver</th>
               <th className="px-4 py-3 font-medium">Delivery Date</th>
               <th className="px-4 py-3 font-medium">Invoice</th>
               <th className="px-4 py-3 font-medium">Units</th>
@@ -6500,7 +6499,6 @@ function DeliveryRecordsTable({ records, loading, error }) {
                       <p className="mt-1 text-xs text-zinc-500">Stock exit</p>
                     )}
                   </td>
-                  <td className="px-4 py-4 text-zinc-300">{record.receiver_name || "-"}</td>
                   <td className="px-4 py-4 text-zinc-300">{formatDate(record.delivery_date)}</td>
                   <td className="px-4 py-4 font-mono text-xs text-zinc-400">{record.invoice_number || "-"}</td>
                   <td className="px-4 py-4">
@@ -6514,7 +6512,7 @@ function DeliveryRecordsTable({ records, loading, error }) {
               ))
             ) : (
               <tr>
-                <td colSpan="7">
+                <td colSpan="6">
                   <EmptyState
                     className="border-t border-nexus-line"
                     title="No delivery records yet."
@@ -6543,7 +6541,6 @@ function DeliveryRecordDetailPage({ data }) {
   const [correctionMessage, setCorrectionMessage] = useState("");
   const [correctionForm, setCorrectionForm] = useState({
     customerName: "",
-    receiverName: "",
     invoiceNumber: "",
     deliveryDate: "",
     notes: "",
@@ -6597,7 +6594,6 @@ function DeliveryRecordDetailPage({ data }) {
     if (!record) return;
     setCorrectionForm({
       customerName: record.customer_name || "",
-      receiverName: record.receiver_name || "",
       invoiceNumber: record.invoice_number || "",
       deliveryDate: record.delivery_date || "",
       notes: record.notes || "",
@@ -6636,7 +6632,6 @@ function DeliveryRecordDetailPage({ data }) {
         },
         body: JSON.stringify({
           customer_name: correctionForm.customerName,
-          receiver_name: correctionForm.receiverName,
           invoice_number: correctionForm.invoiceNumber,
           delivery_date: correctionForm.deliveryDate,
           notes: correctionForm.notes,
@@ -6824,7 +6819,6 @@ function DeliveryRecordDetailPage({ data }) {
 
               <dl className="mt-5 grid gap-4 md:grid-cols-2">
                 <DetailRow label="Client" value={record.client_name || record.customer_name || "-"} strong />
-                <DetailRow label="Receiver" value={record.receiver_name || "-"} />
                 <DetailRow label="Delivery Date" value={formatDate(record.delivery_date)} />
                 <DetailRow label="Invoice Number" value={record.invoice_number || "-"} />
                 {record.from_reservation_number ? (
@@ -6911,7 +6905,7 @@ function DeliveryCorrectionPanel({
         <div>
           <h2 className="text-sm font-bold text-white">Edit delivery details</h2>
           <p className="bim-page-description">
-            Safe edits are limited to client, receiver, invoice number, delivery date, notes, and item notes.
+            Safe edits are limited to client, invoice number, delivery date, notes, and item notes.
           </p>
         </div>
         <Button type="button" variant="ghost" onClick={onCancel}>
@@ -6923,9 +6917,6 @@ function DeliveryCorrectionPanel({
       <div className="mt-5 grid gap-4 md:grid-cols-2">
         <Field label="Client" required>
           <TextInput value={form.customerName} onChange={(value) => onFieldChange("customerName", value)} />
-        </Field>
-        <Field label="Receiver">
-          <TextInput value={form.receiverName} onChange={(value) => onFieldChange("receiverName", value)} />
         </Field>
         <Field label="Invoice Number">
           <TextInput value={form.invoiceNumber} onChange={(value) => onFieldChange("invoiceNumber", value)} />
@@ -7136,7 +7127,7 @@ function InventoryPage({ data }) {
       value: formatCount(summary?.total_products ?? 0),
       detail: "catalogue items",
       icon: "package",
-      tone: "blue",
+      tone: "green",
       href: data.routes.inventory
     },
     {
@@ -8618,6 +8609,7 @@ function StockEntryPage({ data, mode = "add-unit" }) {
   const today = todayLocal();
   const [form, setForm] = useState({
     supplier: "",
+    reserveClient: "",
     entryDate: today,
     poNumber: "",
     supplierInvoiceNumber: "",
@@ -8625,12 +8617,18 @@ function StockEntryPage({ data, mode = "add-unit" }) {
   });
   const [products, setProducts] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
+  const [clients, setClients] = useState([]);
   const [refsLoading, setRefsLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [lines, setLines] = useState([]);
+  const [newProductOpen, setNewProductOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState("");
   const { showSuccess, showError } = useToast();
+  const canCreateProduct = Boolean(data.permissions?.canCreateProduct);
+  // Reserving on receipt also creates a reservation and changes unit status, so it
+  // needs the same permissions as Create Reservation.
+  const canReserve = isReceiving && Boolean(data.permissions?.canCreateReservation);
   const serialBatch = useMemo(() => String(Date.now()).slice(-6), []);
   // One token per page load, reused for every submit attempt from this form
   // instance -- lets the backend recognize and no-op a retried/double-click
@@ -8657,9 +8655,13 @@ function StockEntryPage({ data, mode = "add-unit" }) {
       if (isReceiving) {
         requests.push(fetch(data.api.suppliers, { signal: controller.signal }));
       }
-      const [productsResponse, suppliersResponse] = await Promise.all(requests);
+      if (canReserve) {
+        requests.push(fetch(data.api.clients, { signal: controller.signal }));
+      }
+      const [productsResponse, suppliersResponse, clientsResponse] = await Promise.all(requests);
       setProducts(productsResponse.ok ? await productsResponse.json() : []);
       setSuppliers(suppliersResponse?.ok ? await suppliersResponse.json() : []);
+      setClients(clientsResponse?.ok ? await clientsResponse.json() : []);
       setRefsLoading(false);
     }
 
@@ -8671,7 +8673,7 @@ function StockEntryPage({ data, mode = "add-unit" }) {
     });
 
     return () => controller.abort();
-  }, [data.api.products, data.api.suppliers, isReceiving]);
+  }, [data.api.clients, data.api.products, data.api.suppliers, isReceiving, canReserve]);
 
   useEffect(() => {
     if (preselectApplied.current || !preselectedProductId || !products.length) return;
@@ -8689,6 +8691,7 @@ function StockEntryPage({ data, mode = "add-unit" }) {
     })
     .slice(0, 6);
   const selectedSupplier = suppliers.find((supplier) => String(supplier.id) === String(form.supplier));
+  const selectedReserveClient = clients.find((client) => String(client.id) === String(form.reserveClient));
   const handledByName = data.user?.displayName || data.user?.username || "-";
   const totalUnits = lines.reduce((total, line) => total + Math.max(Number(line.quantity) || 0, 0), 0);
   const totalCost = lines.reduce(
@@ -8725,6 +8728,35 @@ function StockEntryPage({ data, mode = "add-unit" }) {
     return pending;
   }
 
+  function handleProductCreated(product) {
+    // The product is saved right away (it is a normal catalogue entry), then
+    // dropped straight onto this receipt as a line ready for quantity/serials.
+    setProducts((current) => [...current, product]);
+    addProductLine(product);
+    setNewProductOpen(false);
+    showSuccess(`Product ${product.display_name} created and added.`);
+  }
+
+  function createReserveClientOption(name) {
+    // Held locally until the receiving record saves -- same pending pattern as
+    // createSupplierOption; the backend creates (or reuses) the client atomically.
+    const trimmedName = name.trim();
+
+    if (!trimmedName) {
+      throw new Error("Enter a client name before creating it.");
+    }
+
+    const pendingId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const pending = { id: pendingId, name: trimmedName, __pending: true };
+    setClients((current) =>
+      [...current, pending].sort((left, right) =>
+        String(left.name || "").localeCompare(String(right.name || ""))
+      )
+    );
+    updateField("reserveClient", pendingId);
+    return pending;
+  }
+
   function addProductLine(product) {
     setLines((current) => [
       ...current,
@@ -8733,7 +8765,8 @@ function StockEntryPage({ data, mode = "add-unit" }) {
         product,
         quantity: 1,
         serials: "",
-        cost: "0.00"
+        cost: "0.00",
+        reserve: true
       }
     ]);
     setQuery("");
@@ -8789,9 +8822,14 @@ function StockEntryPage({ data, mode = "add-unit" }) {
         product: line.product.id,
         quantity,
         serial_numbers: buildReceivingSerialNumbers(line, lineIndex),
-        cost: line.cost || "0.00"
+        cost: line.cost || "0.00",
+        reserve: line.reserve !== false
       };
     });
+
+    if (selectedReserveClient && !lines.some((line) => line.reserve !== false)) {
+      throw new Error("Tick at least one line to reserve for the client, or remove the client.");
+    }
 
     const response = await fetch(data.api.receivingRecords, {
       method: "POST",
@@ -8803,6 +8841,11 @@ function StockEntryPage({ data, mode = "add-unit" }) {
         ...(selectedSupplier?.__pending
           ? { supplier_name_input: selectedSupplier.name }
           : { supplier: form.supplier }),
+        ...(selectedReserveClient
+          ? selectedReserveClient.__pending
+            ? { reserve_client_name_input: selectedReserveClient.name }
+            : { reserve_for_client: selectedReserveClient.id }
+          : {}),
         received_date: form.entryDate,
         po_number: form.poNumber,
         supplier_invoice_number: form.supplierInvoiceNumber,
@@ -8818,7 +8861,11 @@ function StockEntryPage({ data, mode = "add-unit" }) {
     }
 
     const created = await response.json();
-    showSuccess("Receiving record created.");
+    showSuccess(
+      created.reservation
+        ? `Receiving record created. Reserved for ${created.reservation.reserved_for} (${created.reservation.reservation_number}).`
+        : "Receiving record created."
+    );
     navigateAfterDelay(created.id ? `/operations/receiving/${created.id}/` : data.routes.receivingRecords);
   }
 
@@ -8940,13 +8987,36 @@ function StockEntryPage({ data, mode = "add-unit" }) {
                     loading={refsLoading}
                   />
                 ) : null}
+                {canReserve ? (
+                  <div>
+                    <SearchableCreatableSelect
+                      label="Reserve For Client"
+                      value={form.reserveClient}
+                      onChange={(value) => updateField("reserveClient", value)}
+                      options={clients}
+                      onCreate={createReserveClientOption}
+                      placeholder="Optional - search or create client..."
+                      helperText="Bought for a client? The received units are reserved for them right away, ready to deliver."
+                      loading={refsLoading}
+                    />
+                    {form.reserveClient ? (
+                      <button
+                        type="button"
+                        onClick={() => updateField("reserveClient", "")}
+                        className="mt-2 text-xs font-semibold text-[var(--bim-orange-text)] hover:text-white"
+                      >
+                        Remove client (keep stock available)
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
                 {isReceiving ? (
                   <>
-                    <Field label="Supplier Invoice Number">
-                      <TextInput value={form.supplierInvoiceNumber} onChange={(value) => updateField("supplierInvoiceNumber", value)} placeholder="Enter supplier invoice number" />
+                    <Field label="Supplier Invoice #">
+                      <TextInput value={form.supplierInvoiceNumber} onChange={(value) => updateField("supplierInvoiceNumber", value)} placeholder="Enter supplier invoice #" />
                     </Field>
-                    <Field label="Purchase Order">
-                      <TextInput value={form.poNumber} onChange={(value) => updateField("poNumber", value)} placeholder="Enter purchase order" />
+                    <Field label="Purchase Order #">
+                      <TextInput value={form.poNumber} onChange={(value) => updateField("poNumber", value)} placeholder="Enter purchase order #" />
                     </Field>
                   </>
                 ) : null}
@@ -8965,6 +9035,16 @@ function StockEntryPage({ data, mode = "add-unit" }) {
                     onChange={(event) => setQuery(event.target.value)}
                     placeholder="Search product by name, SKU, or barcode..."
                   />
+                  {canCreateProduct ? (
+                    <button
+                      type="button"
+                      onClick={() => setNewProductOpen(true)}
+                      className="inline-flex h-10 items-center gap-2 rounded-md border border-nexus-line px-3 text-sm font-semibold text-zinc-200 hover:bg-nexus-panel2"
+                    >
+                      <Plus className="h-4 w-4" />
+                      New Product
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     disabled
@@ -8975,6 +9055,20 @@ function StockEntryPage({ data, mode = "add-unit" }) {
                     Scan
                   </button>
                 </div>
+                {query && !filteredProducts.length && !refsLoading ? (
+                  <div className="absolute z-20 mt-2 w-full rounded-lg border border-nexus-line bg-nexus-panel px-4 py-3 text-sm text-zinc-400 shadow-2xl">
+                    No product matches &quot;{query}&quot;.
+                    {canCreateProduct ? (
+                      <button
+                        type="button"
+                        onClick={() => setNewProductOpen(true)}
+                        className="ml-2 font-semibold text-[var(--bim-orange-text)] hover:text-white"
+                      >
+                        Create it now
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
                 {filteredProducts.length ? (
                   <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel shadow-2xl">
                     {filteredProducts.map((product) => (
@@ -9002,6 +9096,16 @@ function StockEntryPage({ data, mode = "add-unit" }) {
                       <div>
                         <p className="font-bold text-white">{line.product.display_name}</p>
                         <p className="mt-1 font-mono text-xs text-[var(--bim-orange-text)]">{line.product.sku}</p>
+                        {selectedReserveClient ? (
+                          <label className="mt-2 flex cursor-pointer items-center gap-2 text-xs font-semibold text-zinc-300">
+                            <input
+                              type="checkbox"
+                              checked={line.reserve !== false}
+                              onChange={(event) => updateLine(line.key, "reserve", event.target.checked)}
+                            />
+                            Reserve for {selectedReserveClient.name}
+                          </label>
+                        ) : null}
                       </div>
                       <CompactField label="Quantity">
                         <TextInput value={line.quantity} onChange={(value) => updateLine(line.key, "quantity", value)} />
@@ -9028,7 +9132,7 @@ function StockEntryPage({ data, mode = "add-unit" }) {
                       <Package className="mx-auto mb-3 h-8 w-8" />
                       No products added yet
                       <br />
-                      Search above or scan a barcode to add items
+                      Search above, or create a new product, to add items
                     </span>
                   </div>
                 )}
@@ -9045,8 +9149,9 @@ function StockEntryPage({ data, mode = "add-unit" }) {
             <dl className="divide-y divide-nexus-line p-4">
               <DetailRow label="Date" value={formatDate(form.entryDate)} />
               {isReceiving ? <DetailRow label="Supplier" value={selectedSupplier?.name || "-"} /> : null}
-              {isReceiving ? <DetailRow label="Supplier Invoice Number" value={form.supplierInvoiceNumber || "-"} /> : null}
-              {isReceiving ? <DetailRow label="Purchase Order" value={form.poNumber || "-"} /> : null}
+              {canReserve ? <DetailRow label="Reserved For" value={selectedReserveClient?.name || "-"} /> : null}
+              {isReceiving ? <DetailRow label="Supplier Invoice #" value={form.supplierInvoiceNumber || "-"} /> : null}
+              {isReceiving ? <DetailRow label="Purchase Order #" value={form.poNumber || "-"} /> : null}
               <DetailRow label={isReceiving ? "Received By" : "Added By"} value={handledByName} />
               <DetailRow label="Products" value={lines.length} strong />
               <DetailRow label="Total Units" value={totalUnits} strong />
@@ -9055,7 +9160,221 @@ function StockEntryPage({ data, mode = "add-unit" }) {
           </section>
         </aside>
       </div>
+      {newProductOpen ? (
+        <QuickAddProductModal
+          data={data}
+          initialName={query}
+          onClose={() => setNewProductOpen(false)}
+          onCreated={handleProductCreated}
+        />
+      ) : null}
     </Shell>
+  );
+}
+
+// Creates a catalogue product without leaving Receive Stock / Add Unit. Same
+// fields and payload as AddProductPage (minus the image, which can be added
+// later from the product's edit page); Category/Brand can be created inline too.
+function QuickAddProductModal({ data, initialName = "", onClose, onCreated }) {
+  const [form, setForm] = useState({
+    descript: initialName,
+    category: "",
+    brand: "",
+    modelName: "",
+    barcode: "",
+    reorderStockLevel: ""
+  });
+  const [refs, setRefs] = useState({ categories: [], brands: [] });
+  const [refsLoading, setRefsLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadRefs() {
+      const [categoriesResponse, brandsResponse] = await Promise.all([
+        fetch(data.api.categories, { signal: controller.signal }),
+        fetch(data.api.brands, { signal: controller.signal })
+      ]);
+      setRefs({
+        categories: categoriesResponse.ok ? await categoriesResponse.json() : [],
+        brands: brandsResponse.ok ? await brandsResponse.json() : []
+      });
+      setRefsLoading(false);
+    }
+
+    loadRefs().catch((loadFailure) => {
+      if (loadFailure.name !== "AbortError") {
+        setError("Could not load categories and brands.");
+        setRefsLoading(false);
+      }
+    });
+
+    return () => controller.abort();
+  }, [data.api.brands, data.api.categories]);
+
+  useEffect(() => {
+    function handleKeyDown(event) {
+      if (event.key === "Escape" && !saving) onClose();
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onClose, saving]);
+
+  const selectedCategory = refs.categories.find((category) => String(category.id) === String(form.category));
+  const selectedBrand = refs.brands.find((brand) => String(brand.id) === String(form.brand));
+
+  function updateField(name, value) {
+    setForm((current) => ({ ...current, [name]: value }));
+  }
+
+  function createLookupOption(kind, name) {
+    // Held locally until the product saves -- same pending pattern as AddProductPage,
+    // so a failed save never leaves a stray Category/Brand row behind.
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      throw new Error("Enter a name before creating a catalogue value.");
+    }
+    const pendingId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const isCategory = kind === "category";
+    const pending = isCategory
+      ? { id: pendingId, name: trimmedName, __pending: true }
+      : { id: pendingId, brandname: trimmedName, __pending: true };
+    const listName = isCategory ? "categories" : "brands";
+    const labelField = isCategory ? "name" : "brandname";
+    setRefs((current) => ({
+      ...current,
+      [listName]: [...current[listName], pending].sort((left, right) =>
+        String(left[labelField] || "").localeCompare(String(right[labelField] || ""))
+      )
+    }));
+    updateField(kind, pendingId);
+    return pending;
+  }
+
+  async function saveProduct() {
+    setError("");
+    if (!form.descript.trim() || !form.category || !form.brand || !form.modelName.trim()) {
+      setError("Product name, category, brand and model are required.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload = new FormData();
+      payload.append("descript", form.descript.trim());
+      if (selectedCategory?.__pending) {
+        payload.append("category_name_input", selectedCategory.name);
+      } else {
+        payload.append("category", form.category);
+      }
+      if (selectedBrand?.__pending) {
+        payload.append("brand_name_input", selectedBrand.brandname);
+      } else {
+        payload.append("brand", form.brand);
+      }
+      payload.append("model_name_input", form.modelName.trim());
+      payload.append("barcode", form.barcode.trim());
+      if (form.reorderStockLevel.trim()) {
+        payload.append("reorder_stock_level", form.reorderStockLevel);
+      }
+      payload.append("isactive", "true");
+
+      const response = await fetch(data.api.products, {
+        method: "POST",
+        headers: { "X-CSRFToken": data.csrfToken },
+        body: payload
+      });
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        throw new Error(firstApiError(details) || "Could not save product.");
+      }
+      onCreated(await response.json());
+    } catch (saveError) {
+      setError(saveError.message);
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="New product"
+      className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-black/80 p-6 backdrop-blur-sm"
+    >
+      <div className="my-8 w-full max-w-xl rounded-lg border border-nexus-line bg-nexus-panel shadow-2xl">
+        <div className="flex items-start justify-between gap-4 border-b border-nexus-line px-5 py-4">
+          <div>
+            <h2 className="bim-section-title">New Product</h2>
+            <p className="mt-1 text-sm text-zinc-400">Add it to the catalogue and to this receipt in one step.</p>
+          </div>
+          <button type="button" onClick={onClose} disabled={saving} aria-label="Close" className="text-zinc-400 hover:text-white">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="grid gap-5 p-5">
+          {error ? (
+            <div className="rounded-lg border border-[rgb(var(--bim-red-rgb)/60%)] bg-red-500/10 px-4 py-3 text-sm font-semibold text-[var(--tone-red-text)]">
+              {error}
+            </div>
+          ) : null}
+          <Field label="Product Name" required>
+            <TextInput value={form.descript} onChange={(value) => updateField("descript", value)} placeholder="Enter product name" />
+          </Field>
+          <SearchableCreatableSelect
+            label="Category"
+            required
+            value={form.category}
+            onChange={(value) => updateField("category", value)}
+            options={refs.categories}
+            getOptionLabel={(item) => item.name}
+            onCreate={(name) => createLookupOption("category", name)}
+            placeholder="Search or create category..."
+            loading={refsLoading}
+          />
+          <SearchableCreatableSelect
+            label="Brand"
+            required
+            value={form.brand}
+            onChange={(value) => updateField("brand", value)}
+            options={refs.brands}
+            getOptionLabel={(item) => item.brandname}
+            onCreate={(name) => createLookupOption("brand", name)}
+            placeholder="Search or create brand..."
+            loading={refsLoading}
+          />
+          <Field label="Model" required>
+            <TextInput value={form.modelName} onChange={(value) => updateField("modelName", value)} placeholder="Enter model" />
+          </Field>
+          <Field label="Barcode">
+            <TextInput value={form.barcode} onChange={(value) => updateField("barcode", value)} placeholder="EAN-13 or UPC barcode (optional)" />
+          </Field>
+          <Field label="Low Stock Alert">
+            <TextInput value={form.reorderStockLevel} onChange={(value) => updateField("reorderStockLevel", value)} placeholder="Optional" />
+          </Field>
+        </div>
+        <div className="flex justify-end gap-3 border-t border-nexus-line px-5 py-4">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="inline-flex h-9 items-center rounded-md px-3 text-sm font-semibold text-zinc-200 hover:bg-nexus-panel2"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={saveProduct}
+            disabled={saving}
+            className="inline-flex h-9 items-center gap-2 rounded-md bg-nexus-orange px-4 text-sm font-semibold text-black"
+          >
+            <Save className="h-4 w-4" />
+            {saving ? "Saving..." : "Create & Add"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -9066,7 +9385,6 @@ function CreateDeliveryPage({ data }) {
   const [form, setForm] = useState({
     client: "",
     customerName: "",
-    receiverName: "",
     invoiceNumber: "",
     deliveryDate: today,
     notes: ""
@@ -9219,7 +9537,6 @@ function CreateDeliveryPage({ data }) {
             ? { client_name_input: selectedClient.name }
             : { client: selectedClient.id }),
           customer_name: selectedClient.name,
-          receiver_name: form.receiverName,
           invoice_number: form.invoiceNumber,
           delivery_date: form.deliveryDate,
           notes: form.notes,
@@ -9296,9 +9613,6 @@ function CreateDeliveryPage({ data }) {
                   onCreate={createClientOption}
                   placeholder="Search or create client..."
                 />
-                <Field label="Receiver Name">
-                  <TextInput value={form.receiverName} onChange={(value) => updateField("receiverName", value)} placeholder="Enter receiver name" />
-                </Field>
                 <Field label="Invoice Number">
                   <TextInput value={form.invoiceNumber} onChange={(value) => updateField("invoiceNumber", value)} placeholder="Enter invoice number" />
                 </Field>
@@ -9380,7 +9694,6 @@ function CreateDeliveryPage({ data }) {
             <dl className="divide-y divide-nexus-line p-4">
               <DetailRow label="Date" value={formatDate(form.deliveryDate)} />
               <DetailRow label="Client" value={clients.find((client) => String(client.id) === String(form.client))?.name || "-"} />
-              <DetailRow label="Receiver" value={form.receiverName || "-"} />
               <DetailRow label="Invoice Number" value={form.invoiceNumber || "-"} />
               <DetailRow label="Units" value={selectedUnits.length} strong />
               <DetailRow label="Reference Sale Price" value={totalSalePrice ? `$${totalSalePrice.toFixed(2)}` : "-"} />
@@ -9773,7 +10086,7 @@ function RepairSourcePicker({ source, onSourceChange, clientValue, onClientChang
       {source === "client_item" ? (
         <p className="-mt-2 text-xs text-zinc-500">
           For an item the client owns that was never entered here (for example sold before the system was used). It is
-          added in Repair, belongs to the client, and is not counted in your stock. It can only go back to the client.
+          added to your stock in Repair and removed from it when it goes back to the client. It can only go back to the client.
         </p>
       ) : null}
       {source === "internal_party" ? (
@@ -10170,41 +10483,87 @@ function parseCardCount(value) {
   return Number.isFinite(parsed) ? parsed : NaN;
 }
 
-// Command Center icon tint: neutral by default for every card, full stop. Only
-// the four cards below carry real severity/state, and each is computed here
-// from the live count rather than trusted from item.tone -- the backend's
-// low_stock_tone/out_of_stock_tone/pending_actions_tone (apps/core/views.py)
-// happen to compute the same thing, but this doesn't rely on that staying
-// true. Any card not listed here -- including one added later -- renders
-// neutral automatically; nothing silently inherits a static backend tone the
-// way the Clients card once did.
-// Icon color per dashboard card. Out of Stock / Low Stock stay
-// severity-driven (red/amber only once their count is > 0); every other
-// card gets a fixed, always-on color regardless of its value, so red/amber
-// stay reserved for those two severity cards alone.
-const FIXED_CARD_TONES = {
-  "Total Products": "blue",
-  "Total Stock": "purple",
-  "Available Stock": "green",
-  "Reserved Stock": "indigo",
-  "Issued Stock": "sky",
-  "Repair Stock": "yellow",
-  "Pending Actions": "cyan",
+// One colour per KPI card, looked up by label. The same tone drives the card's
+// icon, border and number, so to recolour a card change its line here and nothing
+// else. Rules: every card on a page has a different colour (check the page's whole
+// set when adding or changing a line); amber and red are reserved for the severity
+// cards; "Latest ..." cards and any card not listed stay neutral (white border).
+const KPI_CARD_TONES = {
+  // Command Center and Inventory
+  "Total Products": "green",
+  "Pending Actions": "blue",
+  "Total Stock": "blue",
+  "Available Stock": "teal",
+  "Reserved Stock": "purple",
+  "Issued Stock": "cyan",
+  "Repair Stock": "pink",
+  // System Overview
   "Suppliers": "purple",
-  "Receiving Records": "sky",
-  "Delivery Records": "yellow",
-  "Clients": "blue"
+  "Clients": "sky",
+  // Receiving (also the System Overview card)
+  "Receiving Records": "teal",
+  "Received Quantity": "blue",
+  "Supplier Sources": "purple",
+  // Reservations
+  "Reservations": "purple",
+  "Active Holds": "indigo",
+  "Reserved Units": "blue",
+  // Temporary assignments
+  "Temporary Assignments": "cyan",
+  "Active Assignments": "indigo",
+  "Assigned Units": "blue",
+  // Repairs
+  "Repair Records": "pink",
+  "Active Repairs": "yellow",
+  "Repair Units": "blue",
+  // Client upgrades
+  "Upgraded": "green",
+  "Scheduled": "cyan",
+  // Removals
+  "Removal Records": "danger",
+  "Removed Units": "blue",
+  "This Month": "yellow",
+  // Client returns
+  "Client Returns": "yellow",
+  "Returned Units": "blue",
+  "Sent To Repair": "pink",
+  // Deliveries (also the System Overview card)
+  "Delivery Records": "indigo",
+  "Delivered Units": "blue",
+  "Completed": "green"
+};
+
+// Cards that only light up while there is something to look at; at zero they fall
+// back to neutral (white border).
+const KPI_SEVERITY_TONES = {
+  "Low Stock Alerts": "warning",
+  "Out of Stock Products": "danger",
+  "Needs Upgrade": "warning",
+  "Overdue": "danger"
+};
+
+// Border + number colour for each tone (the icon uses toneClasses in uiRegistry.js).
+const KPI_TONE_ACCENTS = {
+  neutral: { border: "border-[var(--bim-card-border-neutral)]", value: "text-white" },
+  green: { border: "border-[rgb(var(--bim-green-rgb)/70%)]", value: "text-nexus-green" },
+  blue: { border: "border-[rgb(var(--bim-blue-rgb)/70%)]", value: "text-nexus-blue" },
+  danger: { border: "border-[rgb(var(--bim-red-rgb)/70%)]", value: "text-nexus-red" },
+  warning: { border: "border-[rgb(var(--bim-orange-focus-rgb)/70%)]", value: "text-[var(--bim-orange-text)]" },
+  purple: { border: "border-violet-500/70", value: "text-nexus-purple" },
+  indigo: { border: "border-indigo-500/70", value: "text-[var(--tone-indigo-text)]" },
+  sky: { border: "border-sky-500/70", value: "text-[var(--tone-sky-text)]" },
+  cyan: { border: "border-cyan-500/70", value: "text-[var(--tone-cyan-text)]" },
+  yellow: { border: "border-yellow-500/70", value: "text-[var(--tone-yellow-text)]" },
+  teal: { border: "border-teal-500/70", value: "text-[var(--tone-teal-text)]" },
+  pink: { border: "border-pink-500/70", value: "text-[var(--tone-pink-text)]" }
 };
 
 function dynamicIconTone(item) {
-  const count = parseCardCount(item.value);
-  if (item.label === "Low Stock Alerts") {
-    return count > 0 ? "warning" : "neutral";
+  const severity = KPI_SEVERITY_TONES[item.label];
+  if (severity) {
+    return parseCardCount(item.value) > 0 ? severity : "neutral";
   }
-  if (item.label === "Out of Stock Products") {
-    return count > 0 ? "danger" : "neutral";
-  }
-  return FIXED_CARD_TONES[item.label] || "neutral";
+  return KPI_CARD_TONES[item.label] || "neutral";
 }
 
 function StockStatusChart({ chart }) {
@@ -10241,7 +10600,8 @@ function StockStatusChart({ chart }) {
         <div className="space-y-3">
           {bars.map((bar) => {
             const color = STOCK_STATUS_COLORS[bar.status]?.[theme] || "#898781";
-            const widthPct = Math.max(2, Math.round((bar.count / maxCount) * 100));
+            // A zero count must draw no bar at all; a non-zero one keeps a visible minimum.
+            const widthPct = bar.count > 0 ? Math.max(2, Math.round((bar.count / maxCount) * 100)) : 0;
             return (
               <div
                 key={bar.status}
@@ -10283,32 +10643,19 @@ function KpiGrid({ items }) {
   return (
     <section className="grid gap-3 md:grid-cols-2 2xl:grid-cols-4" aria-label="Key metrics">
       {items.map((item) => {
-        const isWarning = item.tone === "warning";
-        const isDanger = item.tone === "danger";
-        const className = `group block min-h-32 rounded-lg border bg-nexus-panel p-4 shadow-panel ${
-            isDanger
-              ? "border-[rgb(var(--bim-red-rgb)/70%)]"
-              : isWarning
-                ? "border-[rgb(var(--bim-orange-focus-rgb)/70%)]"
-                : "border-nexus-line"
-          } ${item.href || item.onClick ? "cursor-pointer hover:border-[var(--bim-muted)] hover:bg-nexus-panel2 hover:shadow-[var(--bim-card-shadow-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--bim-orange-focus)]" : ""} ${item.active ? "ring-2 ring-[var(--bim-orange-focus)]" : ""}`;
+        const iconTone = dynamicIconTone(item);
+        const accent = KPI_TONE_ACCENTS[iconTone] || KPI_TONE_ACCENTS.neutral;
+        const className = `group block min-h-32 rounded-lg border bg-nexus-panel p-4 shadow-panel ${accent.border} ${
+            item.href || item.onClick ? "cursor-pointer hover:bg-nexus-panel2 hover:shadow-[var(--bim-card-shadow-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--bim-orange-focus)]" : ""} ${item.active ? "ring-2 ring-[var(--bim-orange-focus)]" : ""}`;
         const content = (
           <>
             <div className="flex items-start justify-between gap-3">
               <p className="text-sm font-medium text-zinc-400">{item.label}</p>
-              <span className={`rounded-md p-2 ${toneClasses[dynamicIconTone(item)] || toneClasses.neutral}`}>
+              <span className={`rounded-md p-2 ${toneClasses[iconTone] || toneClasses.neutral}`}>
                 <Icon name={item.icon} />
               </span>
             </div>
-            <p
-              className={`mt-6 text-3xl font-semibold tracking-tight ${
-                isDanger
-                  ? "text-nexus-red"
-                  : isWarning
-                    ? "text-[var(--bim-orange-text)]"
-                    : "text-white"
-              }`}
-            >
+            <p className={`mt-6 text-3xl font-semibold tracking-tight ${accent.value}`}>
               {item.value}
             </p>
             <div className="mt-1 flex items-center justify-between gap-3 text-sm text-zinc-400">

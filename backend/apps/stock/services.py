@@ -148,14 +148,13 @@ def _clean_serial_numbers(serial_numbers):
 # difference with log_record_changes() -- add new editable fields here.
 RECEIVING_HISTORY_FIELDS = (
     ("supplier", "Supplier"),
-    ("po_number", "Purchase Order"),
-    ("supplier_invoice_number", "Supplier invoice number"),
+    ("po_number", "Purchase Order #"),
+    ("supplier_invoice_number", "Supplier Invoice #"),
     ("received_date", "Received date"),
     ("notes", "Notes"),
 )
 DELIVERY_HISTORY_FIELDS = (
     ("customer_name", "Client"),
-    ("receiver_name", "Receiver"),
     ("invoice_number", "Invoice number"),
     ("delivery_date", "Delivery date"),
     ("notes", "Notes"),
@@ -279,6 +278,8 @@ def _create_receiving_item(receiving, supplier, received_date, item_data, create
     notes = item_data.get("notes", "")
     product_unit = item_data.get("product_unit")
 
+    created_units = []
+
     if quantity < 1:
         raise ValidationError("Receiving item quantity must be at least 1.")
     if product_unit and serial_numbers:
@@ -304,7 +305,7 @@ def _create_receiving_item(receiving, supplier, received_date, item_data, create
             receiving_record=receiving,
             reference=receiving.receiving_number,
         )
-        return
+        return created_units
     if serial_numbers and len(serial_numbers) != quantity:
         raise ValidationError("Serial number count must match quantity.")
 
@@ -331,6 +332,7 @@ def _create_receiving_item(receiving, supplier, received_date, item_data, create
                 purchase_date=received_date,
                 notes=notes,
             )
+            created_units.append(unit)
             ReceivingItem.objects.create(
                 receiving=receiving,
                 product=product,
@@ -352,7 +354,7 @@ def _create_receiving_item(receiving, supplier, received_date, item_data, create
                 receiving_record=receiving,
                 reference=receiving.receiving_number,
             )
-        return
+        return created_units
 
     ReceivingItem.objects.create(
         receiving=receiving,
@@ -361,6 +363,7 @@ def _create_receiving_item(receiving, supplier, received_date, item_data, create
         cost=cost,
         notes=notes,
     )
+    return created_units
 
 
 @transaction.atomic
@@ -375,6 +378,8 @@ def create_receiving_record(
     notes="",
     created_by=None,
     idempotency_key="",
+    reserve_for_client=None,
+    reserve_client_name_input="",
 ):
     if not items:
         raise ValidationError("At least one receiving item is required.")
@@ -415,13 +420,34 @@ def create_receiving_record(
                 return existing
         raise
 
+    units_to_reserve = []
     for item_data in items:
-        _create_receiving_item(
+        created_units = _create_receiving_item(
             receiving=receiving,
             supplier=supplier,
             received_date=receiving.received_date,
             item_data=item_data,
             created_by=created_by,
+        )
+        if item_data.get("reserve", True):
+            units_to_reserve.extend(created_units)
+
+    # Stock bought for a client: reserve the received units for them in the same
+    # step. Goes through create_reservation_record so the reservation, the unit
+    # status change and the StockMovement rows are the normal ones.
+    receiving.created_reservation = None
+    if reserve_for_client is not None or (reserve_client_name_input or "").strip():
+        if not units_to_reserve:
+            raise ValidationError(
+                "Tick at least one received line to reserve it for the client."
+            )
+        receiving.created_reservation = create_reservation_record(
+            unit_ids=[unit.pk for unit in units_to_reserve],
+            reserved_for_type=ReservationRecord.TYPE_CLIENT,
+            reserved_for_client=reserve_for_client,
+            client_name_input=reserve_client_name_input,
+            reason=f"Reserved on receipt {receiving.receiving_number}",
+            reserved_by=created_by,
         )
 
     return receiving
@@ -434,7 +460,6 @@ def create_delivery_record(
     customer_name="",
     client=None,
     client_name_input="",
-    receiver_name="",
     invoice_number="",
     delivery_date=None,
     notes="",
@@ -518,7 +543,6 @@ def create_delivery_record(
     delivery = DeliveryRecord.objects.create(
         client=client,
         customer_name=(customer_name or client_name or "").strip(),
-        receiver_name=(receiver_name or "").strip(),
         invoice_number=(invoice_number or "").strip(),
         delivery_date=delivery_date or timezone.localdate(),
         notes=notes,
@@ -1971,7 +1995,6 @@ def update_delivery_record_header(
     delivery,
     *,
     customer_name=None,
-    receiver_name=None,
     invoice_number=None,
     delivery_date=None,
     notes=None,
@@ -1998,8 +2021,6 @@ def update_delivery_record_header(
 
     if customer_name is not None:
         delivery.customer_name = customer_name.strip()
-    if receiver_name is not None:
-        delivery.receiver_name = receiver_name.strip()
     if invoice_number is not None:
         delivery.invoice_number = invoice_number.strip()
     if delivery_date is not None:
@@ -2009,7 +2030,6 @@ def update_delivery_record_header(
     delivery.save(
         update_fields=(
             "customer_name",
-            "receiver_name",
             "invoice_number",
             "delivery_date",
             "notes",

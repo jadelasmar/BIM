@@ -88,9 +88,12 @@ class Product(models.Model):
         return self.descript
 
     def active_unit_count(self, status=None):
-        units = self.units.filter(isactive=True, owner_client__isnull=True)
+        units = self.units.filter(isactive=True)
         if status:
             units = units.filter(status=status)
+        if status == ProductUnit.STATUS_SOLD:
+            # A client's own item handed back after repair was never sold by us.
+            units = units.filter(owner_client__isnull=True)
 
         return units.count()
 
@@ -98,7 +101,6 @@ class Product(models.Model):
     def total_units(self):
         return self.units.filter(
             isactive=True,
-            owner_client__isnull=True,
             status__in=ProductUnit.IN_STOCK_STATUSES,
         ).count()
 
@@ -246,9 +248,9 @@ class ProductUnit(models.Model):
         Supplier, on_delete=models.SET_NULL, blank=True, null=True
     )
     # Set when the unit belongs to a client: they handed it to us for repair and we
-    # never bought or sold it. It is tracked through the repair like any unit, but
-    # it is not our stock, so it is left out of every stock count (see
-    # Product.total_units and the other aggregates) and cannot be removed.
+    # never bought or sold it. It counts as stock (in Repair) while we hold it and
+    # leaves stock when it is returned to the client; it is never counted as one we
+    # sold, and it cannot be removed from inventory.
     owner_client = models.ForeignKey(
         Client,
         on_delete=models.SET_NULL,

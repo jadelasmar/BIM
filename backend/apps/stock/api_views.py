@@ -87,9 +87,12 @@ class WritePermissionRequiredMixin:
 
 
 def _active_unit_filter(status=None):
-    filters = Q(units__isactive=True, units__owner_client__isnull=True)
+    filters = Q(units__isactive=True)
     if status:
         filters &= Q(units__status=status)
+    if status == ProductUnit.STATUS_SOLD:
+        # A client's own item handed back after repair was never sold by us.
+        filters &= Q(units__owner_client__isnull=True)
     return filters
 
 
@@ -104,7 +107,6 @@ def _product_queryset():
                 "units",
                 filter=Q(
                     units__isactive=True,
-                    units__owner_client__isnull=True,
                     units__status__in=ProductUnit.IN_STOCK_STATUSES,
                 ),
                 distinct=True,
@@ -456,7 +458,6 @@ class DeliveryRecordListCreateAPIView(WritePermissionRequiredMixin, generics.Lis
                 Q(delivery_number__icontains=query)
                 | Q(client__name__icontains=query)
                 | Q(customer_name__icontains=query)
-                | Q(receiver_name__icontains=query)
                 | Q(invoice_number__icontains=query)
                 | Q(items__product_unit__serial_number__icontains=query)
                 | Q(items__product__descript__icontains=query)
@@ -956,6 +957,13 @@ class ReceivingRecordListCreateAPIView(WritePermissionRequiredMixin, generics.Li
     def perform_create(self, serializer):
         _require_perm(self.request.user, stock_constants.ADD_RECEIVING_RECORD)
         _require_perm(self.request.user, stock_constants.ADD_PRODUCT_UNIT)
+        data = serializer.validated_data
+        if data.get("reserve_for_client") is not None or (
+            data.get("reserve_client_name_input") or ""
+        ).strip():
+            # Reserving on receipt also creates a reservation and changes unit status.
+            _require_perm(self.request.user, stock_constants.ADD_RESERVATION_RECORD)
+            _require_perm(self.request.user, stock_constants.CHANGE_PRODUCT_UNIT)
         serializer.save()
 
 
@@ -1020,7 +1028,7 @@ class InventorySummaryAPIView(APIView):
 
     def get(self, request):
         _require_perm(request.user, stock_constants.VIEW_PRODUCT)
-        active_units = ProductUnit.objects.filter(isactive=True, owner_client__isnull=True)
+        active_units = ProductUnit.objects.filter(isactive=True)
         products = _product_queryset()
         return Response(
             {
@@ -1037,7 +1045,10 @@ class InventorySummaryAPIView(APIView):
                 "issued_units": active_units.filter(
                     status=ProductUnit.STATUS_ISSUED,
                 ).count(),
-                "sold_units": active_units.filter(status=ProductUnit.STATUS_SOLD).count(),
+                "sold_units": active_units.filter(
+                    status=ProductUnit.STATUS_SOLD,
+                    owner_client__isnull=True,
+                ).count(),
                 "repair_units": active_units.filter(
                     status=ProductUnit.STATUS_REPAIR,
                 ).count(),

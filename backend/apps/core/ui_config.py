@@ -27,17 +27,17 @@ UI_TOKENS = {
     "total_products": {
         "label": "Total Products",
         "icon": "package",
-        "tone": "blue",
+        "tone": "green",
     },
     "available_stock": {
         "label": "Available Stock",
         "icon": "check-circle-2",
-        "tone": "green",
+        "tone": "teal",
     },
     "reserved_stock": {
         "label": "Reserved Stock",
         "icon": "clock-3",
-        "tone": "indigo",
+        "tone": "purple",
     },
     "out_of_stock": {
         "label": "Out of Stock Products",
@@ -52,7 +52,7 @@ UI_TOKENS = {
     "pending_actions": {
         "label": "Pending Actions",
         "icon": "clipboard",
-        "tone": "cyan",
+        "tone": "blue",
     },
     "suppliers": {
         "label": "Suppliers",
@@ -67,32 +67,32 @@ UI_TOKENS = {
     "receiving_records": {
         "label": "Receiving Records",
         "icon": "inbox",
-        "tone": "sky",
+        "tone": "teal",
     },
     "delivery_records": {
         "label": "Delivery Records",
         "icon": "delivery",
-        "tone": "yellow",
+        "tone": "indigo",
     },
     "reservation_records": {
         "label": "Reservation Records",
         "icon": "clock-3",
-        "tone": "warning",
+        "tone": "purple",
     },
     "repair_records": {
         "label": "Repair Records",
         "icon": "wrench",
-        "tone": "danger",
+        "tone": "pink",
     },
     "client_return_records": {
         "label": "Client Returns",
         "icon": "reset",
-        "tone": "green",
+        "tone": "yellow",
     },
     "clients": {
         "label": "Clients",
         "icon": "clients",
-        "tone": "blue",
+        "tone": "sky",
     },
     "active_users": {
         "label": "Active Users",
@@ -124,17 +124,17 @@ UI_TOKENS = {
     "add_product": {
         "label": "Add Product",
         "icon": "plus",
-        "tone": "blue",
+        "tone": "green",
     },
     "add_stock_unit": {
         "label": "Add Unit",
         "icon": "package-plus",
-        "tone": "green",
+        "tone": "blue",
     },
     "receive_stock": {
         "label": "Receive Stock",
         "icon": "inbox",
-        "tone": "green",
+        "tone": "teal",
     },
     "create_delivery": {
         "label": "Create Delivery",
@@ -144,32 +144,32 @@ UI_TOKENS = {
     "create_reservation": {
         "label": "Create Reservation",
         "icon": "clock-3",
-        "tone": "warning",
+        "tone": "purple",
     },
     "create_issue": {
         "label": "Create Temporary Assignment",
         "icon": "user-check",
-        "tone": "indigo",
+        "tone": "cyan",
     },
     "create_repair": {
         "label": "Create Repair",
         "icon": "wrench",
-        "tone": "danger",
+        "tone": "pink",
     },
     "create_client_return": {
         "label": "Create Client Return",
         "icon": "reset",
-        "tone": "green",
+        "tone": "yellow",
     },
     "add_supplier": {
         "label": "Add Supplier",
         "icon": "suppliers",
-        "tone": "purple",
+        "tone": "orange",
     },
     "add_client": {
         "label": "Add Client",
         "icon": "clients",
-        "tone": "blue",
+        "tone": "neutral",
     },
     "create_removal": {
         "label": "Remove Unit",
@@ -179,7 +179,7 @@ UI_TOKENS = {
     "create_client_upgrade": {
         "label": "Add Client Upgrade",
         "icon": "refresh-cw",
-        "tone": "cyan",
+        "tone": "sky",
     },
 }
 

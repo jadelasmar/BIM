@@ -1693,7 +1693,6 @@ class DeliveryRecordSerializer(serializers.ModelSerializer):
             "client_name",
             "client_name_input",
             "customer_name",
-            "receiver_name",
             "invoice_number",
             "delivery_date",
             "notes",
@@ -1782,7 +1781,6 @@ class DeliveryRecordCorrectionSerializer(serializers.ModelSerializer):
         model = DeliveryRecord
         fields = (
             "customer_name",
-            "receiver_name",
             "invoice_number",
             "delivery_date",
             "notes",
@@ -1790,7 +1788,6 @@ class DeliveryRecordCorrectionSerializer(serializers.ModelSerializer):
         )
         extra_kwargs = {
             "customer_name": {"required": False, "allow_blank": False},
-            "receiver_name": {"required": False, "allow_blank": True},
             "invoice_number": {"required": False, "allow_blank": True},
             "delivery_date": {"required": False},
             "notes": {"required": False, "allow_blank": True},
@@ -1804,9 +1801,6 @@ class DeliveryRecordCorrectionSerializer(serializers.ModelSerializer):
                 customer_name=validated_data.get("customer_name")
                 if "customer_name" in validated_data
                 else instance.customer_name,
-                receiver_name=validated_data.get("receiver_name")
-                if "receiver_name" in validated_data
-                else instance.receiver_name,
                 invoice_number=validated_data.get("invoice_number")
                 if "invoice_number" in validated_data
                 else instance.invoice_number,
@@ -1887,6 +1881,9 @@ class ReceivingItemInputSerializer(serializers.Serializer):
     )
     cost = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
     notes = serializers.CharField(required=False, allow_blank=True)
+    # Only matters when the receipt names a client to reserve for; lets one
+    # receipt mix client stock and stock that stays available.
+    reserve = serializers.BooleanField(required=False, default=True)
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
@@ -1936,6 +1933,18 @@ class ReceivingRecordSerializer(serializers.ModelSerializer):
         allow_blank=True,
         max_length=64,
     )
+    reserve_for_client = serializers.PrimaryKeyRelatedField(
+        queryset=Client.objects.filter(isactive=True),
+        required=False,
+        allow_null=True,
+        write_only=True,
+    )
+    reserve_client_name_input = serializers.CharField(
+        required=False,
+        write_only=True,
+        allow_blank=True,
+    )
+    reservation = serializers.SerializerMethodField()
 
     class Meta:
         model = ReceivingRecord
@@ -1958,6 +1967,9 @@ class ReceivingRecordSerializer(serializers.ModelSerializer):
             "total_quantity",
             "item_inputs",
             "idempotency_key",
+            "reserve_for_client",
+            "reserve_client_name_input",
+            "reservation",
             "items",
             "crdate",
             "isactive",
@@ -1980,6 +1992,17 @@ class ReceivingRecordSerializer(serializers.ModelSerializer):
 
     def get_total_quantity(self, obj):
         return obj.total_quantity
+
+    def get_reservation(self, obj):
+        # Only set on the response to the create call that also reserved the stock.
+        reservation = getattr(obj, "created_reservation", None)
+        if reservation is None:
+            return None
+        return {
+            "id": reservation.pk,
+            "reservation_number": reservation.reservation_number,
+            "reserved_for": reservation.reserved_for,
+        }
 
     def create(self, validated_data):
         item_inputs = validated_data.pop("item_inputs")

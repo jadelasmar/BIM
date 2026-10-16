@@ -9,25 +9,27 @@ export const toneClasses = {
   indigo: TONE_COLORS.indigoSoft10,
   neutral: TONE_COLORS.zinc70060,
   orange: TONE_COLORS.amberSoft10Nexus,
+  pink: TONE_COLORS.pinkSoft10,
   purple: TONE_COLORS.violetSoft10Nexus,
   red: TONE_COLORS.redSoft10Nexus,
   sky: TONE_COLORS.skySoft10,
   stock: TONE_COLORS.zinc70060,
+  teal: TONE_COLORS.tealSoft10,
   warning: TONE_COLORS.amberSoft10Nexus,
   yellow: TONE_COLORS.yellowSoft10
 };
 
 export const workflowMeta = {
-  add_product: { icon: "plus", tone: "blue" },
-  add_stock_unit: { icon: "package-plus", tone: "green" },
-  receive_stock: { icon: "inbox", tone: "green" },
+  add_product: { icon: "plus", tone: "green" },
+  add_stock_unit: { icon: "package-plus", tone: "blue" },
+  receive_stock: { icon: "inbox", tone: "teal" },
   create_delivery: { icon: "delivery", tone: "indigo" },
-  create_reservation: { icon: "clock-3", tone: "warning" },
-  create_issue: { icon: "user-check", tone: "indigo" },
-  create_repair: { icon: "wrench", tone: "danger" },
+  create_reservation: { icon: "clock-3", tone: "purple" },
+  create_issue: { icon: "user-check", tone: "cyan" },
+  create_repair: { icon: "wrench", tone: "pink" },
   create_removal: { icon: "package-x", tone: "danger" },
-  create_client_return: { icon: "reset", tone: "green" },
-  create_client_upgrade: { icon: "refresh-cw", tone: "cyan" },
-  add_supplier: { icon: "suppliers", tone: "purple" },
-  add_client: { icon: "clients", tone: "blue" }
+  create_client_return: { icon: "reset", tone: "yellow" },
+  create_client_upgrade: { icon: "refresh-cw", tone: "sky" },
+  add_supplier: { icon: "suppliers", tone: "orange" },
+  add_client: { icon: "clients", tone: "neutral" }
 };

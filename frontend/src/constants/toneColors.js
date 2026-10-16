@@ -46,5 +46,9 @@ export const TONE_COLORS = {
   skySoft15: "bg-sky-500/15 text-[var(--tone-sky-text)]",
   skySoft10: "bg-sky-500/10 text-[var(--tone-sky-text)]",
 
+  tealSoft10: "bg-teal-500/10 text-[var(--tone-teal-text)]",
+
+  pinkSoft10: "bg-pink-500/10 text-[var(--tone-pink-text)]",
+
   yellowSoft10: "bg-yellow-500/10 text-[var(--tone-yellow-text)]"
 };

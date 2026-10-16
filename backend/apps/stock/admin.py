@@ -90,27 +90,27 @@ class ProductAdmin(admin.ModelAdmin):
             # permanently left inventory. See ProductUnit.IN_STOCK_STATUSES.
             total_unit_count=Count(
                 "units",
-                filter=Q(units__isactive=True, units__owner_client__isnull=True, units__status__in=ProductUnit.IN_STOCK_STATUSES),
+                filter=Q(units__isactive=True, units__status__in=ProductUnit.IN_STOCK_STATUSES),
             ),
             available_unit_count=Count(
                 "units",
                 filter=Q(
                     units__status=ProductUnit.STATUS_AVAILABLE,
-                    units__isactive=True, units__owner_client__isnull=True,
+                    units__isactive=True,
                 ),
             ),
             reserved_unit_count=Count(
                 "units",
                 filter=Q(
                     units__status=ProductUnit.STATUS_RESERVED,
-                    units__isactive=True, units__owner_client__isnull=True,
+                    units__isactive=True,
                 ),
             ),
             issued_unit_count=Count(
                 "units",
                 filter=Q(
                     units__status=ProductUnit.STATUS_ISSUED,
-                    units__isactive=True, units__owner_client__isnull=True,
+                    units__isactive=True,
                 ),
             ),
             sold_unit_count=Count(
@@ -124,14 +124,14 @@ class ProductAdmin(admin.ModelAdmin):
                 "units",
                 filter=Q(
                     units__status=ProductUnit.STATUS_REPAIR,
-                    units__isactive=True, units__owner_client__isnull=True,
+                    units__isactive=True,
                 ),
             ),
             removed_unit_count=Count(
                 "units",
                 filter=Q(
                     units__status=ProductUnit.STATUS_REMOVED,
-                    units__isactive=True, units__owner_client__isnull=True,
+                    units__isactive=True,
                 ),
             ),
         )
