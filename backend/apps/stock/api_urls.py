@@ -30,6 +30,11 @@ urlpatterns = [
         name="product-unit-detail",
     ),
     path(
+        "product-units/<int:pk>/details/",
+        api_views.ProductUnitCorrectionAPIView.as_view(),
+        name="product-unit-details",
+    ),
+    path(
         "deliveries/",
         api_views.DeliveryRecordListCreateAPIView.as_view(),
         name="deliveries",

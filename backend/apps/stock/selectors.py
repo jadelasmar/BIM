@@ -1,4 +1,5 @@
 from datetime import date, timedelta
+from urllib.parse import urlencode
 
 from django.db.models import Count, Q
 from django.urls import reverse
@@ -629,7 +630,9 @@ def global_search(user, query, limit=GLOBAL_SEARCH_RESULT_LIMIT):
                 "id": unit.pk,
                 "title": unit.serial_number,
                 "subtitle": f"{unit.product.descript} - {unit.get_status_display()}",
-                "href": reverse("inventory_product_detail", kwargs={"pk": unit.product_id}),
+                "href": reverse("inventory_product_detail", kwargs={"pk": unit.product_id})
+                + "?"
+                + urlencode({"unit": unit.serial_number}),
             },
             limit,
         )

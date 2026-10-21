@@ -225,7 +225,7 @@ class UIRegistryTests(SimpleTestCase):
         self.assertIn("movements={movements}", product_details_source)
         self.assertIn("data.api.productMovements", product_details_source)
         self.assertIn('["Movements", movements.length]', product_details_source)
-        self.assertIn("canAccessAdmin={data.user?.canAccessAdmin}", product_details_source)
+        self.assertIn("onUnitSaved={handleUnitSaved}", product_details_source)
         self.assertIn("data.quickActions.find", product_details_source)
         self.assertIn("Movement History", product_details_source)
         self.assertNotIn("activityTitle(unit)", product_details_source)
@@ -233,7 +233,9 @@ class UIRegistryTests(SimpleTestCase):
         self.assertNotIn("Supplier Code", product_details_source)
         self.assertNotIn('href="/inventory/receiving/new/"', product_details_source)
         self.assertNotIn('href="/inventory/deliveries/new/"', product_details_source)
-        self.assertIn("/admin/bim_stock/productunit/${unit.id}/change/", app_source)
+        self.assertIn("function EditUnitModal", app_source)
+        self.assertIn("data.permissions?.canEditStockUnit", product_details_source)
+        self.assertNotIn("/admin/bim_stock/productunit/${unit.id}/change/", app_source)
 
     def test_inventory_product_rows_select_inline_detail_without_navigation(self):
         app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")

@@ -49,6 +49,7 @@ from .services import (
     update_client_return_record_header,
     update_delivery_record_header,
     update_issue_record_header,
+    update_product_unit_details,
     update_receiving_record_header,
     update_repair_record_header,
     update_reservation_record_header,
@@ -413,6 +414,36 @@ class ProductUnitSerializer(serializers.ModelSerializer):
 
     def get_supplier_name(self, obj):
         return obj.supplier.name if obj.supplier else None
+
+
+class ProductUnitCorrectionSerializer(serializers.ModelSerializer):
+    """Edits a unit's own details through update_product_unit_details(); the
+    status is not editable here."""
+
+    class Meta:
+        model = ProductUnit
+        fields = ("serial_number", "purchase_date", "supplier", "cost", "notes")
+        extra_kwargs = {
+            # Uniqueness is checked (with a readable message) in the service.
+            "serial_number": {"required": False, "validators": []},
+            "purchase_date": {"required": False},
+            "supplier": {"required": False},
+            "cost": {"required": False},
+            "notes": {"required": False, "allow_blank": True},
+        }
+
+    def update(self, instance, validated_data):
+        try:
+            return update_product_unit_details(
+                instance,
+                **validated_data,
+                changed_by=getattr(self.context.get("request"), "user", None),
+            )
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc
+
+    def to_representation(self, instance):
+        return ProductUnitSerializer(instance, context=self.context).data
 
 
 class StockMovementSerializer(serializers.ModelSerializer):

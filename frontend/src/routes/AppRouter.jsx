@@ -7772,7 +7772,19 @@ function ProductDetailsPage({ data }) {
   const [movementsAccessDenied, setMovementsAccessDenied] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState("Overview");
+  // ?unit=<serial> (from global search) opens the Stock Units tab on that unit.
+  const [unitQuery] = useState(() => new URLSearchParams(window.location.search).get("unit") || "");
+  const [activeTab, setActiveTab] = useState(unitQuery ? "Stock Units" : "Overview");
+
+  function handleUnitSaved(updated) {
+    setUnits((current) => current.map((unit) => (unit.id === updated.id ? updated : unit)));
+    fetch(data.api.productMovements.replace("{id}", productId))
+      .then((response) => (response.ok ? response.json() : null))
+      .then((rows) => {
+        if (rows) setMovements(rows);
+      })
+      .catch(() => {});
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -7995,9 +8007,11 @@ function ProductDetailsPage({ data }) {
       {activeTab === "Stock Units" ? (
         <div className="mt-4">
           <ProductUnitRegister
+            data={data}
             units={units}
             accessDenied={unitsAccessDenied}
-            canAccessAdmin={data.user?.canAccessAdmin}
+            initialQuery={unitQuery}
+            onUnitSaved={handleUnitSaved}
           />
         </div>
       ) : null}
@@ -8178,16 +8192,42 @@ function ProductDetailActionLink({ action }) {
   );
 }
 
-function ProductUnitRegister({ units, accessDenied, canAccessAdmin = false }) {
-  const visibleUnits = units.slice(0, 10);
+function ProductUnitRegister({ data, units, accessDenied, initialQuery = "", onUnitSaved }) {
+  const [query, setQuery] = useState(initialQuery);
+  const [editingUnit, setEditingUnit] = useState(null);
+  const canEdit = Boolean(data.permissions?.canEditStockUnit);
+  const search = query.trim().toLowerCase();
+  const matchingUnits = search
+    ? units.filter((unit) =>
+        `${unit.serial_number} ${unit.supplier_name || ""} ${unit.status_label || unit.status} ${unit.notes || ""}`
+          .toLowerCase()
+          .includes(search)
+      )
+    : units;
+  // Without a search only the first 10 are listed; a search lists every match.
+  const visibleUnits = search ? matchingUnits : matchingUnits.slice(0, 10);
   const unitLabel = units.length === 1 ? "unit" : "units";
 
   return (
     <section className="overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel" aria-label="Stock unit register">
       <PanelHeader title="Stock Unit Register" badge={`${formatCount(units.length)} ${unitLabel}`} />
+      {!accessDenied && units.length ? (
+        <div className="border-t border-nexus-line p-4">
+          <SearchBar
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onScan={setQuery}
+            placeholder="Search serial number, supplier, status, or notes..."
+          />
+        </div>
+      ) : null}
       {accessDenied ? (
         <p className="border-t border-nexus-line px-4 py-5 text-sm text-zinc-500">
           Stock-unit details require stock-unit access.
+        </p>
+      ) : search && !visibleUnits.length ? (
+        <p className="border-t border-nexus-line px-4 py-5 text-sm text-zinc-500">
+          No stock unit of this product matches "{query.trim()}".
         </p>
       ) : visibleUnits.length ? (
         <>
@@ -8201,7 +8241,7 @@ function ProductUnitRegister({ units, accessDenied, canAccessAdmin = false }) {
                   <th className="px-4 py-3 font-medium">Cost</th>
                   <th className="px-4 py-3 font-medium">Purchased</th>
                   <th className="px-4 py-3 font-medium">Sold</th>
-                  {canAccessAdmin ? <th className="px-4 py-3 font-medium">Admin</th> : null}
+                  {canEdit ? <th className="px-4 py-3 font-medium"><span className="sr-only">Actions</span></th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -8222,11 +8262,16 @@ function ProductUnitRegister({ units, accessDenied, canAccessAdmin = false }) {
                     <td className="px-4 py-3 text-zinc-400">{formatCurrency(unit.cost)}</td>
                     <td className="px-4 py-3 text-zinc-400">{formatDate(unit.purchase_date)}</td>
                     <td className="px-4 py-3 text-zinc-400">{formatDate(unit.sold_date)}</td>
-                    {canAccessAdmin ? (
-                      <td className="px-4 py-3">
-                        <a href={`/admin/bim_stock/productunit/${unit.id}/change/`} className="text-xs font-semibold text-[var(--bim-orange-text)] hover:text-white">
-                          Edit Unit
-                        </a>
+                    {canEdit ? (
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => setEditingUnit(unit)}
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--bim-orange-text)] hover:text-white"
+                        >
+                          <Edit3 className="h-3.5 w-3.5" />
+                          Edit
+                        </button>
                       </td>
                     ) : null}
                   </tr>
@@ -8234,9 +8279,9 @@ function ProductUnitRegister({ units, accessDenied, canAccessAdmin = false }) {
               </tbody>
             </table>
           </div>
-          {units.length > visibleUnits.length ? (
+          {!search && units.length > visibleUnits.length ? (
             <p className="border-t border-nexus-line px-4 py-3 text-xs text-zinc-500">
-              Showing {visibleUnits.length} of {units.length} active stock units.
+              Showing {visibleUnits.length} of {units.length} active stock units. Search to find any unit.
             </p>
           ) : null}
         </>
@@ -8245,7 +8290,153 @@ function ProductUnitRegister({ units, accessDenied, canAccessAdmin = false }) {
           No stock units are registered for this product yet.
         </p>
       )}
+      {editingUnit ? (
+        <EditUnitModal
+          data={data}
+          unit={editingUnit}
+          onClose={() => setEditingUnit(null)}
+          onSaved={(updated) => {
+            onUnitSaved?.(updated);
+            setEditingUnit(null);
+          }}
+        />
+      ) : null}
     </section>
+  );
+}
+
+// Corrects one stock unit's own details -- typically its real serial number in
+// place of an auto-generated one. The status is not editable here: it only
+// changes through the workflows. Every change shows in the unit's Edit History.
+function EditUnitModal({ data, unit, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    serialNumber: unit.serial_number || "",
+    purchaseDate: unit.purchase_date || "",
+    supplier: unit.supplier ? String(unit.supplier) : "",
+    cost: unit.cost ?? "0.00",
+    notes: unit.notes || ""
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const { suppliers } = usePartyLookups(data, { suppliers: true });
+  const { showSuccess } = useToast();
+
+  useEffect(() => {
+    function handleKeyDown(event) {
+      if (event.key === "Escape" && !saving) onClose();
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [onClose, saving]);
+
+  function updateField(name, value) {
+    setForm((current) => ({ ...current, [name]: value }));
+  }
+
+  async function saveUnit() {
+    setSaving(true);
+    setError("");
+    try {
+      if (!form.serialNumber.trim()) {
+        throw new Error("Serial number is required.");
+      }
+      const response = await fetch(`${data.api.productUnitDetail.replace("{id}", unit.id)}details/`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          "X-CSRFToken": data.csrfToken
+        },
+        body: JSON.stringify({
+          serial_number: form.serialNumber.trim(),
+          purchase_date: form.purchaseDate || null,
+          supplier: form.supplier || null,
+          cost: form.cost || "0.00",
+          notes: form.notes
+        })
+      });
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        throw new Error(firstApiError(details) || "Could not update the stock unit.");
+      }
+      const updated = await response.json();
+      showSuccess(`Stock unit ${updated.serial_number} updated.`);
+      onSaved(updated);
+    } catch (saveError) {
+      setError(saveError.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const supplierOptions = suppliers.map((supplier) => [String(supplier.id), supplier.name]);
+  if (unit.supplier && !supplierOptions.some(([id]) => id === String(unit.supplier))) {
+    supplierOptions.push([String(unit.supplier), unit.supplier_name || "Current supplier"]);
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Edit stock unit"
+      className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-black/80 p-4 backdrop-blur-sm sm:p-6"
+    >
+      <div className="my-4 w-full max-w-xl rounded-lg border border-nexus-line bg-nexus-panel shadow-2xl sm:my-8">
+        <div className="flex items-start justify-between gap-4 border-b border-nexus-line px-5 py-4">
+          <div>
+            <h2 className="bim-section-title">Edit Stock Unit</h2>
+            <p className="mt-1 text-sm text-zinc-400">
+              {unit.product_name} <span className="mx-1">•</span> {unit.status_label || unit.status}
+            </p>
+          </div>
+          <button type="button" onClick={onClose} disabled={saving} aria-label="Close" className="text-zinc-400 hover:text-white">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="grid gap-5 p-5">
+          {error ? (
+            <div className="rounded-lg border border-[rgb(var(--bim-red-rgb)/60%)] bg-red-500/10 px-4 py-3 text-sm font-semibold text-[var(--tone-red-text)]">
+              {error}
+            </div>
+          ) : null}
+          <Field label="Serial Number" required>
+            <div className="flex items-center gap-2">
+              <div className="min-w-0 flex-1">
+                <TextInput value={form.serialNumber} onChange={(value) => updateField("serialNumber", value)} placeholder="Serial number on the unit" />
+              </div>
+              <ScanButton
+                title="Scan Serial Number"
+                label="Scan serial number"
+                onScan={(code) => updateField("serialNumber", code)}
+                className="h-10 w-10 rounded-md border border-nexus-line"
+              />
+            </div>
+          </Field>
+          <Field label="Purchase Date">
+            <DateInput value={form.purchaseDate} onChange={(value) => updateField("purchaseDate", value)} />
+          </Field>
+          <Field label="Supplier">
+            <SelectInput value={form.supplier} onChange={(value) => updateField("supplier", value)} options={supplierOptions} placeholder="No supplier" />
+          </Field>
+          <Field label="Cost">
+            <TextInput value={form.cost} onChange={(value) => updateField("cost", value)} placeholder="0.00" />
+          </Field>
+          <Field label="Notes">
+            <TextInput value={form.notes} onChange={(value) => updateField("notes", value)} placeholder="Notes about this unit" />
+          </Field>
+          <p className="text-xs text-zinc-500">The status changes only through Delivery, Reservation, Repair and the other operations.</p>
+          <div className="flex justify-end gap-3">
+            <button type="button" onClick={onClose} disabled={saving} className="inline-flex h-9 items-center gap-2 rounded-md px-3 text-sm font-semibold text-zinc-200 hover:bg-nexus-panel2">
+              Cancel
+            </button>
+            <button type="button" onClick={saveUnit} disabled={saving} className="inline-flex h-9 items-center gap-2 rounded-md bg-nexus-orange px-4 text-sm font-semibold text-black">
+              <Save className="h-4 w-4" />
+              {saving ? "Saving..." : "Save Unit"}
+            </button>
+          </div>
+          <RecordHistory data={data} type="product_unit" id={unit.id} />
+        </div>
+      </div>
+    </div>
   );
 }
 

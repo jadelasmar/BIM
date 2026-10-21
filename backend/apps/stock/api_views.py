@@ -68,6 +68,7 @@ from .serializers import (
     ClientUpgradeRecordSerializer,
     StockMovementSerializer,
     SupplierSerializer,
+    ProductUnitCorrectionSerializer,
 )
 from .services import create_stock_movement
 
@@ -296,6 +297,25 @@ class ProductUnitDetailAPIView(WritePermissionRequiredMixin, generics.RetrieveUp
                     movement_date=timezone.localdate(),
                     reference="Manual Unit Update",
                 )
+
+
+class ProductUnitCorrectionAPIView(WritePermissionRequiredMixin, generics.UpdateAPIView):
+    """PATCH a unit's own details (serial number, purchase date, supplier, cost,
+    notes). Every change is kept in the unit's edit history."""
+
+    serializer_class = ProductUnitCorrectionSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+    http_method_names = ("patch", "options")
+    write_permissions = {"PATCH": (stock_constants.CHANGE_PRODUCT_UNIT,)}
+
+    def get_queryset(self):
+        _require_perm(self.request.user, stock_constants.VIEW_PRODUCT_UNIT)
+        return ProductUnit.objects.filter(isactive=True).select_related(
+            "product",
+            "product__category",
+            "product__model__brand",
+            "supplier",
+        )
 
 
 class ProductStockMovementListAPIView(generics.ListAPIView):
@@ -1340,6 +1360,7 @@ class RecordHistoryAPIView(APIView):
         "repair": stock_constants.VIEW_REPAIR_RECORD,
         "client_return": stock_constants.VIEW_CLIENT_RETURN_RECORD,
         "client_upgrade": stock_constants.VIEW_CLIENT_UPGRADE_RECORD,
+        "product_unit": stock_constants.VIEW_PRODUCT_UNIT,
     }
 
     def get(self, request):

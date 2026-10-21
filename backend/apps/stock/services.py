@@ -190,6 +190,13 @@ CLIENT_UPGRADE_HISTORY_FIELDS = (
     ("updater", "Updater"),
     ("notes", "Notes"),
 )
+PRODUCT_UNIT_HISTORY_FIELDS = (
+    ("serial_number", "Serial number"),
+    ("purchase_date", "Purchase date"),
+    ("supplier", "Supplier"),
+    ("cost", "Cost"),
+    ("notes", "Notes"),
+)
 
 
 def _snapshot(obj, fields):
@@ -2262,3 +2269,50 @@ def cancel_client_upgrade_record(upgrade, *, cancelled_by=None, cancel_reason=""
         )
     )
     return upgrade
+
+
+@transaction.atomic
+def update_product_unit_details(
+    unit,
+    *,
+    serial_number=None,
+    purchase_date=_UNSET,
+    supplier=_UNSET,
+    cost=None,
+    notes=None,
+    changed_by=None,
+):
+    """Correct a stock unit's own details: its real serial number in place of an
+    auto-generated one, purchase date, supplier, cost and notes. The status is
+    never changed here -- that only happens through the workflows."""
+    unit = ProductUnit.objects.select_for_update().get(pk=unit.pk)
+    before = _snapshot(unit, PRODUCT_UNIT_HISTORY_FIELDS)
+
+    if serial_number is not None:
+        serial_number = serial_number.strip()
+        if not serial_number:
+            raise ValidationError("Serial number is required.")
+        if ProductUnit.objects.filter(serial_number=serial_number).exclude(pk=unit.pk).exists():
+            raise ValidationError(f"Serial number {serial_number} is already used by another stock unit.")
+        unit.serial_number = serial_number
+    if purchase_date is not _UNSET:
+        unit.purchase_date = purchase_date
+    if supplier is not _UNSET:
+        unit.supplier = supplier
+    if cost is not None:
+        if cost < 0:
+            raise ValidationError("Cost cannot be negative.")
+        unit.cost = cost
+    if notes is not None:
+        unit.notes = notes
+    unit.save(update_fields=("serial_number", "purchase_date", "supplier", "cost", "notes"))
+
+    log_record_changes(
+        "product_unit",
+        unit,
+        unit.serial_number[:32],
+        before,
+        _snapshot(unit, PRODUCT_UNIT_HISTORY_FIELDS),
+        changed_by,
+    )
+    return unit
