@@ -265,7 +265,7 @@ function GlobalSearch({ data }) {
   }, [searchEndpoint, trimmedQuery]);
 
   return (
-    <div className="relative min-w-0 flex-1 sm:max-w-md">
+    <div className="relative order-last min-w-0 basis-full sm:order-none sm:flex-1 sm:basis-auto sm:max-w-md">
       <label className="flex h-9 items-center gap-2 rounded-control border border-nexus-line bg-black px-3 text-zinc-500 transition-colors focus-within:border-[var(--bim-orange-focus)] focus-within:ring-2 focus-within:ring-[rgb(var(--bim-orange-focus-rgb)/20%)]">
         <Search className="h-4 w-4 shrink-0" aria-hidden="true" />
         <input
@@ -2113,7 +2113,7 @@ function ReservationRecordDetailPage({ data }) {
       ) : null}
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
           {editing && canEditReservation ? (
             <ReservationCorrectionPanel
               form={correctionForm}
@@ -2900,7 +2900,7 @@ function IssueRecordDetailPage({ data }) {
       ) : null}
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
           {editing && canEditIssue ? (
             <IssueCorrectionPanel
               form={correctionForm}
@@ -3687,7 +3687,7 @@ function RepairRecordDetailPage({ data }) {
       ) : null}
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
           {editing && canEditRepair ? (
             <RepairCorrectionPanel
               form={correctionForm}
@@ -4511,7 +4511,7 @@ function ClientUpgradeRecordsTable({ records, loading, error, canEdit }) {
               <th className="px-4 py-3 font-medium">Date</th>
               <th className="px-4 py-3 font-medium">Notes</th>
               <th className="px-4 py-3 font-medium">Record</th>
-              <th className="px-4 py-3 font-medium"><span className="sr-only">Actions</span></th>
+              <th className="relative px-4 py-3 font-medium"><span className="sr-only">Actions</span></th>
             </tr>
           </thead>
           <tbody>
@@ -5328,7 +5328,7 @@ function RemovalRecordDetailPage({ data }) {
       </header>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="space-y-5">
+        <div className="min-w-0 space-y-5">
           <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
             <SectionTitle title="Removal Details" />
             <dl className="mt-4 divide-y divide-nexus-line">
@@ -6018,7 +6018,7 @@ function ClientReturnRecordDetailPage({ data }) {
           ) : null}
 
           <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
-            <div className="space-y-5">
+            <div className="min-w-0 space-y-5">
               <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
                 <SectionTitle title="Return Details" />
                 <dl className="mt-4 divide-y divide-nexus-line">
@@ -7229,6 +7229,16 @@ function InventoryPage({ data }) {
     [visibleProducts, selectedId]
   );
   const lowStockCount = visibleProducts.filter((product) => product.is_low_stock).length;
+
+  // The detail panel only sits beside the table on wide screens; below that it
+  // would be under the whole table, so a row opens the product page instead.
+  function handleSelectProduct(productId) {
+    if (!window.matchMedia("(min-width: 1280px)").matches) {
+      window.location.href = `/inventory/products/${productId}/`;
+      return;
+    }
+    setSelectedId(productId);
+  }
   const outOfStockCount = visibleProducts.filter((product) => product.available_units === 0).length;
   const inactiveCount = visibleProducts.filter((product) => !product.isactive || product.available_units === 0).length;
   const inventoryKpis = [
@@ -7323,6 +7333,7 @@ function InventoryPage({ data }) {
                 <Filter className="h-4 w-4" />
                 Filter
               </span>
+              <div className="grid grid-cols-2 gap-3 xl:flex xl:items-center">
               <Select value={category} onChange={setCategory} options={refs.categories.map((item) => [item.id, item.name])} label="Category" />
               <Select value={brand} onChange={setBrand} options={refs.brands.map((item) => [item.id, item.brandname])} label="Brand" />
               <Select
@@ -7354,6 +7365,7 @@ function InventoryPage({ data }) {
                 ]}
                 label="Stock"
               />
+              </div>
               <span className="text-right text-xs text-zinc-500 xl:ml-auto">
                 {visibleProducts.length} products
               </span>
@@ -7363,7 +7375,7 @@ function InventoryPage({ data }) {
           <InventoryTable
             products={visibleProducts}
             selectedId={selectedProduct?.id}
-            onSelect={setSelectedId}
+            onSelect={handleSelectProduct}
             loading={loading}
             error={error}
             statusFilter={status}
@@ -7374,10 +7386,12 @@ function InventoryPage({ data }) {
           </div>
         </div>
 
-        <ProductDetail
-          product={selectedProduct}
-          canEditProduct={data.permissions?.canEditProduct}
-        />
+        <div className="hidden xl:block">
+          <ProductDetail
+            product={selectedProduct}
+            canEditProduct={data.permissions?.canEditProduct}
+          />
+        </div>
       </div>
     </Shell>
   );
@@ -7437,12 +7451,12 @@ function InventoryTable({ products, selectedId, onSelect, loading, error, status
         <table className="w-full table-fixed text-left text-sm">
           <thead className="bg-zinc-800/80 text-zinc-400">
             <tr>
-              <th className="w-[30%] px-4 py-3 font-medium">Product</th>
-              <th className="w-[12%] px-4 py-3 font-medium">Category</th>
-              <th className="w-[16%] px-4 py-3 font-medium">Brand / Model</th>
-              <th className="w-[14%] px-4 py-3 font-medium">SKU</th>
-              <th className="w-[16%] px-4 py-3 font-medium">Stock</th>
-              <th className="w-[12%] px-4 py-3 font-medium">Status</th>
+              <th className="w-[52%] px-4 py-3 font-medium md:w-[30%]">Product</th>
+              <th className="hidden w-[12%] px-4 py-3 font-medium md:table-cell">Category</th>
+              <th className="hidden w-[16%] px-4 py-3 font-medium md:table-cell">Brand / Model</th>
+              <th className="hidden w-[14%] px-4 py-3 font-medium md:table-cell">SKU</th>
+              <th className="w-[24%] px-4 py-3 font-medium md:w-[16%]">Stock</th>
+              <th className="w-[24%] px-4 py-3 font-medium md:w-[12%]">Status</th>
             </tr>
           </thead>
           <tbody>
@@ -7459,7 +7473,7 @@ function InventoryTable({ products, selectedId, onSelect, loading, error, status
                   }`}
                   onClick={() => onSelect(product.id)}
                 >
-                  <td className="px-4 py-4">
+                  <td className="px-3 py-4 md:px-4">
                     <div className="flex min-w-0 items-center gap-3">
                       <Avatar product={product} />
                       <div className="min-w-0">
@@ -7468,16 +7482,16 @@ function InventoryTable({ products, selectedId, onSelect, loading, error, status
                       </div>
                     </div>
                   </td>
-                  <td className="truncate px-4 py-4 text-zinc-400">{product.category_name}</td>
-                  <td className="px-4 py-4">
+                  <td className="hidden truncate px-4 py-4 text-zinc-400 md:table-cell">{product.category_name}</td>
+                  <td className="hidden px-4 py-4 md:table-cell">
                     <p className="truncate text-zinc-200">{product.brand_name}</p>
                     <p className="mt-1 truncate font-mono text-xs text-zinc-500">{product.model_name}</p>
                   </td>
-                  <td className="truncate px-4 py-4 font-mono text-xs text-[var(--bim-orange-text)]">{product.sku}</td>
-                  <td className="px-4 py-4">
+                  <td className="hidden truncate px-4 py-4 font-mono text-xs text-[var(--bim-orange-text)] md:table-cell">{product.sku}</td>
+                  <td className="px-3 py-4 md:px-4">
                     <StockBar product={product} statusFilter={statusFilter} />
                   </td>
-                  <td className="px-4 py-4">
+                  <td className="px-3 py-4 md:px-4">
                     <ProductStatus product={product} />
                   </td>
                 </tr>
@@ -7894,7 +7908,7 @@ function ProductDetailsPage({ data }) {
         </div>
       </header>
 
-      <section className="grid gap-3 md:grid-cols-2 2xl:grid-cols-6">
+      <section className="grid grid-cols-2 gap-3 2xl:grid-cols-6">
         <ProductDetailMetric label="Total Stock" value={product.total_units} detail="registered units" />
         <ProductDetailMetric
           label="Available"
@@ -7919,7 +7933,7 @@ function ProductDetailsPage({ data }) {
           <button
             key={label}
             onClick={() => setActiveTab(label)}
-            className={`border-b-2 px-4 py-3 ${activeTab === label ? "border-[var(--bim-orange-focus)] text-[var(--bim-orange-text)]" : "border-transparent text-zinc-400 hover:text-zinc-200"}`}
+            className={`shrink-0 whitespace-nowrap border-b-2 px-4 py-3 ${activeTab === label ? "border-[var(--bim-orange-focus)] text-[var(--bim-orange-text)]" : "border-transparent text-zinc-400 hover:text-zinc-200"}`}
           >
             {label} {count !== "" ? <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-xs text-zinc-400">{count}</span> : null}
           </button>
@@ -8241,7 +8255,7 @@ function ProductUnitRegister({ data, units, accessDenied, initialQuery = "", onU
                   <th className="px-4 py-3 font-medium">Cost</th>
                   <th className="px-4 py-3 font-medium">Purchased</th>
                   <th className="px-4 py-3 font-medium">Sold</th>
-                  {canEdit ? <th className="px-4 py-3 font-medium"><span className="sr-only">Actions</span></th> : null}
+                  {canEdit ? <th className="relative px-4 py-3 font-medium"><span className="sr-only">Actions</span></th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -9362,7 +9376,7 @@ function StockEntryPage({ data, mode = "add-unit" }) {
 
             <FormSection icon="box" title="Products" subtitle="Search or scan a product, then add physical units.">
               <div className="relative">
-                <div className="flex gap-3">
+                <div className="flex flex-col gap-3 sm:flex-row">
                   <SearchBar
                     className="flex-1"
                     value={query}
@@ -9380,15 +9394,6 @@ function StockEntryPage({ data, mode = "add-unit" }) {
                       New Product
                     </button>
                   ) : null}
-                  <button
-                    type="button"
-                    disabled
-                    title="Barcode scanning coming later"
-                    className="inline-flex h-10 cursor-not-allowed items-center gap-2 rounded-md px-3 text-sm font-semibold text-zinc-500"
-                  >
-                    <RefreshCw className="h-4 w-4" />
-                    Scan
-                  </button>
                 </div>
                 {query && !filteredProducts.length && !refsLoading ? (
                   <div className="absolute z-20 mt-2 w-full rounded-lg border border-nexus-line bg-nexus-panel px-4 py-3 text-sm text-zinc-400 shadow-2xl">
@@ -10112,7 +10117,7 @@ function AddProductHeader({ isNew = true, productId, saving, onReset, onSave, on
 
 function FormSection({ icon, title, subtitle, children }) {
   return (
-    <Card className="mb-5 p-5">
+    <Card className="mb-5 min-w-0 p-4 sm:p-5">
       <CardHeader className="flex items-start gap-3 px-0 py-0 pb-5">
         <span className="rounded-lg bg-[rgb(var(--bim-orange-rgb)/10%)] p-2 text-[var(--bim-orange-text)]">
           <Icon name={icon} className="h-5 w-5" />
@@ -10998,24 +11003,24 @@ function StockStatusChart({ chart }) {
 
 function KpiGrid({ items }) {
   return (
-    <section className="grid gap-3 md:grid-cols-2 2xl:grid-cols-4" aria-label="Key metrics">
+    <section className="grid grid-cols-2 gap-3 2xl:grid-cols-4" aria-label="Key metrics">
       {items.map((item) => {
         const iconTone = dynamicIconTone(item);
         const accent = KPI_TONE_ACCENTS[iconTone] || KPI_TONE_ACCENTS.neutral;
-        const className = `group block min-h-32 rounded-lg border bg-nexus-panel p-4 shadow-panel ${accent.border} ${
+        const className = `group block min-h-28 min-w-0 rounded-lg border bg-nexus-panel p-3 shadow-panel sm:min-h-32 sm:p-4 ${accent.border} ${
             item.href || item.onClick ? "cursor-pointer hover:bg-nexus-panel2 hover:shadow-[var(--bim-card-shadow-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--bim-orange-focus)]" : ""} ${item.active ? "ring-2 ring-[var(--bim-orange-focus)]" : ""}`;
         const content = (
           <>
             <div className="flex items-start justify-between gap-3">
-              <p className="text-sm font-medium text-zinc-400">{item.label}</p>
-              <span className={`rounded-md p-2 ${toneClasses[iconTone] || toneClasses.neutral}`}>
+              <p className="min-w-0 text-sm font-medium text-zinc-400">{item.label}</p>
+              <span className={`shrink-0 rounded-md p-1.5 sm:p-2 ${toneClasses[iconTone] || toneClasses.neutral}`}>
                 <Icon name={item.icon} />
               </span>
             </div>
-            <p className={`mt-6 text-3xl font-semibold tracking-tight ${accent.value}`}>
+            <p className={`mt-3 break-words text-2xl font-semibold tracking-tight sm:mt-6 sm:text-3xl ${accent.value}`}>
               {item.value}
             </p>
-            <div className="mt-1 flex items-center justify-between gap-3 text-sm text-zinc-400">
+            <div className="mt-1 flex items-center justify-between gap-2 text-xs text-zinc-400 sm:gap-3 sm:text-sm">
               <span>{item.detail}</span>
               {item.href || item.onClick ? <ChevronRight className="h-4 w-4 shrink-0 text-zinc-600" /> : null}
             </div>

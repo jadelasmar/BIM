@@ -282,7 +282,7 @@ class UIRegistryTests(SimpleTestCase):
 
         self.assertIn("Export coming later", inventory_header_source)
         self.assertIn("disabled", inventory_header_source)
-        self.assertIn("Barcode scanning coming later", stock_entry_source)
+        self.assertIn("onScan={handleProductScan}", stock_entry_source)
 
     def test_add_product_page_can_create_catalogue_lookups_inline(self):
         app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")

@@ -357,3 +357,20 @@ textarea {
 summary::-webkit-details-marker {
   display: none;
 }
+
+/* Phones: a data table keeps readable columns and scrolls sideways inside its
+   card instead of squeezing every cell until names wrap one word per line.
+   Fixed-layout tables (Inventory) choose their own phone columns instead. */
+@media (max-width: 767px) {
+  :is(.overflow-x-auto, .overflow-auto) > table:not(.table-fixed) :is(th, td) {
+    min-width: 6.5rem;
+  }
+
+  :is(.overflow-x-auto, .overflow-auto) > table:not(.table-fixed) :is(th, td):first-child {
+    min-width: 9rem;
+  }
+
+  :is(.overflow-x-auto, .overflow-auto) > table:not(.table-fixed) th {
+    white-space: nowrap;
+  }
+}
