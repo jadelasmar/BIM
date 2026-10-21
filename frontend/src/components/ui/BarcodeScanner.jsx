@@ -54,6 +54,45 @@ function getDetector() {
   return detectorPromise;
 }
 
+// Copy of the photo (or of its centre, for "center") drawn at most `maxSide`
+// pixels on its longest side.
+function drawScaled(image, mode) {
+  let sx = 0;
+  let sy = 0;
+  let sw = image.width;
+  let sh = image.height;
+  if (mode === "center") {
+    sw = image.width / 2;
+    sh = image.height / 2;
+    sx = sw / 2;
+    sy = sh / 2;
+  }
+  const maxSide = mode === "center" ? Math.max(sw, sh) : mode;
+  const scale = Math.min(1, maxSide / Math.max(sw, sh));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(sw * scale);
+  canvas.height = Math.round(sh * scale);
+  canvas.getContext("2d").drawImage(image, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
+// Phone photos are large and the label is often a small, slightly soft part of
+// them: try the whole photo, then smaller copies and a centred close-up, and
+// stop at the first one that reads.
+async function detectInPhoto(detector, file) {
+  const image = await createImageBitmap(file);
+  try {
+    for (const attempt of [null, 2000, 1200, "center"]) {
+      const source = attempt === null ? image : drawScaled(image, attempt);
+      const found = await detector.detect(source);
+      if (found.length) return found;
+    }
+    return [];
+  } finally {
+    image.close?.();
+  }
+}
+
 function canUseLiveCamera() {
   return Boolean(window.isSecureContext && navigator.mediaDevices?.getUserMedia);
 }
@@ -153,11 +192,11 @@ export function BarcodeScannerModal({ title = "Scan Barcode", multiple = false, 
     setMessage("");
     try {
       const detector = await getDetector();
-      const image = await createImageBitmap(file);
-      const found = await detector.detect(image);
-      image.close?.();
+      const found = await detectInPhoto(detector, file);
       if (!addCodes(found)) {
-        setMessage("No barcode found in that photo. Hold the phone closer, keep the label flat and in focus, and try again.");
+        setMessage(
+          "No barcode found in that photo. Hold the phone 10-15 cm from the label so the barcode fills most of the width, keep it flat and sharp, and try again."
+        );
       }
     } catch {
       setMessage("That photo could not be read. Try again.");
@@ -270,11 +309,19 @@ export function BarcodeScannerModal({ title = "Scan Barcode", multiple = false, 
           </div>
 
           {insecureHint ? (
-            <p className="text-xs leading-5 text-zinc-500">
-              The live camera needs a secure site. To turn it on in Chrome on Android, open <span className="font-mono">chrome://flags</span>,
-              search "Insecure origins treated as secure", add <span className="font-mono">{window.location.origin}</span>, set it to
-              Enabled and relaunch Chrome.
-            </p>
+            <div className="rounded-lg border border-nexus-line bg-black/40 px-4 py-3 text-xs leading-5 text-zinc-400">
+              <p className="font-semibold text-zinc-200">Turn on live scanning (one time, Chrome on Android)</p>
+              <ol className="mt-1 list-decimal pl-4">
+                <li>
+                  Type <span className="font-mono text-zinc-200">chrome://flags</span> in the address bar.
+                </li>
+                <li>Search "Insecure origins treated as secure".</li>
+                <li>
+                  Enter <span className="font-mono text-zinc-200">{window.location.origin}</span> and set it to Enabled.
+                </li>
+                <li>Tap Relaunch, then allow the camera when asked.</li>
+              </ol>
+            </div>
           ) : null}
         </div>
       </div>
