@@ -31,6 +31,7 @@ This roadmap documents product direction, not implementation history.
 - Login and password setup
 - Dark/light theme
 - React/Vite/Tailwind frontend shell
+- Command Center as a module dashboard: Needs Attention list plus one summary card per module, fed by per-module dashboard providers (`apps/core/dashboard.py`)
 
 ## Current Product Focus
 

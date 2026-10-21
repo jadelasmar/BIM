@@ -87,6 +87,40 @@ def pending_repair_count():
     return RepairRecord.objects.filter(status=RepairRecord.STATUS_ACTIVE).count()
 
 
+# How long an open repair or an active reservation can sit before the Command
+# Center lists it under Needs Attention.
+STALE_RECORD_DAYS = 30
+
+
+def long_open_repair_count(days=STALE_RECORD_DAYS):
+    return RepairRecord.objects.filter(
+        status=RepairRecord.STATUS_ACTIVE,
+        repair_date__lt=timezone.localdate() - timedelta(days=days),
+    ).count()
+
+
+def long_held_reservation_count(days=STALE_RECORD_DAYS):
+    return ReservationRecord.objects.filter(
+        status=ReservationRecord.STATUS_ACTIVE,
+        reserved_at__lt=timezone.now() - timedelta(days=days),
+    ).count()
+
+
+def client_upgrade_needed_count():
+    return ClientUpgradeRecord.objects.filter(
+        status=ClientUpgradeRecord.STATUS_NEEDS_UPGRADE
+    ).count()
+
+
+def overdue_client_upgrade_count():
+    """Same rule as the Client Upgrades page's Overdue chip: still needs an
+    upgrade and its planned date has passed."""
+    return ClientUpgradeRecord.objects.filter(
+        status=ClientUpgradeRecord.STATUS_NEEDS_UPGRADE,
+        upgrade_date__lt=timezone.localdate(),
+    ).count()
+
+
 def recent_receiving_count():
     recent_window = timezone.now() - timedelta(days=30)
     return ReceivingRecord.objects.filter(

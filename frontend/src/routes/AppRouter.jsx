@@ -426,13 +426,12 @@ function CommandCenter({ data }) {
     <Shell data={dashboardData}>
       <header className="mb-5 border-b border-nexus-line pb-4">
         <h1 className="bim-page-title">Command Center</h1>
-        <p className="bim-page-description">Live snapshot of inventory levels, pending operations, and recent activity.</p>
+        <p className="bim-page-description">What needs attention, and a live summary of every module.</p>
       </header>
-      <StockStatusChart chart={dashboardData.stockStatusChart} />
-      <KpiGrid items={dashboardData.kpis} />
-      <Overview items={dashboardData.overview} />
+      <NeedsAttention items={dashboardData.dashboard?.attention || []} />
+      <ModuleSummaryCards sections={dashboardData.dashboard?.sections || []} />
 
-      <section className="mt-4">
+      <section className="mt-5">
         <RecentActivity items={dashboardData.recentActivity} endpoint={dashboardData.api?.recentActivity} />
       </section>
     </Shell>
@@ -4312,7 +4311,10 @@ function ClientUpgradeRecordsPage({ data }) {
   const canEditUpgrade = Boolean(data.permissions?.canEditClientUpgrade);
   const [records, setRecords] = useState([]);
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState("all");
+  const [filter, setFilter] = useState(() => {
+    const requested = new URLSearchParams(window.location.search).get("filter");
+    return ["needs_upgrade", "scheduled", "overdue", "upgraded", "cancelled"].includes(requested) ? requested : "all";
+  });
   const [clientFilter, setClientFilter] = useState("");
   const [updaterFilter, setUpdaterFilter] = useState("");
   const [loading, setLoading] = useState(true);
@@ -10928,7 +10930,91 @@ function dynamicIconTone(item) {
   return KPI_CARD_TONES[item.label] || "neutral";
 }
 
-function StockStatusChart({ chart }) {
+// What someone has to act on, from every module the user can see (built by
+// apps/core/dashboard.py from each module's provider). Red rows come first;
+// with nothing to do it says so instead of disappearing.
+function NeedsAttention({ items }) {
+  return (
+    <section className="mb-5 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel" aria-label="Needs attention">
+      <PanelHeader title="Needs Attention" badge={items.length ? formatCount(items.length) : null} />
+      {items.length ? (
+        <ul className="border-t border-nexus-line">
+          {items.map((item) => (
+            <li key={item.key} className="border-b border-nexus-line last:border-b-0">
+              <a href={item.href} className="flex items-center gap-3 px-4 py-3 hover:bg-nexus-panel2">
+                <span className={`shrink-0 rounded-md p-2 ${toneClasses[item.tone] || toneClasses.neutral}`}>
+                  <Icon name={item.icon} className="h-4 w-4" />
+                </span>
+                <span className="min-w-0 flex-1 text-sm text-zinc-300">
+                  <span className={`mr-1.5 text-base font-bold ${item.tone === "danger" ? "text-[var(--tone-red-text)]" : "text-[var(--bim-orange-text)]"}`}>
+                    {formatCount(item.count)}
+                  </span>
+                  {item.label}
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-zinc-600" />
+              </a>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="flex items-center gap-2 border-t border-nexus-line px-4 py-4 text-sm text-zinc-400">
+          <Icon name="check-circle-2" className="h-4 w-4 text-[var(--tone-green-text)]" />
+          All clear: nothing needs action right now.
+        </p>
+      )}
+    </section>
+  );
+}
+
+// One card per module the user can see. Each module's backend provider decides
+// its numbers (apps/stock/dashboard.py, ...), so a new module shows up here
+// without a frontend change.
+function ModuleSummaryCards({ sections }) {
+  if (!sections.length) return null;
+
+  const statTone = (tone) =>
+    tone === "danger" ? "text-[var(--tone-red-text)]" : tone === "warning" ? "text-[var(--bim-orange-text)]" : "text-white";
+
+  return (
+    <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3" aria-label="Modules">
+      {sections.map((section) => (
+        <article key={section.key} className="flex min-w-0 flex-col rounded-lg border border-nexus-line bg-nexus-panel p-4">
+          <div className="flex items-center gap-3">
+            <span className={`rounded-md p-2 ${toneClasses[section.tone] || toneClasses.neutral}`}>
+              <Icon name={section.icon} />
+            </span>
+            <h2 className="bim-section-title">{section.title}</h2>
+          </div>
+          {section.headline ? (
+            <a href={section.headline.href} className="mt-4 flex flex-wrap items-baseline gap-x-2 hover:opacity-90">
+              <span className="text-3xl font-semibold tracking-tight text-white">{formatCount(section.headline.value)}</span>
+              <span className="text-sm text-zinc-400">{section.headline.label}</span>
+            </a>
+          ) : null}
+          {section.bars?.length ? <StockStatusBars bars={section.bars} /> : null}
+          <div className="mt-3 divide-y divide-nexus-line">
+            {section.stats.map((stat) => (
+              <a key={stat.label} href={stat.href} className="flex items-center justify-between gap-3 py-2.5 text-sm hover:bg-nexus-panel2">
+                <span className="text-zinc-400">{stat.label}</span>
+                <span className={`font-semibold ${statTone(stat.tone)}`}>{formatCount(stat.value)}</span>
+              </a>
+            ))}
+          </div>
+          {section.href ? (
+            <a href={section.href} className="mt-auto inline-flex items-center gap-1 pt-3 text-sm font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
+              {section.linkLabel}
+              <ChevronRight className="h-4 w-4" />
+            </a>
+          ) : null}
+        </article>
+      ))}
+    </section>
+  );
+}
+
+// Reserved / Issued / Repair as compact bars inside the Stock card; each row
+// opens Inventory filtered to that status.
+function StockStatusBars({ bars }) {
   const [theme, setTheme] = useState(() => currentTheme());
 
   useEffect(() => {
@@ -10939,65 +11025,30 @@ function StockStatusChart({ chart }) {
     return () => document.removeEventListener("bim-nexus-theme-change", handleThemeChange);
   }, []);
 
-  const { available, total, bars = [] } = chart || {};
-  const hasAccess = typeof available === "number";
   const maxCount = Math.max(1, ...bars.map((bar) => bar.count));
 
   return (
-    <section className="mb-4 rounded-lg border border-nexus-line bg-nexus-panel p-4" aria-label="Stock status breakdown">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="bim-section-title">Stock Status Breakdown</h2>
-        {hasAccess ? (
-          <div className="flex items-center gap-4 text-sm">
-            <span className="text-zinc-400">
-              Available <span className="font-semibold text-white">{available}</span>
+    <div className="mt-3 space-y-1" aria-label="Stock status breakdown">
+      {bars.map((bar) => {
+        const color = STOCK_STATUS_COLORS[bar.status]?.[theme] || "#898781";
+        // A zero count draws no bar at all; a non-zero one keeps a visible minimum.
+        const widthPct = bar.count > 0 ? Math.max(2, Math.round((bar.count / maxCount) * 100)) : 0;
+        return (
+          <a
+            key={bar.status}
+            href={bar.href}
+            title={`${bar.label}: ${bar.count} unit${bar.count === 1 ? "" : "s"}`}
+            className="-mx-2 flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-nexus-panel2"
+          >
+            <span className="w-20 shrink-0 text-sm text-zinc-400">{bar.label}</span>
+            <span className="h-2.5 flex-1 rounded-full bg-nexus-panel2">
+              <span className="block h-2.5 rounded-r-[4px]" style={{ width: `${widthPct}%`, backgroundColor: color }} />
             </span>
-            <span className="text-zinc-400">
-              Total <span className="font-semibold text-white">{total}</span>
-            </span>
-          </div>
-        ) : null}
-      </div>
-      {hasAccess ? (
-        <div className="space-y-3">
-          {bars.map((bar) => {
-            const color = STOCK_STATUS_COLORS[bar.status]?.[theme] || "#898781";
-            // A zero count must draw no bar at all; a non-zero one keeps a visible minimum.
-            const widthPct = bar.count > 0 ? Math.max(2, Math.round((bar.count / maxCount) * 100)) : 0;
-            return (
-              <div
-                key={bar.status}
-                className={`flex items-center gap-3 rounded-md px-2 py-1.5 -mx-2 focus:outline-none focus:ring-2 focus:ring-[var(--bim-orange-focus)] ${
-                  bar.href ? "cursor-pointer hover:bg-nexus-panel2" : ""
-                }`}
-                tabIndex={0}
-                title={`${bar.label}: ${bar.count} unit${bar.count === 1 ? "" : "s"}`}
-                onClick={() => {
-                  if (bar.href) window.location.assign(bar.href);
-                }}
-                onKeyDown={(event) => {
-                  if (bar.href && (event.key === "Enter" || event.key === " ")) {
-                    event.preventDefault();
-                    window.location.assign(bar.href);
-                  }
-                }}
-              >
-                <span className="w-28 shrink-0 text-sm text-zinc-400">{bar.label}</span>
-                <div className="h-3 flex-1 rounded-full bg-nexus-panel2">
-                  <div
-                    className="h-3 rounded-r-[4px] transition-[filter] hover:brightness-110"
-                    style={{ width: `${widthPct}%`, backgroundColor: color }}
-                  />
-                </div>
-                <span className="w-10 shrink-0 text-right text-sm font-semibold text-white">{bar.count}</span>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <p className="text-sm text-zinc-500">Stock status data requires inventory view access.</p>
-      )}
-    </section>
+            <span className="w-8 shrink-0 text-right text-sm font-semibold text-white">{bar.count}</span>
+          </a>
+        );
+      })}
+    </div>
   );
 }
 
@@ -11055,44 +11106,6 @@ function KpiGrid({ items }) {
           </article>
         );
       })}
-    </section>
-  );
-}
-
-function Overview({ items }) {
-  return (
-    <section className="mt-5" aria-label="System overview">
-      <SectionTitle title="System Overview" />
-      <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-4">
-        {items.map((item) => {
-          const isEnabled = item.enabled !== false && item.href;
-          const className = `group flex items-center gap-3 rounded-lg border border-nexus-line bg-nexus-panel p-4 ${
-            isEnabled ? "cursor-pointer hover:border-[var(--bim-muted)] hover:bg-nexus-panel2 hover:shadow-[var(--bim-card-shadow-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--bim-orange-focus)]" : "cursor-not-allowed opacity-45 grayscale"
-          }`;
-          const content = (
-            <>
-              <span className={`rounded-md p-2 ${toneClasses[dynamicIconTone(item)] || toneClasses.neutral}`}>
-                <Icon name={item.icon} />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className={`text-sm font-bold ${isEnabled ? "text-white" : "text-zinc-500"}`}>{item.value}</p>
-                <p className={`text-xs ${isEnabled ? "text-zinc-400" : "text-zinc-500"}`}>{item.label}</p>
-                <p className="text-xs text-zinc-500">{item.detail}</p>
-              </div>
-              {isEnabled ? <ChevronRight className="h-4 w-4 shrink-0 text-zinc-600" /> : null}
-            </>
-          );
-          return isEnabled ? (
-            <a key={item.label} href={item.href} className={className}>
-              {content}
-            </a>
-          ) : (
-            <article key={item.label} aria-disabled="true" className={className} title={item.detail || undefined}>
-              {content}
-            </article>
-          );
-        })}
-      </div>
     </section>
   );
 }

@@ -43,6 +43,7 @@ def _admin_user_change_data(user, **overrides):
     return data
 
 from .admin import ProductAdmin, ProductUnitAdmin, ProductUnitPurchaseForm
+from apps.core.dashboard import build_dashboard
 from .selectors import delivery_record_count
 from .models import (
     Brand,
@@ -6809,3 +6810,85 @@ class InventoryApiTests(TestCase):
             ProductUnit.objects.get(serial_number="API-AVAILABLE").pk,
             returned_ids,
         )
+
+
+class ModuleDashboardTests(TestCase):
+    """Command Center module cards and Needs Attention rows (apps/core/dashboard.py)."""
+
+    def _user(self, *codenames):
+        user = User.objects.create_user(username=f"dash-{len(codenames)}-{'-'.join(codenames)}"[:150], password="test-pass")
+        user.groups.clear()
+        for codename in codenames:
+            user.user_permissions.add(Permission.objects.get(codename=codename))
+        return User.objects.get(pk=user.pk)
+
+    def test_user_without_permissions_sees_nothing(self):
+        RepairRecord.objects.create(repair_reason="No supplier yet")
+
+        self.assertEqual(build_dashboard(self._user()), {"attention": [], "sections": []})
+
+    def test_rows_and_numbers_follow_each_record_permission(self):
+        today = timezone.localdate()
+        RepairRecord.objects.create(repair_reason="No supplier yet", repair_date=today)
+        IssueRecord.objects.create(issued_to="Field Tech", expected_return_date=today - timedelta(days=1))
+
+        dashboard = build_dashboard(self._user("view_repairrecord"))
+
+        self.assertEqual([item["key"] for item in dashboard["attention"]], ["repairs_without_supplier"])
+        self.assertEqual([section["key"] for section in dashboard["sections"]], ["operations"])
+        operations = dashboard["sections"][0]
+        self.assertEqual([stat["label"] for stat in operations["stats"]], ["Open repairs"])
+        # No Operations page access: the card has no "Open Operations" link.
+        self.assertIsNone(operations["href"])
+
+    def test_red_rows_come_first_and_link_to_the_matching_rows(self):
+        today = timezone.localdate()
+        RepairRecord.objects.create(repair_reason="Old repair", repair_date=today - timedelta(days=45))
+        ClientUpgradeRecord.objects.create(
+            client_name="Upgrade Co", updater="740", upgrade_date=today - timedelta(days=1)
+        )
+
+        dashboard = build_dashboard(self._user("view_repairrecord", "view_clientupgraderecord"))
+        rows = {item["key"]: item for item in dashboard["attention"]}
+
+        self.assertEqual(dashboard["attention"][0]["key"], "overdue_client_upgrades")
+        self.assertEqual(rows["overdue_client_upgrades"]["href"], "/operations/upgrades/?filter=overdue")
+        self.assertEqual(rows["overdue_client_upgrades"]["label"], "client upgrade is past its planned date")
+        self.assertEqual(rows["long_open_repairs"]["href"], "/operations/repairs/")
+        self.assertEqual(rows["repairs_without_supplier"]["href"], "/operations/pending/")
+
+    def test_stock_card_keeps_the_old_dashboard_numbers(self):
+        category = Category.objects.create(name="Printers")
+        brand = Brand.objects.create(brandname="Zebra")
+        model = ProductModel.objects.create(brand=brand, modelname="ZD220")
+        Product.objects.create(descript="Zebra label printer", category=category, model=model)
+
+        dashboard = build_dashboard(self._user("view_product"))
+        stock = dashboard["sections"][0]
+        stats = {stat["label"]: stat for stat in stock["stats"]}
+
+        self.assertEqual(stock["key"], "stock")
+        self.assertEqual(stats["Products"]["value"], 1)
+        self.assertEqual(stats["Out of stock"]["value"], 1)
+        self.assertEqual(stats["Out of stock"]["href"], "/inventory/?stock=out")
+        self.assertEqual([bar["status"] for bar in stock["bars"]], ["reserved", "issued", "repair"])
+        self.assertEqual(dashboard["attention"][0]["key"], "out_of_stock")
+
+    def test_dashboard_is_built_only_for_the_command_center(self):
+        self.client.force_login(self._user("view_product"))
+
+        self.assertIsNotNone(self.client.get("/").context["initial_data"]["dashboard"])
+        self.assertIsNotNone(self.client.get("/api/command-center/").json()["dashboard"])
+        self.assertIsNone(self.client.get("/inventory/").context["initial_data"]["dashboard"])
+
+    def test_command_center_renders_the_module_dashboard(self):
+        app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
+        command_center_source = app_source[
+            app_source.index("function CommandCenter"):
+            app_source.index("function SettingsPage")
+        ]
+
+        self.assertIn("<NeedsAttention", command_center_source)
+        self.assertIn("<ModuleSummaryCards", command_center_source)
+        self.assertNotIn("<StockStatusChart", command_center_source)
+        self.assertNotIn("<Overview", command_center_source)

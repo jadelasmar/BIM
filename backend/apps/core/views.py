@@ -6,6 +6,7 @@ from django.middleware.csrf import get_token
 from django.shortcuts import render
 from django.urls import reverse
 
+from .dashboard import build_dashboard
 from .ui_config import ui_item
 from apps.stock import constants as stock_constants
 from apps.stock.models import ProductUnit
@@ -422,6 +423,11 @@ def _command_center_initial_data(
         "recentActivity": recent_activity,
         "lowStockAlerts": low_stock_alerts,
         "stockStatusChart": stock_status_chart,
+        # Module cards + Needs Attention; built only for the Command Center so
+        # other pages (which get this same initial data) pay no extra queries.
+        "dashboard": build_dashboard(user)
+        if current_path == reverse("module_launcher")
+        else None,
         "pollIntervalMs": 60000,
     }
 
