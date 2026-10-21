@@ -281,8 +281,9 @@ class UIRegistryTests(SimpleTestCase):
             app_source.index("function CreateDeliveryPage")
         ]
 
-        self.assertIn("Export coming later", inventory_header_source)
-        self.assertIn("disabled", inventory_header_source)
+        # Export works now: it downloads the listed products or units as CSV.
+        self.assertIn("onClick={onExport}", inventory_header_source)
+        self.assertNotIn("Export coming later", inventory_header_source)
         self.assertIn("onScan={handleProductScan}", stock_entry_source)
 
     def test_add_product_page_can_create_catalogue_lookups_inline(self):
@@ -6880,6 +6881,16 @@ class ModuleDashboardTests(TestCase):
         self.assertIsNotNone(self.client.get("/").context["initial_data"]["dashboard"])
         self.assertIsNotNone(self.client.get("/api/command-center/").json()["dashboard"])
         self.assertIsNone(self.client.get("/inventory/").context["initial_data"]["dashboard"])
+        # The Operations page shows its own open work and per-workflow counts.
+        self.assertIsNotNone(self.client.get("/operations/").context["initial_data"]["dashboard"])
+
+    def test_stats_and_rows_carry_stable_keys_for_other_pages(self):
+        RepairRecord.objects.create(repair_reason="No supplier yet")
+
+        dashboard = build_dashboard(self._user("view_repairrecord"))
+
+        self.assertEqual(dashboard["sections"][0]["stats"][0]["key"], "open_repairs")
+        self.assertEqual(dashboard["attention"][0]["module"], "operations")
 
     def test_command_center_renders_the_module_dashboard(self):
         app_source = REACT_APP_SOURCE.read_text(encoding="utf-8")
@@ -6892,3 +6903,45 @@ class ModuleDashboardTests(TestCase):
         self.assertIn("<ModuleSummaryCards", command_center_source)
         self.assertNotIn("<StockStatusChart", command_center_source)
         self.assertNotIn("<Overview", command_center_source)
+
+
+class InventoryUnitLocationTests(TestCase):
+    """Inventory > Stock Units: GET product-units/?with_location=1 says where each unit is."""
+
+    def setUp(self):
+        category = Category.objects.create(name="Laptops")
+        brand = Brand.objects.create(brandname="Dell")
+        model = ProductModel.objects.create(brand=brand, modelname="5440")
+        self.product = Product.objects.create(descript="Dell Latitude", category=category, model=model)
+        user = User.objects.create_user(username="units-viewer", password="test-pass")
+        user.groups.clear()
+        user.user_permissions.add(Permission.objects.get(codename="view_productunit"))
+        self.client.force_login(user)
+
+    def _unit(self, serial, status):
+        return ProductUnit.objects.create(product=self.product, serial_number=serial, status=status)
+
+    def test_each_status_says_where_the_unit_is_and_links_to_its_record(self):
+        self._unit("IN-STOCK", ProductUnit.STATUS_AVAILABLE)
+        reserved = self._unit("HELD", ProductUnit.STATUS_RESERVED)
+        reservation = ReservationRecord.objects.create(reserved_for="Acme Bank")
+        ReservationItem.objects.create(reservation=reservation, product=self.product, product_unit=reserved)
+        at_repair = self._unit("AT-REPAIR", ProductUnit.STATUS_REPAIR)
+        repair = RepairRecord.objects.create(repair_reason="Screen", vendor=Supplier.objects.create(name="Fix Co"))
+        RepairItem.objects.create(repair=repair, product=self.product, product_unit=at_repair)
+
+        response = self.client.get("/api/stock/product-units/?with_location=1")
+        rows = {row["serial_number"]: row for row in response.json()}
+
+        self.assertEqual(rows["IN-STOCK"]["location"], {"text": "In stock", "href": ""})
+        self.assertEqual(rows["HELD"]["location"]["text"], "Reserved for Acme Bank")
+        self.assertEqual(rows["HELD"]["location"]["href"], f"/operations/reservations/{reservation.pk}/")
+        self.assertEqual(rows["AT-REPAIR"]["location"]["text"], "At Fix Co")
+        self.assertEqual(rows["AT-REPAIR"]["location"]["href"], f"/operations/repairs/{repair.pk}/")
+
+    def test_plain_unit_list_is_unchanged(self):
+        self._unit("IN-STOCK", ProductUnit.STATUS_AVAILABLE)
+
+        row = self.client.get("/api/stock/product-units/").json()[0]
+
+        self.assertNotIn("location", row)

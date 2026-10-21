@@ -835,88 +835,106 @@ function MasterDataDetailPage({ data, type, isNew = false }) {
   );
 }
 
+// Stock workflows grouped by what they do, each with its live count (from the
+// same dashboard providers as the Command Center: apps/stock/dashboard.py stat
+// keys), plus the open work that needs attention.
+const OPERATION_GROUPS = ["Stock in", "Stock out", "Holds & loans", "Repairs & returns", "Clients"];
+
 function OperationsPage({ data }) {
+  const enabled = (label) => data.quickActions.some((action) => action.label === label && action.enabled);
+  const stats = Object.fromEntries(
+    (data.dashboard?.sections || []).flatMap((section) => section.stats).map((stat) => [stat.key, stat])
+  );
+  const count = (key, suffix) => (stats[key] ? { value: stats[key].value, suffix, href: stats[key].href } : null);
+  const openWork = (data.dashboard?.attention || []).filter((item) => item.module === "operations" || item.module === "clients");
+
   const workflows = [
     {
+      group: "Stock in",
       title: "Receive Stock",
       detail: "Record supplier receipts with delivery or reference details.",
       href: data.routes.receiveStock,
       recordsHref: data.routes.receivingRecords,
-      enabled: data.quickActions.some((action) => action.label === "Receive Stock" && action.enabled),
-      icon: workflowMeta.receive_stock.icon,
-      tone: workflowMeta.receive_stock.tone
+      enabled: enabled("Receive Stock"),
+      count: count("received_30_days", "received in the last 30 days"),
+      ...workflowMeta.receive_stock
     },
     {
+      group: "Stock in",
       title: "Add Unit",
       detail: "Create manual stock units from count or correction.",
       href: data.routes.addStockUnit,
       recordsHref: data.routes.inventory,
-      enabled: data.quickActions.some((action) => action.label === "Add Unit" && action.enabled),
-      icon: workflowMeta.add_stock_unit.icon,
-      tone: workflowMeta.add_stock_unit.tone
+      enabled: enabled("Add Unit"),
+      ...workflowMeta.add_stock_unit
     },
     {
+      group: "Stock out",
       title: "Create Delivery",
       detail: "Dispatch available stock units.",
       href: data.routes.createDelivery,
       recordsHref: data.routes.deliveryRecords,
-      enabled: data.quickActions.some((action) => action.label === "Create Delivery" && action.enabled),
-      icon: workflowMeta.create_delivery.icon,
-      tone: workflowMeta.create_delivery.tone
+      enabled: enabled("Create Delivery"),
+      count: count("deliveries", "deliveries so far"),
+      ...workflowMeta.create_delivery
     },
     {
-      title: "Create Reservation",
-      detail: "Hold available units for a person, client, or job.",
-      href: data.routes.createReservation,
-      recordsHref: data.routes.reservationRecords,
-      enabled: data.quickActions.some((action) => action.label === "Create Reservation" && action.enabled),
-      icon: workflowMeta.create_reservation.icon,
-      tone: workflowMeta.create_reservation.tone
-    },
-    {
-      title: "Create Temporary Assignment",
-      detail: "Temporarily assign available units that are expected to come back.",
-      href: data.routes.createIssue,
-      recordsHref: data.routes.issueRecords,
-      enabled: data.quickActions.some((action) => action.label === "Create Temporary Assignment" && action.enabled),
-      icon: workflowMeta.create_issue.icon,
-      tone: workflowMeta.create_issue.tone
-    },
-    {
-      title: "Create Repair",
-      detail: "Move available units into repair, testing, or diagnosis.",
-      href: data.routes.createRepair,
-      recordsHref: data.routes.repairRecords,
-      enabled: data.quickActions.some((action) => action.label === "Create Repair" && action.enabled),
-      icon: workflowMeta.create_repair.icon,
-      tone: workflowMeta.create_repair.tone
-    },
-    {
-      title: "Create Client Return",
-      detail: "Record sold stock that came back from a client.",
-      href: data.routes.createClientReturn,
-      recordsHref: data.routes.clientReturnRecords,
-      enabled: data.quickActions.some((action) => action.label === "Create Client Return" && action.enabled),
-      icon: workflowMeta.create_client_return.icon,
-      tone: workflowMeta.create_client_return.tone
-    },
-    {
+      group: "Stock out",
       title: "Remove Unit",
       detail: "Permanently remove a unit for damage, loss, theft, or write-off.",
       href: data.routes.createRemoval,
       recordsHref: data.routes.removalRecords,
-      enabled: data.quickActions.some((action) => action.label === "Remove Unit" && action.enabled),
-      icon: workflowMeta.create_removal.icon,
-      tone: workflowMeta.create_removal.tone
+      enabled: enabled("Remove Unit"),
+      ...workflowMeta.create_removal
     },
     {
+      group: "Holds & loans",
+      title: "Create Reservation",
+      detail: "Hold available units for a person, client, or job.",
+      href: data.routes.createReservation,
+      recordsHref: data.routes.reservationRecords,
+      enabled: enabled("Create Reservation"),
+      count: count("active_reservations", "active"),
+      ...workflowMeta.create_reservation
+    },
+    {
+      group: "Holds & loans",
+      title: "Create Temporary Assignment",
+      detail: "Temporarily assign available units that are expected to come back.",
+      href: data.routes.createIssue,
+      recordsHref: data.routes.issueRecords,
+      enabled: enabled("Create Temporary Assignment"),
+      count: count("active_assignments", "out now"),
+      ...workflowMeta.create_issue
+    },
+    {
+      group: "Repairs & returns",
+      title: "Create Repair",
+      detail: "Move available units into repair, testing, or diagnosis.",
+      href: data.routes.createRepair,
+      recordsHref: data.routes.repairRecords,
+      enabled: enabled("Create Repair"),
+      count: count("open_repairs", "open"),
+      ...workflowMeta.create_repair
+    },
+    {
+      group: "Repairs & returns",
+      title: "Create Client Return",
+      detail: "Record sold stock that came back from a client.",
+      href: data.routes.createClientReturn,
+      recordsHref: data.routes.clientReturnRecords,
+      enabled: enabled("Create Client Return"),
+      ...workflowMeta.create_client_return
+    },
+    {
+      group: "Clients",
       title: "Add Client Upgrade",
       detail: "Track clients that need an upgrade and those already upgraded.",
       href: data.routes.createClientUpgrade,
       recordsHref: data.routes.clientUpgradeRecords,
-      enabled: data.quickActions.some((action) => action.label === "Add Client Upgrade" && action.enabled),
-      icon: workflowMeta.create_client_upgrade.icon,
-      tone: workflowMeta.create_client_upgrade.tone
+      enabled: enabled("Add Client Upgrade"),
+      count: count("upgrades_needed", "need an upgrade"),
+      ...workflowMeta.create_client_upgrade
     }
   ];
   const visibleWorkflows = workflows.filter((workflow) => workflow.enabled || !workflow.href);
@@ -925,64 +943,65 @@ function OperationsPage({ data }) {
     <Shell data={data}>
       <header className="mb-5 border-b border-nexus-line pb-4">
         <h1 className="bim-page-title">Operations</h1>
-        <p className="bim-page-description">Run stock entry and stock exit workflows.</p>
+        <p className="bim-page-description">Open work first, then every stock workflow grouped by what it does.</p>
       </header>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {visibleWorkflows.map((workflow) => {
-          const topContent = (
-            <>
-              <span className={`inline-flex rounded-lg p-3 ${toneClasses[workflow.tone] || toneClasses.neutral}`}>
-                <Icon name={workflow.icon} className="h-5 w-5" />
-              </span>
-              <h2 className={`mt-4 text-base font-bold ${workflow.enabled ? "text-white" : "text-zinc-500"}`}>
-                {workflow.title}
-              </h2>
-              <p className={`mt-2 text-sm ${workflow.enabled ? "text-zinc-400" : "text-zinc-600"}`}>
-                {workflow.detail}
-              </p>
-            </>
-          );
+      <NeedsAttention
+        items={openWork}
+        moreHref={data.routes.operationsPending}
+        moreLabel="View all open reservations, assignments and repairs"
+      />
 
-          const footer = (
-            <div className="mt-5 flex items-center justify-between gap-3 border-t border-nexus-line pt-3 text-sm font-semibold">
-              {workflow.enabled && workflow.href ? (
-                <a href={workflow.href} className="text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
-                  Open
-                </a>
-              ) : (
-                <span className="text-zinc-600">Pending</span>
-              )}
-              {workflow.recordsHref ? (
-                <a
-                  href={workflow.recordsHref}
-                  className="inline-flex items-center gap-1 text-zinc-400 hover:text-[var(--bim-orange-text)]"
+      {OPERATION_GROUPS.map((group) => {
+        const groupWorkflows = visibleWorkflows.filter((workflow) => workflow.group === group);
+        if (!groupWorkflows.length) return null;
+        return (
+          <section key={group} className="mt-6" aria-label={group}>
+            <h2 className="bim-section-title mb-3">{group}</h2>
+            <div className="grid gap-3 md:grid-cols-2">
+              {groupWorkflows.map((workflow) => (
+                <article
+                  key={workflow.title}
+                  className="flex min-w-0 flex-col rounded-lg border border-nexus-line bg-nexus-panel p-4 hover:border-[rgb(var(--bim-orange-focus-rgb)/80%)]"
                 >
-                  View Records
-                  <ChevronRight className="h-4 w-4" />
-                </a>
-              ) : null}
+                  <div className="flex items-start gap-3">
+                    <span className={`shrink-0 rounded-lg p-2.5 ${toneClasses[workflow.tone] || toneClasses.neutral}`}>
+                      <Icon name={workflow.icon} className="h-5 w-5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <h3 className="text-base font-bold text-white">{workflow.title}</h3>
+                      <p className="mt-1 text-sm text-zinc-400">{workflow.detail}</p>
+                    </div>
+                  </div>
+                  {workflow.count ? (
+                    <a href={workflow.count.href} className="mt-3 text-sm text-zinc-400 hover:text-zinc-200">
+                      <span className="text-lg font-bold text-white">{formatCount(workflow.count.value)}</span> {workflow.count.suffix}
+                    </a>
+                  ) : null}
+                  <div className="mt-auto flex items-center gap-2 pt-4 text-sm font-semibold">
+                    <a
+                      href={workflow.href}
+                      className="inline-flex h-9 items-center gap-1.5 rounded-md border border-[rgb(var(--bim-orange-focus-rgb)/60%)] px-3 text-[var(--bim-orange-text)] hover:bg-nexus-panel2"
+                    >
+                      <Plus className="h-4 w-4" />
+                      New
+                    </a>
+                    {workflow.recordsHref ? (
+                      <a
+                        href={workflow.recordsHref}
+                        className="ml-auto inline-flex h-9 items-center gap-1 rounded-md px-2 text-zinc-400 hover:text-[var(--bim-orange-text)]"
+                      >
+                        Records
+                        <ChevronRight className="h-4 w-4" />
+                      </a>
+                    ) : null}
+                  </div>
+                </article>
+              ))}
             </div>
-          );
-
-          return workflow.enabled && workflow.href ? (
-            <article
-              key={workflow.title}
-              className="rounded-lg border border-nexus-line bg-nexus-panel p-5 hover:border-[rgb(var(--bim-orange-focus-rgb)/80%)]"
-            >
-              <a href={workflow.href} className="block">
-                {topContent}
-              </a>
-              {footer}
-            </article>
-          ) : (
-            <article key={workflow.title} aria-disabled="true" className="cursor-not-allowed rounded-lg border border-nexus-line bg-nexus-panel p-5 opacity-45 grayscale">
-              {topContent}
-              {footer}
-            </article>
-          );
-        })}
-      </section>
+          </section>
+        );
+      })}
     </Shell>
   );
 }
@@ -7169,6 +7188,25 @@ function InventoryPage({ data }) {
   const [selectedId, setSelectedId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // Products (one row per catalogue item) or Stock Units (one row per serial,
+  // with where it is now). Kept in the URL so refresh and links keep it.
+  const [view, setView] = useState(() => (initialInventoryParams.get("view") === "units" ? "units" : "products"));
+  const [sort, setSort] = useState({ key: "", direction: "asc" });
+  const [unitRows, setUnitRows] = useState([]);
+
+  function changeView(nextView) {
+    setView(nextView);
+    const url = new URL(window.location.href);
+    if (nextView === "units") url.searchParams.set("view", "units");
+    else url.searchParams.delete("view");
+    window.history.replaceState(null, "", url);
+  }
+
+  function toggleSort(key) {
+    setSort((current) =>
+      current.key === key ? { key, direction: current.direction === "asc" ? "desc" : "asc" } : { key, direction: "asc" }
+    );
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -7226,10 +7264,63 @@ function InventoryPage({ data }) {
     return products;
   }, [products, stockFilter]);
 
+  // Click Product or Stock to sort; click again to reverse. No sort keeps the
+  // server's order.
+  const sortedProducts = useMemo(() => {
+    if (!sort.key) return visibleProducts;
+    const value = (product) =>
+      sort.key === "stock" ? Number(product.available_units) || 0 : String(product.display_name || "").toLowerCase();
+    const sorted = [...visibleProducts].sort((left, right) => {
+      const a = value(left);
+      const b = value(right);
+      return a < b ? -1 : a > b ? 1 : 0;
+    });
+    return sort.direction === "desc" ? sorted.reverse() : sorted;
+  }, [visibleProducts, sort]);
+
   const selectedProduct = useMemo(
     () => visibleProducts.find((product) => product.id === selectedId) || visibleProducts[0] || null,
     [visibleProducts, selectedId]
   );
+
+  function exportCurrentView() {
+    const stamp = todayLocal();
+    if (view === "units") {
+      downloadCsv(
+        `stock-units-${stamp}.csv`,
+        ["Serial Number", "Product", "SKU", "Status", "Where", "Supplier", "Cost", "Purchase Date", "Notes"],
+        unitRows.map((unit) => [
+          unit.serial_number,
+          unit.product_name,
+          unit.product_sku,
+          unit.status_label || unit.status,
+          unit.location?.text || "",
+          unit.supplier_name || "",
+          unit.cost,
+          unit.purchase_date || "",
+          unit.notes || ""
+        ])
+      );
+      return;
+    }
+    downloadCsv(
+      `inventory-${stamp}.csv`,
+      ["Product", "SKU", "Barcode", "Category", "Brand", "Model", "Available", "Reserved", "Total In Stock", "Low Stock Alert", "Status"],
+      sortedProducts.map((product) => [
+        product.display_name,
+        product.sku,
+        product.barcode || "",
+        product.category_name,
+        product.brand_name,
+        product.model_name,
+        product.available_units,
+        product.reserved_units,
+        product.total_units,
+        product.reorder_stock_level,
+        productStatusInfo(product).label
+      ])
+    );
+  }
   const lowStockCount = visibleProducts.filter((product) => product.is_low_stock).length;
 
   // The detail panel only sits beside the table on wide screens; below that it
@@ -7316,10 +7407,34 @@ function InventoryPage({ data }) {
 
   return (
     <Shell data={data}>
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <div className={`grid gap-5 ${view === "products" ? "xl:grid-cols-[minmax(0,1fr)_320px]" : ""}`}>
         <div className="min-w-0">
-          <InventoryHeader actions={data.quickActions} />
+          <InventoryHeader actions={data.quickActions} onExport={exportCurrentView} />
           <KpiGrid items={inventoryKpis} />
+
+          <nav className="mt-4 flex gap-1 border-b border-nexus-line text-sm font-semibold" aria-label="Inventory view">
+            {[
+              ["products", "Products"],
+              ["units", "Stock Units"]
+            ].map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => changeView(key)}
+                aria-pressed={view === key}
+                className={`shrink-0 whitespace-nowrap border-b-2 px-4 py-3 ${
+                  view === key ? "border-[var(--bim-orange-focus)] text-[var(--bim-orange-text)]" : "border-transparent text-zinc-400 hover:text-zinc-200"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
+
+          {view === "units" ? (
+            <InventoryUnitsView data={data} onRowsChange={setUnitRows} />
+          ) : (
+          <>
 
           <section className="mt-4 rounded-lg border border-nexus-line bg-nexus-panel p-3">
             <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
@@ -7375,7 +7490,9 @@ function InventoryPage({ data }) {
           </section>
 
           <InventoryTable
-            products={visibleProducts}
+            products={sortedProducts}
+            sort={sort}
+            onSort={toggleSort}
             selectedId={selectedProduct?.id}
             onSelect={handleSelectProduct}
             loading={loading}
@@ -7386,20 +7503,253 @@ function InventoryPage({ data }) {
             <span>Showing {visibleProducts.length} products</span>
             <span>{lowStockCount} low stock - {inactiveCount} inactive</span>
           </div>
+          </>
+          )}
         </div>
 
-        <div className="hidden xl:block">
-          <ProductDetail
-            product={selectedProduct}
-            canEditProduct={data.permissions?.canEditProduct}
-          />
-        </div>
+        {view === "products" ? (
+          <div className="hidden xl:block">
+            <ProductDetail
+              product={selectedProduct}
+              canEditProduct={data.permissions?.canEditProduct}
+            />
+          </div>
+        ) : null}
       </div>
     </Shell>
   );
 }
 
-function InventoryHeader({ actions }) {
+// Downloads rows as a CSV file that Excel opens directly. The UTF-8 BOM keeps
+// Arabic names readable, and a cell that would start a formula is prefixed so
+// Excel shows it as text instead of running it.
+function downloadCsv(filename, header, rows) {
+  const cell = (value) => {
+    let text = value === null || value === undefined ? "" : String(value);
+    if (/^[=+@]/.test(text) || /^-[^0-9]/.test(text)) text = `'${text}`;
+    return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  };
+  const csv = [header, ...rows].map((row) => row.map(cell).join(",")).join("\r\n");
+  const url = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+const INVENTORY_UNIT_ROW_LIMIT = 100;
+
+// The unit's product page, opened on its Stock Units tab filtered to it.
+function unitProductHref(unit) {
+  return `/inventory/products/${unit.product}/?${new URLSearchParams({ unit: unit.serial_number }).toString()}`;
+}
+
+// Where a unit is now, linking to the record that holds it when there is one.
+function UnitWhere({ location }) {
+  if (!location) return <span>-</span>;
+  return location.href ? (
+    <a href={location.href} className="min-w-0 hover:text-[var(--bim-orange-text)]">
+      {location.text}
+    </a>
+  ) : (
+    <span className="min-w-0">{location.text}</span>
+  );
+}
+
+// Inventory > Stock Units: every serial across all products, with where it is
+// now (computed by the server: ?with_location=1), searchable and scannable,
+// each editable with the same form as the product page.
+function InventoryUnitsView({ data, onRowsChange }) {
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState("");
+  const [units, setUnits] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [editingUnit, setEditingUnit] = useState(null);
+  const canEdit = Boolean(data.permissions?.canEditStockUnit);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      const params = new URLSearchParams({ with_location: "1" });
+      if (query.trim()) params.set("q", query.trim());
+      if (status) params.set("status", status);
+      setLoading(true);
+      setError("");
+      try {
+        const response = await fetch(`${data.api.productUnits}?${params.toString()}`, { signal: controller.signal });
+        if (response.status === 401 || response.status === 403) {
+          throw new Error("Stock-unit details require stock-unit access.");
+        }
+        if (!response.ok) throw new Error("Could not load stock units.");
+        setUnits(await response.json());
+      } catch (loadError) {
+        if (loadError.name !== "AbortError") {
+          setUnits([]);
+          setError(loadError.message);
+        }
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }, 250);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [data.api.productUnits, query, status]);
+
+  useEffect(() => {
+    onRowsChange?.(units);
+  }, [units, onRowsChange]);
+
+  const visibleUnits = units.slice(0, INVENTORY_UNIT_ROW_LIMIT);
+
+  return (
+    <>
+      <section className="mt-4 rounded-lg border border-nexus-line bg-nexus-panel p-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <SearchBar
+            className="flex-1"
+            inputClassName="placeholder:text-zinc-500"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onScan={setQuery}
+            placeholder="Search serial number, product, SKU, or barcode..."
+          />
+          <Select
+            value={status}
+            onChange={setStatus}
+            options={[
+              ["available", "Available"],
+              ["reserved", "Reserved"],
+              ["issued", "Issued"],
+              ["sold", "Sold"],
+              ["repair", "Repair"],
+              ["inactive", "Inactive"],
+              ["removed", "Removed"]
+            ]}
+            label="All statuses"
+          />
+          <span className="text-right text-xs text-zinc-500 md:ml-auto">
+            {loading ? "Loading..." : `${formatCount(units.length)} units`}
+          </span>
+        </div>
+      </section>
+
+      <section className="mt-4 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
+        {error ? (
+          <p className="px-4 py-5 text-sm text-[var(--tone-red-text)]">{error}</p>
+        ) : !loading && !units.length ? (
+          <p className="px-4 py-5 text-sm text-zinc-500">No stock unit matches this search.</p>
+        ) : (
+          <>
+          <ul className="divide-y divide-nexus-line md:hidden">
+            {visibleUnits.map((unit) => (
+              <li key={unit.id} className="px-4 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <a href={unitProductHref(unit)} className="min-w-0 break-all font-mono text-sm font-semibold text-[var(--bim-orange-text)]">
+                    {unit.serial_number}
+                  </a>
+                  <Status status={unit.status_label || unit.status} statusClass={unit.status} />
+                </div>
+                <p className="mt-1 text-sm font-semibold text-white">{unit.product_name}</p>
+                <div className="mt-1 flex items-center justify-between gap-3 text-sm text-zinc-400">
+                  <UnitWhere location={unit.location} />
+                  {canEdit ? (
+                    <button
+                      type="button"
+                      onClick={() => setEditingUnit(unit)}
+                      className="inline-flex shrink-0 items-center gap-1.5 text-xs font-semibold text-[var(--bim-orange-text)]"
+                    >
+                      <Edit3 className="h-3.5 w-3.5" />
+                      Edit
+                    </button>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+          <div className="hidden overflow-x-auto md:block">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-zinc-800/80 text-zinc-400">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Serial Number</th>
+                  <th className="px-4 py-3 font-medium">Product</th>
+                  <th className="px-4 py-3 font-medium">Status</th>
+                  <th className="px-4 py-3 font-medium">Where</th>
+                  <th className="px-4 py-3 font-medium">Supplier</th>
+                  <th className="px-4 py-3 font-medium">Purchased</th>
+                  {canEdit ? <th className="relative px-4 py-3 font-medium"><span className="sr-only">Actions</span></th> : null}
+                </tr>
+              </thead>
+              <tbody>
+                {visibleUnits.map((unit) => (
+                  <tr key={unit.id} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
+                    <td className="px-4 py-3">
+                      <a href={unitProductHref(unit)} className="font-mono text-xs font-semibold text-[var(--bim-orange-text)] hover:text-white">
+                        {unit.serial_number}
+                      </a>
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className="font-semibold text-white">{unit.product_name}</p>
+                      <p className="mt-0.5 font-mono text-xs text-zinc-500">{unit.product_sku}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Status status={unit.status_label || unit.status} statusClass={unit.status} />
+                    </td>
+                    <td className="px-4 py-3 text-zinc-300">
+                      <UnitWhere location={unit.location} />
+                    </td>
+                    <td className="px-4 py-3 text-zinc-400">{unit.supplier_name || "-"}</td>
+                    <td className="px-4 py-3 text-zinc-400">{formatDate(unit.purchase_date)}</td>
+                    {canEdit ? (
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          type="button"
+                          onClick={() => setEditingUnit(unit)}
+                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--bim-orange-text)] hover:text-white"
+                        >
+                          <Edit3 className="h-3.5 w-3.5" />
+                          Edit
+                        </button>
+                      </td>
+                    ) : null}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          </>
+        )}
+        {units.length > visibleUnits.length ? (
+          <p className="border-t border-nexus-line px-4 py-3 text-xs text-zinc-500">
+            Showing {visibleUnits.length} of {formatCount(units.length)} units. Search or filter by status to find others; Export includes all of them.
+          </p>
+        ) : null}
+      </section>
+
+      {editingUnit ? (
+        <EditUnitModal
+          data={data}
+          unit={editingUnit}
+          onClose={() => setEditingUnit(null)}
+          onSaved={(updated) => {
+            // The edit response has no "where"; the unit has not moved, so keep it.
+            setUnits((current) =>
+              current.map((unit) => (unit.id === updated.id ? { ...updated, location: unit.location } : unit))
+            );
+            setEditingUnit(null);
+          }}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function InventoryHeader({ actions, onExport }) {
   const addProduct = actions.find((action) => action.label === "Add Product");
   return (
     <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -7410,9 +7760,9 @@ function InventoryHeader({ actions }) {
       <div className="flex items-center gap-3 text-sm">
         <button
           type="button"
-          disabled
-          title="Export coming later"
-          className="inline-flex h-9 cursor-not-allowed items-center gap-2 rounded-md px-3 font-semibold text-zinc-500"
+          onClick={onExport}
+          title="Download what is listed below as a CSV file (opens in Excel)"
+          className="inline-flex h-9 items-center gap-2 rounded-md px-3 font-semibold text-zinc-200 hover:bg-nexus-panel"
         >
           <Icon name="upload" className="h-4 w-4" />
           Export
@@ -7446,18 +7796,36 @@ function Select({ value, onChange, options, label }) {
   );
 }
 
-function InventoryTable({ products, selectedId, onSelect, loading, error, statusFilter }) {
+function SortableHeader({ label, sortKey, sort, onSort }) {
+  const active = sort?.key === sortKey;
+  return (
+    <button type="button" onClick={() => onSort?.(sortKey)} className="inline-flex items-center gap-1 font-medium hover:text-white">
+      {label}
+      <ChevronDown
+        className={`h-3.5 w-3.5 transition-transform ${active ? "text-[var(--bim-orange-text)]" : "opacity-40"} ${
+          active && sort.direction === "desc" ? "rotate-180" : ""
+        }`}
+      />
+    </button>
+  );
+}
+
+function InventoryTable({ products, sort, onSort, selectedId, onSelect, loading, error, statusFilter }) {
   return (
     <section className="mt-4 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
       <div className="overflow-x-auto">
         <table className="w-full table-fixed text-left text-sm">
           <thead className="bg-zinc-800/80 text-zinc-400">
             <tr>
-              <th className="w-[52%] px-4 py-3 font-medium md:w-[30%]">Product</th>
+              <th className="w-[52%] px-4 py-3 font-medium md:w-[30%]" aria-sort={sort?.key === "name" ? (sort.direction === "asc" ? "ascending" : "descending") : undefined}>
+                <SortableHeader label="Product" sortKey="name" sort={sort} onSort={onSort} />
+              </th>
               <th className="hidden w-[12%] px-4 py-3 font-medium md:table-cell">Category</th>
               <th className="hidden w-[16%] px-4 py-3 font-medium md:table-cell">Brand / Model</th>
               <th className="hidden w-[14%] px-4 py-3 font-medium md:table-cell">SKU</th>
-              <th className="w-[24%] px-4 py-3 font-medium md:w-[16%]">Stock</th>
+              <th className="w-[24%] px-4 py-3 font-medium md:w-[16%]" aria-sort={sort?.key === "stock" ? (sort.direction === "asc" ? "ascending" : "descending") : undefined}>
+                <SortableHeader label="Stock" sortKey="stock" sort={sort} onSort={onSort} />
+              </th>
               <th className="w-[24%] px-4 py-3 font-medium md:w-[12%]">Status</th>
             </tr>
           </thead>
@@ -7662,19 +8030,15 @@ function StockBar({ product, statusFilter }) {
   );
 }
 
+function productStatusInfo(product) {
+  if (!product.isactive) return { label: "Inactive", statusKey: "inactive" };
+  if (product.available_units === 0) return { label: "Out of Stock", statusKey: "out_of_stock" };
+  if (product.is_low_stock) return { label: "Low Stock", statusKey: "low_stock" };
+  return { label: "Active", statusKey: "active" };
+}
+
 function ProductStatus({ product }) {
-  let label = "Active";
-  let statusKey = "active";
-  if (!product.isactive) {
-    label = "Inactive";
-    statusKey = "inactive";
-  } else if (product.available_units === 0) {
-    label = "Out of Stock";
-    statusKey = "out_of_stock";
-  } else if (product.is_low_stock) {
-    label = "Low Stock";
-    statusKey = "low_stock";
-  }
+  const { label, statusKey } = productStatusInfo(product);
   const meta = statusMeta[statusKey] || statusMeta.active;
   return (
     <span className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-bold ${meta.className}`}>
@@ -10933,7 +11297,7 @@ function dynamicIconTone(item) {
 // What someone has to act on, from every module the user can see (built by
 // apps/core/dashboard.py from each module's provider). Red rows come first;
 // with nothing to do it says so instead of disappearing.
-function NeedsAttention({ items }) {
+function NeedsAttention({ items, moreHref, moreLabel }) {
   return (
     <section className="mb-5 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel" aria-label="Needs attention">
       <PanelHeader title="Needs Attention" badge={items.length ? formatCount(items.length) : null} />
@@ -10962,6 +11326,15 @@ function NeedsAttention({ items }) {
           All clear: nothing needs action right now.
         </p>
       )}
+      {moreHref ? (
+        <a
+          href={moreHref}
+          className="flex items-center justify-between gap-3 border-t border-nexus-line px-4 py-3 text-sm font-semibold text-[var(--bim-orange-text)] hover:bg-nexus-panel2"
+        >
+          {moreLabel}
+          <ChevronRight className="h-4 w-4 shrink-0" />
+        </a>
+      ) : null}
     </section>
   );
 }
@@ -11054,7 +11427,7 @@ function StockStatusBars({ bars }) {
 
 function KpiGrid({ items }) {
   return (
-    <section className="grid grid-cols-2 gap-3 2xl:grid-cols-4" aria-label="Key metrics">
+    <section className="grid grid-cols-2 gap-3 xl:grid-cols-4" aria-label="Key metrics">
       {items.map((item) => {
         const iconTone = dynamicIconTone(item);
         const accent = KPI_TONE_ACCENTS[iconTone] || KPI_TONE_ACCENTS.neutral;

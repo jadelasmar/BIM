@@ -30,6 +30,7 @@ from .models import (
 )
 from .selectors import (
     RECENT_ACTIVITY_LIMIT,
+    unit_locations,
     global_search,
     recent_activity_page,
     returnable_units,
@@ -245,6 +246,18 @@ class ProductUnitListCreateAPIView(WritePermissionRequiredMixin, generics.ListCr
             queryset = queryset.filter(product_id=product)
 
         return queryset
+
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        # ?with_location=1 (Inventory > Stock Units) adds where each unit is
+        # now; the workflow pickers that also use this list don't pay for it.
+        if request.query_params.get("with_location") == "1":
+            locations = unit_locations(
+                [(row["id"], row["status"], row.get("owner_client_name")) for row in response.data]
+            )
+            for row in response.data:
+                row["location"] = locations.get(row["id"])
+        return response
 
     def perform_create(self, serializer):
         _require_perm(self.request.user, stock_constants.ADD_PRODUCT_UNIT)

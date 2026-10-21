@@ -1,3 +1,4 @@
+from collections import defaultdict
 from datetime import date, timedelta
 from urllib.parse import urlencode
 
@@ -14,13 +15,18 @@ from .models import (
     Client,
     ClientReturnRecord,
     ClientUpgradeRecord,
+    DeliveryItem,
     DeliveryRecord,
+    IssueItem,
     IssueRecord,
     Product,
     ProductUnit,
     ReceivingRecord,
+    RemovalItem,
     RemovalRecord,
+    RepairItem,
     RepairRecord,
+    ReservationItem,
     ReservationRecord,
     Supplier,
 )
@@ -880,3 +886,82 @@ def global_search(user, query, limit=GLOBAL_SEARCH_RESULT_LIMIT):
             groups.append(group)
 
     return groups
+
+
+def unit_locations(units):
+    """Where each unit is right now, for the Inventory Stock Units view:
+    {unit_id: {"text", "href"}}, the href pointing at the record that holds it.
+
+    `units` is a list of (id, status, owner_client_name). One bulk query per
+    status, never one per unit, so a long unit list stays fast."""
+    ids_by_status = defaultdict(list)
+    for unit_id, status, _owner in units:
+        ids_by_status[status].append(unit_id)
+    locations = {}
+
+    for item in ReservationItem.objects.filter(
+        product_unit_id__in=ids_by_status[ProductUnit.STATUS_RESERVED],
+        reservation__status=ReservationRecord.STATUS_ACTIVE,
+    ).select_related("reservation"):
+        locations[item.product_unit_id] = {
+            "text": f"Reserved for {item.reservation.reserved_for}",
+            "href": reverse("operations_reservation_detail", kwargs={"pk": item.reservation_id}),
+        }
+
+    for item in IssueItem.objects.filter(
+        product_unit_id__in=ids_by_status[ProductUnit.STATUS_ISSUED],
+        issue__status=IssueRecord.STATUS_ACTIVE,
+    ).select_related("issue"):
+        locations[item.product_unit_id] = {
+            "text": f"With {item.issue.issued_to}",
+            "href": reverse("operations_issue_detail", kwargs={"pk": item.issue_id}),
+        }
+
+    for item in RepairItem.objects.filter(
+        product_unit_id__in=ids_by_status[ProductUnit.STATUS_REPAIR],
+        repair__status=RepairRecord.STATUS_ACTIVE,
+    ).select_related("repair", "repair__vendor"):
+        repair = item.repair
+        locations[item.product_unit_id] = {
+            "text": f"At {repair.vendor.name}" if repair.vendor_id else "In repair, no supplier",
+            "href": reverse("operations_repair_detail", kwargs={"pk": item.repair_id}),
+        }
+
+    # Oldest first, so the latest completed delivery of a unit wins.
+    for item in (
+        DeliveryItem.objects.filter(
+            product_unit_id__in=ids_by_status[ProductUnit.STATUS_SOLD],
+            isactive=True,
+            delivery__isactive=True,
+            delivery__status=DeliveryRecord.STATUS_COMPLETED,
+        )
+        .select_related("delivery", "delivery__client")
+        .order_by("pk")
+    ):
+        delivery = item.delivery
+        client_name = delivery.client.name if delivery.client_id else delivery.customer_name
+        locations[item.product_unit_id] = {
+            "text": f"Delivered to {client_name}",
+            "href": reverse("operations_delivery_detail", kwargs={"pk": item.delivery_id}),
+        }
+
+    for item in RemovalItem.objects.filter(
+        product_unit_id__in=ids_by_status[ProductUnit.STATUS_REMOVED],
+    ).select_related("removal"):
+        locations[item.product_unit_id] = {
+            "text": f"Removed ({item.removal.removal_number})",
+            "href": reverse("operations_removal_detail", kwargs={"pk": item.removal_id}),
+        }
+
+    labels = dict(ProductUnit.STATUS_CHOICES)
+    for unit_id, status, owner in units:
+        if unit_id in locations:
+            continue
+        if owner:
+            text = f"Belongs to {owner}"
+        elif status == ProductUnit.STATUS_AVAILABLE:
+            text = "In stock"
+        else:
+            text = labels.get(status, status)
+        locations[unit_id] = {"text": text, "href": ""}
+    return locations

@@ -32,6 +32,8 @@ This roadmap documents product direction, not implementation history.
 - Dark/light theme
 - React/Vite/Tailwind frontend shell
 - Command Center as a module dashboard: Needs Attention list plus one summary card per module, fed by per-module dashboard providers (`apps/core/dashboard.py`)
+- Inventory Stock Units view (every serial with where it is now, editable) and CSV export of products or units
+- Operations page grouped by purpose with live counts and its open work
 
 ## Current Product Focus
 

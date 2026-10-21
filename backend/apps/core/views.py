@@ -295,6 +295,7 @@ def _command_center_initial_data(
         },
         "routes": {
             "inventory": reverse("inventory"),
+            "operationsPending": reverse("operations_pending"),
             "availableStock": f"{reverse('inventory')}?status={ProductUnit.STATUS_AVAILABLE}",
             "outOfStock": f"{reverse('inventory')}?stock=out",
             "lowStock": f"{reverse('inventory')}?stock=low",
@@ -423,10 +424,11 @@ def _command_center_initial_data(
         "recentActivity": recent_activity,
         "lowStockAlerts": low_stock_alerts,
         "stockStatusChart": stock_status_chart,
-        # Module cards + Needs Attention; built only for the Command Center so
+        # Module cards + Needs Attention; built only for the Command Center and
+        # the Operations page (its open-work strip and per-workflow counts), so
         # other pages (which get this same initial data) pay no extra queries.
         "dashboard": build_dashboard(user)
-        if current_path == reverse("module_launcher")
+        if current_path in (reverse("module_launcher"), reverse("operations"))
         else None,
         "pollIntervalMs": 60000,
     }

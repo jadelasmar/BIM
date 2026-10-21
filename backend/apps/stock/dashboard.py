@@ -5,9 +5,11 @@ Each provider takes the user and returns {"section": {...} or None,
 apps.core.dashboard runs them in order. A new module adds its own provider
 there -- see the standing rule in CLAUDE.md.
 
-Section: {key, title, icon, tone, href, linkLabel, stats: [{label, value,
-href, tone}], and for Stock also headline + bars}. Attention row: {key, count,
-label, href, tone ("danger" or "warning"), icon}.
+Section: {key, title, icon, tone, href, linkLabel, stats: [{key, label, value,
+href, tone}], and for Stock also headline + bars}. Attention row: {key, module,
+count, label, href, tone ("danger" or "warning"), icon}. Stat keys and the
+attention `module` are stable identifiers other pages look up (the Operations
+page shows its own rows and per-workflow counts from them).
 """
 
 from django.urls import reverse
@@ -36,9 +38,10 @@ from .selectors import (
 )
 
 
-def _attention(key, count, one, many, href, tone, icon):
+def _attention(module, key, count, one, many, href, tone, icon):
     return {
         "key": key,
+        "module": module,
         "count": count,
         "label": one if count == 1 else many,
         "href": href,
@@ -47,8 +50,8 @@ def _attention(key, count, one, many, href, tone, icon):
     }
 
 
-def _stat(label, value, href, tone=None):
-    return {"label": label, "value": value, "href": href, "tone": tone}
+def _stat(key, label, value, href, tone=None):
+    return {"key": key, "label": label, "value": value, "href": href, "tone": tone}
 
 
 def stock_dashboard(user):
@@ -63,14 +66,14 @@ def stock_dashboard(user):
     if out:
         attention.append(
             _attention(
-                "out_of_stock", out, "product is out of stock", "products are out of stock",
+                "stock", "out_of_stock", out, "product is out of stock", "products are out of stock",
                 f"{inventory}?stock=out", "danger", "package-x",
             )
         )
     if low:
         attention.append(
             _attention(
-                "low_stock", low, "product is low on stock", "products are low on stock",
+                "stock", "low_stock", low, "product is low on stock", "products are low on stock",
                 f"{inventory}?stock=low", "warning", "triangle-alert",
             )
         )
@@ -89,9 +92,9 @@ def stock_dashboard(user):
         },
         "bars": breakdown["bars"],
         "stats": [
-            _stat("Products", active_product_count(), inventory),
-            _stat("Low stock", low, f"{inventory}?stock=low", "warning" if low else None),
-            _stat("Out of stock", out, f"{inventory}?stock=out", "danger" if out else None),
+            _stat("products", "Products", active_product_count(), inventory),
+            _stat("low_stock", "Low stock", low, f"{inventory}?stock=low", "warning" if low else None),
+            _stat("out_of_stock", "Out of stock", out, f"{inventory}?stock=out", "danger" if out else None),
         ],
     }
     return {"section": section, "attention": attention}
@@ -104,12 +107,12 @@ def operations_dashboard(user):
 
     if user.has_perm(stock_constants.VIEW_RESERVATION_RECORD):
         reservations = reverse("operations_reservations")
-        stats.append(_stat("Active reservations", pending_reservation_count(), reservations))
+        stats.append(_stat("active_reservations", "Active reservations", pending_reservation_count(), reservations))
         held = long_held_reservation_count()
         if held:
             attention.append(
                 _attention(
-                    "long_held_reservations", held,
+                    "operations", "long_held_reservations", held,
                     f"reservation held more than {STALE_RECORD_DAYS} days",
                     f"reservations held more than {STALE_RECORD_DAYS} days",
                     reservations, "warning", "clock-3",
@@ -117,12 +120,12 @@ def operations_dashboard(user):
             )
 
     if user.has_perm(stock_constants.VIEW_ISSUE_RECORD):
-        stats.append(_stat("On temporary assignment", pending_issue_count(), reverse("operations_issues")))
+        stats.append(_stat("active_assignments", "On temporary assignment", pending_issue_count(), reverse("operations_issues")))
         overdue = overdue_issue_count()
         if overdue:
             attention.append(
                 _attention(
-                    "overdue_assignments", overdue,
+                    "operations", "overdue_assignments", overdue,
                     "temporary assignment is overdue", "temporary assignments are overdue",
                     pending, "danger", "user-check",
                 )
@@ -130,12 +133,12 @@ def operations_dashboard(user):
 
     if user.has_perm(stock_constants.VIEW_REPAIR_RECORD):
         repairs = reverse("operations_repairs")
-        stats.append(_stat("Open repairs", pending_repair_count(), repairs))
+        stats.append(_stat("open_repairs", "Open repairs", pending_repair_count(), repairs))
         no_vendor = repairs_without_vendor_count()
         if no_vendor:
             attention.append(
                 _attention(
-                    "repairs_without_supplier", no_vendor,
+                    "operations", "repairs_without_supplier", no_vendor,
                     "repair has no supplier", "repairs have no supplier",
                     pending, "warning", "wrench",
                 )
@@ -144,7 +147,7 @@ def operations_dashboard(user):
         if long_open:
             attention.append(
                 _attention(
-                    "long_open_repairs", long_open,
+                    "operations", "long_open_repairs", long_open,
                     f"repair open more than {STALE_RECORD_DAYS} days",
                     f"repairs open more than {STALE_RECORD_DAYS} days",
                     repairs, "warning", "wrench",
@@ -152,10 +155,10 @@ def operations_dashboard(user):
             )
 
     if user.has_perm(stock_constants.VIEW_RECEIVING_RECORD):
-        stats.append(_stat("Received, last 30 days", recent_receiving_count(), reverse("operations_receiving")))
+        stats.append(_stat("received_30_days", "Received, last 30 days", recent_receiving_count(), reverse("operations_receiving")))
 
     if user.has_perm(stock_constants.VIEW_DELIVERY_RECORD):
-        stats.append(_stat("Deliveries", delivery_record_count(), reverse("operations_deliveries")))
+        stats.append(_stat("deliveries", "Deliveries", delivery_record_count(), reverse("operations_deliveries")))
 
     if not stats:
         return {"section": None, "attention": attention}
@@ -177,22 +180,22 @@ def clients_dashboard(user):
     attention = []
 
     if user.has_perm(stock_constants.VIEW_CLIENT):
-        stats.append(_stat("Clients", client_count(), reverse("clients")))
+        stats.append(_stat("clients", "Clients", client_count(), reverse("clients")))
 
     if user.has_perm(stock_constants.VIEW_SUPPLIER):
-        stats.append(_stat("Suppliers", supplier_count(), reverse("suppliers")))
+        stats.append(_stat("suppliers", "Suppliers", supplier_count(), reverse("suppliers")))
 
     if user.has_perm(stock_constants.VIEW_CLIENT_UPGRADE_RECORD):
         upgrades = reverse("operations_client_upgrades")
         needed = client_upgrade_needed_count()
         stats.append(
-            _stat("Need an upgrade", needed, f"{upgrades}?filter=needs_upgrade", "warning" if needed else None)
+            _stat("upgrades_needed", "Need an upgrade", needed, f"{upgrades}?filter=needs_upgrade", "warning" if needed else None)
         )
         overdue = overdue_client_upgrade_count()
         if overdue:
             attention.append(
                 _attention(
-                    "overdue_client_upgrades", overdue,
+                    "clients", "overdue_client_upgrades", overdue,
                     "client upgrade is past its planned date",
                     "client upgrades are past their planned date",
                     f"{upgrades}?filter=overdue", "danger", "refresh-cw",
