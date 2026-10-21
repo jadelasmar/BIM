@@ -34,6 +34,7 @@ import {
   DateInput,
   EmptyState,
   Input,
+  ScanButton,
   SearchBar,
   useToast
 } from "../components/ui";
@@ -284,6 +285,13 @@ function GlobalSearch({ data }) {
           placeholder="Search products, records, suppliers..."
           aria-label="Global search"
           className="w-full bg-transparent text-sm text-zinc-200 outline-none placeholder:text-zinc-600"
+        />
+        <ScanButton
+          onScan={(code) => {
+            setQuery(code);
+            setOpen(true);
+          }}
+          className="h-7 w-7"
         />
       </label>
 
@@ -1077,6 +1085,7 @@ function ReceivingRecordsPage({ data }) {
             inputClassName="placeholder:text-zinc-500"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            onScan={setQuery}
             placeholder="Search receiving number, supplier, purchase order, invoice, product, or serial..."
           />
           <span className="text-xs text-zinc-500">{records.length} records</span>
@@ -1732,6 +1741,7 @@ function ReservationRecordsPage({ data }) {
             inputClassName="placeholder:text-zinc-500"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            onScan={setQuery}
             placeholder="Search reservation number, reserved for, reason, product, or serial..."
           />
           <span className="text-xs text-zinc-500">{records.length} records</span>
@@ -2329,6 +2339,18 @@ function CreateReservationPage({ data }) {
     setQuery("");
   }
 
+  function handleScan(code) {
+    const match = findUnitBySerial(units, code);
+    if (!match) {
+      setQuery(code);
+    } else if (selectedIds.has(match.id)) {
+      showError(`${match.serial_number} is already added.`);
+    } else {
+      addUnit(match);
+      showSuccess(`Added ${match.serial_number}.`);
+    }
+  }
+
   function removeUnit(unitId) {
     setSelectedUnits((current) => current.filter((unit) => unit.id !== unitId));
   }
@@ -2424,6 +2446,7 @@ function CreateReservationPage({ data }) {
               <SearchBar
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
+                onScan={handleScan}
                 placeholder="Search product, SKU, barcode, or serial..."
               />
               {filteredUnits.length ? (
@@ -2465,6 +2488,17 @@ function CreateReservationPage({ data }) {
       </div>
     </Shell>
   );
+}
+
+// Scanning a label in a unit picker: a code that is exactly one offered unit's
+// serial number adds that unit straight away; anything else (a product barcode, a
+// partial serial) just fills the search so the matching units are listed.
+function findUnitBySerial(units, code) {
+  const wanted = code.trim().toLowerCase();
+  const matches = units.filter(
+    (unit) => !unit.blocked_reason && String(unit.serial_number || "").trim().toLowerCase() === wanted
+  );
+  return matches.length === 1 ? matches[0] : null;
 }
 
 function SelectedUnitsTable({ units, onRemove, emptyText }) {
@@ -2603,6 +2637,7 @@ function IssueRecordsPage({ data }) {
             inputClassName="placeholder:text-zinc-500"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            onScan={setQuery}
             placeholder="Search assignment number, assigned to, product, or serial..."
           />
           <span className="text-xs text-zinc-500">{records.length} records</span>
@@ -3090,6 +3125,18 @@ function CreateIssuePage({ data }) {
     setQuery("");
   }
 
+  function handleScan(code) {
+    const match = findUnitBySerial(units, code);
+    if (!match) {
+      setQuery(code);
+    } else if (selectedIds.has(match.id)) {
+      showError(`${match.serial_number} is already added.`);
+    } else {
+      addUnit(match);
+      showSuccess(`Added ${match.serial_number}.`);
+    }
+  }
+
   function removeUnit(unitId) {
     setSelectedUnits((current) => current.filter((unit) => unit.id !== unitId));
   }
@@ -3197,6 +3244,7 @@ function CreateIssuePage({ data }) {
               <SearchBar
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
+                onScan={handleScan}
                 placeholder="Search product, SKU, barcode, or serial..."
               />
               {filteredUnits.length ? (
@@ -3344,6 +3392,7 @@ function RepairRecordsPage({ data }) {
             inputClassName="placeholder:text-zinc-500"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            onScan={setQuery}
             placeholder="Search repair number, reason, supplier, product, or serial..."
           />
           <span className="text-xs text-zinc-500">{records.length} records</span>
@@ -3940,6 +3989,18 @@ function CreateRepairPage({ data }) {
     setQuery("");
   }
 
+  function handleScan(code) {
+    const match = findUnitBySerial(units, code);
+    if (!match) {
+      setQuery(code);
+    } else if (selectedIds.has(match.id)) {
+      showError(`${match.serial_number} is already added.`);
+    } else {
+      addUnit(match);
+      showSuccess(`Added ${match.serial_number}.`);
+    }
+  }
+
   function removeUnit(unitId) {
     setSelectedUnits((current) => current.filter((unit) => unit.id !== unitId));
   }
@@ -4090,7 +4151,17 @@ function CreateRepairPage({ data }) {
                       placeholder="Search product..."
                     />
                     <Field label="Serial Number" required>
-                      <TextInput value={item.serial} onChange={(value) => updateClientItem(index, "serial", value)} placeholder="Serial number on the item" />
+                      <div className="flex items-center gap-2">
+                        <div className="min-w-0 flex-1">
+                          <TextInput value={item.serial} onChange={(value) => updateClientItem(index, "serial", value)} placeholder="Serial number on the item" />
+                        </div>
+                        <ScanButton
+                          title="Scan Serial Number"
+                          label="Scan serial number"
+                          onScan={(code) => updateClientItem(index, "serial", code)}
+                          className="h-10 w-10 rounded-md border border-nexus-line"
+                        />
+                      </div>
                     </Field>
                     {clientItems.length > 1 ? (
                       <button
@@ -4119,6 +4190,7 @@ function CreateRepairPage({ data }) {
               <SearchBar
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
+                onScan={handleScan}
                 placeholder="Search product, SKU, barcode, or serial..."
               />
               {filteredUnits.length ? (
@@ -5123,6 +5195,7 @@ function RemovalRecordsPage({ data }) {
             inputClassName="placeholder:text-zinc-500"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            onScan={setQuery}
             placeholder="Search removal number, reason, notes, product, or serial..."
           />
           <span className="text-xs text-zinc-500">{records.length} records</span>
@@ -5376,6 +5449,18 @@ function CreateRemovalPage({ data }) {
     setQuery("");
   }
 
+  function handleScan(code) {
+    const match = findUnitBySerial(units, code);
+    if (!match) {
+      setQuery(code);
+    } else if (selectedIds.has(match.id)) {
+      showError(`${match.serial_number} is already added.`);
+    } else {
+      addUnit(match);
+      showSuccess(`Added ${match.serial_number}.`);
+    }
+  }
+
   function removeUnit(unitId) {
     setSelectedUnits((current) => current.filter((unit) => unit.id !== unitId));
   }
@@ -5467,6 +5552,7 @@ function CreateRemovalPage({ data }) {
               <SearchBar
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
+                onScan={handleScan}
                 placeholder="Search product, SKU, barcode, or serial..."
               />
               {filteredUnits.length ? (
@@ -5605,6 +5691,7 @@ function ClientReturnRecordsPage({ data }) {
             inputClassName="placeholder:text-zinc-500"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            onScan={setQuery}
             placeholder="Search return number, delivery, client, received from, reason, product, or serial..."
           />
           <span className="text-xs text-zinc-500">{records.length} records</span>
@@ -6154,6 +6241,31 @@ function CreateClientReturnPage({ data }) {
     setQuery("");
   }
 
+  // Sold units are not preloaded: a scanned serial is searched on the server, and
+  // once its results arrive an exact serial match is added straight away.
+  const pendingScan = useRef("");
+  useEffect(() => {
+    const code = pendingScan.current;
+    if (!code || query !== code) return;
+    pendingScan.current = "";
+    const match = findUnitBySerial(
+      units.filter((unit) => !returnClient || unit.client?.id === returnClient.id),
+      code
+    );
+    if (!match) return;
+    if (selectedIds.has(match.id)) {
+      showError(`${match.serial_number} is already added.`);
+    } else {
+      addUnit(match);
+      showSuccess(`Added ${match.serial_number}.`);
+    }
+  }, [units]);
+
+  function handleScan(code) {
+    pendingScan.current = code;
+    setQuery(code);
+  }
+
   function removeUnit(unitId) {
     setSelectedUnits((current) => current.filter((unit) => unit.id !== unitId));
   }
@@ -6288,6 +6400,7 @@ function CreateClientReturnPage({ data }) {
               <SearchBar
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
+                onScan={handleScan}
                 placeholder="Search by serial number, product, or SKU..."
               />
               {returnClient ? (
@@ -6449,6 +6562,7 @@ function DeliveryRecordsPage({ data }) {
             inputClassName="placeholder:text-zinc-500"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
+            onScan={setQuery}
             placeholder="Search delivery number, client, invoice, product, or serial..."
           />
           <span className="text-xs text-zinc-500">{records.length} records</span>
@@ -7202,6 +7316,7 @@ function InventoryPage({ data }) {
                 inputClassName="placeholder:text-zinc-500"
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
+                onScan={setQuery}
                 placeholder="Search by product name, SKU, barcode, or serial..."
               />
               <span className="inline-flex items-center gap-2 text-sm text-zinc-400">
@@ -8772,6 +8887,34 @@ function StockEntryPage({ data, mode = "add-unit" }) {
     setQuery("");
   }
 
+  // A scanned product barcode or SKU that matches exactly one product adds its
+  // line; anything else fills the search.
+  function handleProductScan(code) {
+    const wanted = code.trim().toLowerCase();
+    const matches = products.filter((product) =>
+      [product.barcode, product.sku].some((value) => String(value || "").trim().toLowerCase() === wanted)
+    );
+    if (matches.length === 1) {
+      addProductLine(matches[0]);
+      showSuccess(`Added ${matches[0].display_name}.`);
+    } else {
+      setQuery(code);
+    }
+  }
+
+  // Each scanned serial is appended to the line; quantity grows to match.
+  function addScannedSerial(key, code) {
+    setLines((current) =>
+      current.map((line) => {
+        if (line.key !== key) return line;
+        const serials = parseSerials(line.serials);
+        if (serials.includes(code)) return line;
+        const next = [...serials, code];
+        return { ...line, serials: next.join("\n"), quantity: Math.max(Number(line.quantity) || 0, next.length) };
+      })
+    );
+  }
+
   function updateLine(key, field, value) {
     setLines((current) =>
       current.map((line) => (line.key === key ? { ...line, [field]: value } : line))
@@ -9033,6 +9176,7 @@ function StockEntryPage({ data, mode = "add-unit" }) {
                     className="flex-1"
                     value={query}
                     onChange={(event) => setQuery(event.target.value)}
+                    onScan={handleProductScan}
                     placeholder="Search product by name, SKU, or barcode..."
                   />
                   {canCreateProduct ? (
@@ -9114,12 +9258,21 @@ function StockEntryPage({ data, mode = "add-unit" }) {
                         <TextInput value={line.cost} onChange={(value) => updateLine(line.key, "cost", value)} />
                       </CompactField>
                       <CompactField label="Serial Numbers">
-                        <textarea
-                          value={line.serials}
-                          onChange={(event) => updateLine(line.key, "serials", event.target.value)}
-                          className="min-h-10 rounded-md border border-nexus-line bg-black px-3 py-2 text-sm text-zinc-200 outline-none placeholder:text-zinc-600"
-                          placeholder="One per line. Blank = auto-generated"
-                        />
+                        <div className="flex items-start gap-2">
+                          <textarea
+                            value={line.serials}
+                            onChange={(event) => updateLine(line.key, "serials", event.target.value)}
+                            className="min-h-10 min-w-0 flex-1 rounded-md border border-nexus-line bg-black px-3 py-2 text-sm text-zinc-200 outline-none placeholder:text-zinc-600"
+                            placeholder="One per line. Blank = auto-generated"
+                          />
+                          <ScanButton
+                            multiple
+                            title="Scan Serial Numbers"
+                            label="Scan serial numbers"
+                            onScan={(code) => addScannedSerial(line.key, code)}
+                            className="h-10 w-10 rounded-md border border-nexus-line"
+                          />
+                        </div>
                       </CompactField>
                       <button onClick={() => removeLine(line.key)} type="button" className="mt-5 text-zinc-500 hover:text-nexus-red" aria-label={`Remove ${line.product.display_name}`}>
                         <X className="h-4 w-4" aria-hidden="true" />
@@ -9503,6 +9656,18 @@ function CreateDeliveryPage({ data }) {
     setQuery("");
   }
 
+  function handleScan(code) {
+    const match = findUnitBySerial(units, code);
+    if (!match) {
+      setQuery(code);
+    } else if (selectedIds.has(match.id)) {
+      showError(`${match.serial_number} is already added.`);
+    } else {
+      addUnit(match);
+      showSuccess(`Added ${match.serial_number}.`);
+    }
+  }
+
   function removeUnit(unitId) {
     setSelectedUnits((current) => current.filter((unit) => unit.id !== unitId));
   }
@@ -9630,6 +9795,7 @@ function CreateDeliveryPage({ data }) {
                   className="flex-1"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
+                  onScan={handleScan}
                   placeholder="Search available unit by product, SKU, barcode, or serial..."
                 />
                 {filteredUnits.length ? (

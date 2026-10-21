@@ -1,4 +1,5 @@
 import { Search } from "../../constants/icons";
+import { ScanButton } from "./BarcodeScanner";
 
 export default function SearchBar({
   value,
@@ -6,6 +7,7 @@ export default function SearchBar({
   placeholder,
   className = "",
   inputClassName = "",
+  onScan,
   ...props
 }) {
   return (
@@ -18,6 +20,7 @@ export default function SearchBar({
         className={`w-full bg-transparent text-sm text-zinc-200 outline-none placeholder:text-zinc-600 ${inputClassName}`.trim()}
         {...props}
       />
+      {onScan ? <ScanButton onScan={onScan} className="h-8 w-8" /> : null}
     </label>
   );
 }

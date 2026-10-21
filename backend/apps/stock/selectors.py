@@ -615,6 +615,27 @@ def global_search(user, query, limit=GLOBAL_SEARCH_RESULT_LIMIT):
         if group:
             groups.append(group)
 
+    if user.has_perm(stock_constants.VIEW_PRODUCT_UNIT) and user.has_perm(stock_constants.VIEW_PRODUCT):
+        matches = (
+            ProductUnit.objects.filter(isactive=True, serial_number__icontains=query)
+            .select_related("product")
+            .order_by("serial_number")
+        )
+        group = _search_group(
+            "stock_units",
+            "Stock Units",
+            matches,
+            lambda unit: {
+                "id": unit.pk,
+                "title": unit.serial_number,
+                "subtitle": f"{unit.product.descript} - {unit.get_status_display()}",
+                "href": reverse("inventory_product_detail", kwargs={"pk": unit.product_id}),
+            },
+            limit,
+        )
+        if group:
+            groups.append(group)
+
     if user.has_perm(stock_constants.VIEW_SUPPLIER):
         matches = Supplier.objects.filter(isactive=True).filter(
             Q(name__icontains=query) | Q(contact_person__icontains=query)
