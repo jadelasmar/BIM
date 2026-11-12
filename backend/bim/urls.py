@@ -15,6 +15,7 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
+from django.contrib.auth.decorators import login_required
 from django.conf import settings
 from django.urls import include, path, re_path
 from django.views.static import serve as serve_static
@@ -34,10 +35,12 @@ urlpatterns = [
 # django.views.static.serve directly, not the django.conf.urls.static.static()
 # shortcut - that shortcut silently no-ops whenever DEBUG=False, which is
 # exactly why the previous version of this file never worked in production.
+# login_required keeps uploads private: anonymous requests are redirected to the
+# login page (settings.LOGIN_URL) instead of receiving the file.
 urlpatterns += [
     re_path(
         r'^%s(?P<path>.*)$' % settings.MEDIA_URL.lstrip('/'),
-        serve_static,
+        login_required(serve_static),
         {'document_root': settings.MEDIA_ROOT},
     ),
 ]

@@ -58,6 +58,21 @@ if (-not (Test-Path -LiteralPath $shareCopy) -or
 }
 Write-Host "Backup copied and verified on share: $shareCopy"
 
+# Uploaded files (product images in backend\media) are not in git or the database, so
+# copy them to the share too. /E adds and updates files but never deletes from the share
+# (not /MIR, which would empty it if the source were ever empty). Robocopy exit codes
+# 0-7 mean success (bit flags for copied/extra/mismatched files), 8 or more is a failure.
+$MediaDir = Join-Path $RepoRoot "backend\media"
+if (-not (Test-Path -LiteralPath $MediaDir)) {
+    Write-Host "No backend\media folder - skipping media backup."
+} else {
+    $MediaShareDir = Join-Path $ShareDir "media"
+    robocopy $MediaDir $MediaShareDir /E /R:2 /W:2 /NFL /NDL /NP /NJH | Out-Host
+    if ($LASTEXITCODE -ge 8) { Fail "could not copy backend\media to $MediaShareDir (robocopy exit code $LASTEXITCODE) - nothing was changed" }
+    Write-Host "Media copied to share: $MediaShareDir"
+    $global:LASTEXITCODE = 0   # robocopy 1-7 is success; do not leak it into later checks
+}
+
 # Keep only the newest $KeepBackups timestamped backups, locally and on the share.
 # Pre-rollback safety copies (db_prod_prerollback_*) are never removed.
 foreach ($dir in @($BackupDir, $ShareDir)) {

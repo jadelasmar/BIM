@@ -27,6 +27,7 @@ This roadmap documents product direction, not implementation history.
 - Removal workflow (`RemovalRecord`, `RMV-YYYY-####`): permanently removes units from stock as damaged, lost, stolen, written off or other; create-only, no undo
 - Client Upgrade workflow (`ClientUpgradeRecord`, `/operations/upgrades/...`): tracks which clients still need a software upgrade and which are done; it never touches stock units
 - Product edit (`/inventory/products/<id>/edit/`) and Product Groups (`/inventory/groups/`)
+- Uploaded media (`/media/`) requires a login and `backend\media` is copied to the backup share on deploy
 - Global search across products, groups, units, suppliers, clients and every record type, permission-gated
 - Record edit history (`RecordChange`) shown on detail pages, plus the per-unit journey from `StockMovement`
 - Office-ready ProductUnit status vocabulary
@@ -52,7 +53,6 @@ StockMovement now records receiving, receiving cancellation, delivery, delivery 
 
 - Better stock history views
 - Broader office stock polish around operational usability
-- Move uploaded media (`/media/`) behind authentication and include `backend/media/` in deploy backups
 
 ## Future Modules
 
