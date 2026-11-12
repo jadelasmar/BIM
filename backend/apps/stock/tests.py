@@ -7024,3 +7024,160 @@ class WriteEndpointPermissionMatrixTests(TestCase):
                 response = self.client.post(url, {}, content_type="application/json")
                 self.assertEqual(response.status_code, 403, f"{method.upper()} {url} as {user.username}")
 
+
+class HeaderEditAtomicityTests(TestCase):
+    """Header edits and their RecordChange rows are one transaction: if logging the
+    change fails, the header edit is rolled back too."""
+
+    def setUp(self):
+        category = Category.objects.create(name="Laptops")
+        brand = Brand.objects.create(brandname="Dell")
+        model = ProductModel.objects.create(brand=brand, modelname="5440")
+        self.product = Product.objects.create(descript="Dell Latitude", category=category, model=model)
+
+    def _unit(self, serial):
+        return ProductUnit.objects.create(
+            product=self.product, serial_number=serial, status=ProductUnit.STATUS_AVAILABLE
+        )
+
+    def test_failed_change_log_rolls_back_reservation_header_edit(self):
+        from apps.stock import services
+
+        reservation = services.create_reservation_record(
+            unit_ids=[self._unit("ATOM-R1").pk],
+            reserved_for_type="internal",
+            internal_name_input="Alex",
+            reason="Original reason",
+        )
+
+        with patch("apps.stock.services.log_record_changes", side_effect=RuntimeError("log failed")):
+            with self.assertRaises(RuntimeError):
+                services.update_reservation_record_header(reservation, reason="Edited reason")
+
+        reservation.refresh_from_db()
+        self.assertEqual(reservation.reason, "Original reason")
+        self.assertFalse(RecordChange.objects.exists())
+
+    def test_failed_change_log_rolls_back_issue_header_edit(self):
+        from apps.stock import services
+
+        issue = services.create_issue_record(
+            unit_ids=[self._unit("ATOM-I1").pk],
+            assigned_to_name_input="Alex",
+            reason="Original reason",
+        )
+
+        with patch("apps.stock.services.log_record_changes", side_effect=RuntimeError("log failed")):
+            with self.assertRaises(RuntimeError):
+                services.update_issue_record_header(issue, reason="Edited reason")
+
+        issue.refresh_from_db()
+        self.assertEqual(issue.reason, "Original reason")
+
+    def test_every_update_service_is_atomic(self):
+        import inspect
+        from apps.stock import services
+
+        for name, func in inspect.getmembers(services, inspect.isfunction):
+            if name.startswith("update_"):
+                self.assertTrue(
+                    hasattr(func, "__wrapped__"),
+                    f"services.{name} must be wrapped in @transaction.atomic",
+                )
+
+
+class LimitedPermissionVisibilityTests(TestCase):
+    """Global search and Recent Activity only return the record types the user may view."""
+
+    TERM = "zqxterm"
+    RECENT_TYPES = {"Delivery", "Reservation", "Temporary Assignment", "Repair"}
+
+    def setUp(self):
+        category = Category.objects.create(name="Laptops")
+        brand = Brand.objects.create(brandname="Dell")
+        model = ProductModel.objects.create(brand=brand, modelname="5440")
+        self.product = Product.objects.create(descript=f"Dell {self.TERM}", category=category, model=model)
+        self.supplier = Supplier.objects.create(name=f"Supplier {self.TERM}")
+        Client.objects.create(name=f"Client {self.TERM}")
+        DeliveryRecord.objects.create(customer_name=f"Acme {self.TERM}", receiver_name="R", invoice_number=f"INV-{self.TERM}")
+        ReservationRecord.objects.create(reserved_for=f"Acme {self.TERM}")
+        IssueRecord.objects.create(issued_to=f"Acme {self.TERM}")
+        RepairRecord.objects.create(repair_reason=f"Screen {self.TERM}", vendor=self.supplier)
+
+    def _login(self, name, codenames=None, viewer=False, exclude=None):
+        from apps.stock.roles import prepare_bimpos_groups
+
+        user = User.objects.create_user(username=name, password="test-pass")
+        user.groups.clear()
+        if viewer:
+            prepare_bimpos_groups()
+            permissions = Permission.objects.filter(group__name="Viewer")
+            if exclude:
+                permissions = permissions.exclude(codename=exclude)
+            user.user_permissions.set(permissions)
+        if codenames:
+            user.user_permissions.set(Permission.objects.filter(codename__in=codenames))
+        self.client.force_login(user)
+
+    def _search_keys(self):
+        response = self.client.get(f"/api/stock/search/?q={self.TERM}")
+        self.assertEqual(response.status_code, 200)
+        return {group["key"] for group in response.json()["groups"]}
+
+    def _recent_types(self):
+        response = self.client.get("/api/stock/recent-activity/")
+        self.assertEqual(response.status_code, 200)
+        return {row["type"] for row in response.json()["results"]}
+
+    def test_user_in_no_group_sees_nothing(self):
+        self._login("nogroup")
+        self.assertEqual(self._search_keys(), set())
+        self.assertEqual(self._recent_types(), set())
+
+    def test_user_only_sees_the_types_they_may_view(self):
+        self._login("deliveries-only", ["view_deliveryrecord"])
+        keys = self._search_keys()
+        self.assertEqual(self._recent_types(), {"Delivery"})
+        self.assertIn("delivery_records", keys)
+        for leaked in ("products", "suppliers", "clients", "reservations", "temporary_assignments", "repairs"):
+            self.assertNotIn(leaked, keys)
+
+    def test_viewer_without_one_permission_does_not_see_that_type(self):
+        self._login("viewer-minus-repair", viewer=True, exclude="view_repairrecord")
+        self.assertNotIn("repairs", self._search_keys())
+        recent = self._recent_types()
+        self.assertNotIn("Repair", recent)
+        self.assertIn("Temporary Assignment", recent)
+
+    def test_full_viewer_sees_every_type(self):
+        self._login("full-viewer", viewer=True)
+        self.assertIn("repairs", self._search_keys())
+        self.assertEqual(self._recent_types(), self.RECENT_TYPES)
+
+
+class MediaAccessTests(TestCase):
+    def test_media_requires_login_and_serves_file_to_a_session(self):
+        import importlib
+        import bim.urls
+        from django.urls import clear_url_caches
+
+        with TemporaryDirectory() as media_root:
+            Path(media_root, "products_images").mkdir()
+            Path(media_root, "products_images", "pic.txt").write_bytes(b"hello")
+            with override_settings(MEDIA_ROOT=media_root):
+                # bim.urls captures MEDIA_ROOT at import time, so rebuild it.
+                clear_url_caches()
+                importlib.reload(bim.urls)
+                try:
+                    anonymous = self.client.get("/media/products_images/pic.txt")
+                    self.assertEqual(anonymous.status_code, 302)
+                    self.assertTrue(anonymous.url.startswith("/accounts/login/"))
+
+                    self.client.force_login(User.objects.create_user(username="media-user", password="test-pass"))
+                    response = self.client.get("/media/products_images/pic.txt")
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(b"".join(response.streaming_content), b"hello")
+                finally:
+                    pass
+        clear_url_caches()
+        importlib.reload(bim.urls)

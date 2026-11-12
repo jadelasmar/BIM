@@ -190,6 +190,8 @@ Current services:
 
 Receiving creation, receiving cancellation, delivery creation, delivery cancellation, reservation creation, reservation release/cancel, issue creation, issue return, repair creation, repair resolution, client return creation, manual Add Unit, and direct product-unit status updates now write `StockMovement` rows going forward. Clean deployments do not need legacy backfill.
 
+Every `update_*` function in `services.py` (receiving, delivery, reservation, issue, repair, client return, client upgrade, product unit details, product group) is `@transaction.atomic`, so a header edit and its `RecordChange` log rows are saved together or not at all.
+
 Keep views thin. Broader stock adjustment workflows should write movements through services instead of direct ad hoc model updates.
 
 ## Admin

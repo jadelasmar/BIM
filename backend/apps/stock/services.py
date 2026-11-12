@@ -885,6 +885,7 @@ def cancel_client_return_record(client_return, *, cancelled_by=None, cancel_reas
     return client_return
 
 
+@transaction.atomic
 def update_client_return_record_header(
     client_return,
     *,
@@ -1022,6 +1023,7 @@ def create_reservation_record(
     return reservation
 
 
+@transaction.atomic
 def update_reservation_record_header(
     reservation,
     *,
@@ -1260,6 +1262,7 @@ def create_issue_record(
     return issue
 
 
+@transaction.atomic
 def update_issue_record_header(
     issue,
     *,
@@ -1562,6 +1565,7 @@ def create_repair_record(
     return repair
 
 
+@transaction.atomic
 def update_repair_record_header(
     repair,
     *,
