@@ -13,6 +13,8 @@ from .models import (
     InternalParty,
     IssueItem,
     IssueRecord,
+    Product,
+    ProductGroup,
     ProductUnit,
     ReceivingItem,
     ReceivingRecord,
@@ -196,6 +198,10 @@ PRODUCT_UNIT_HISTORY_FIELDS = (
     ("supplier", "Supplier"),
     ("cost", "Cost"),
     ("notes", "Notes"),
+)
+PRODUCT_GROUP_HISTORY_FIELDS = (
+    ("name", "Name"),
+    ("low_stock_alert", "Low Stock Alert"),
 )
 
 
@@ -2316,3 +2322,104 @@ def update_product_unit_details(
         changed_by,
     )
     return unit
+
+
+def _product_group_snapshot(group):
+    values = _snapshot(group, PRODUCT_GROUP_HISTORY_FIELDS)
+    values["Active"] = "Yes" if group.isactive else "No"
+    return values
+
+
+def _clean_group_name(name, exclude_pk=None):
+    name = (name or "").strip()
+    if not name:
+        raise ValidationError("Group name is required.")
+    if len(name) > 150:
+        raise ValidationError("Group name must be 150 characters or fewer.")
+    clashes = ProductGroup.objects.filter(name__iexact=name)
+    if exclude_pk is not None:
+        clashes = clashes.exclude(pk=exclude_pk)
+    if clashes.exists():
+        raise ValidationError("A group with this name already exists.")
+    return name
+
+
+def log_group_membership_change(group, product, *, joined, changed_by=None):
+    """Record a product joining or leaving a group in the group's edit history."""
+    label = "Member added" if joined else "Member removed"
+    log_record_changes(
+        "product_group",
+        group,
+        group.name[:32],
+        {label: ""},
+        {label: str(product)},
+        changed_by,
+    )
+
+
+def resolve_product_group(*, group=None, name_input="", low_stock_alert=None, member_alert=0, changed_by=None):
+    """An existing group, or one created from a typed name (the product form's
+    inline "create" option). The new group's Low Stock Alert is `low_stock_alert`
+    when given, else the highest alert among its members so far (`member_alert`),
+    so a freshly created group keeps the level its first product already had.
+    Returns None when neither is given."""
+    if group is not None:
+        return group
+    name = (name_input or "").strip()
+    if not name:
+        return None
+    existing = ProductGroup.objects.filter(name__iexact=name).first()
+    if existing is not None:
+        if not existing.isactive:
+            raise ValidationError(
+                f"A group named {existing.name} exists but is deactivated. Reactivate it on the Groups page."
+            )
+        return existing
+    name = _clean_group_name(name)
+    created = ProductGroup.objects.create(
+        name=name,
+        low_stock_alert=member_alert if low_stock_alert is None else low_stock_alert,
+    )
+    log_record_changes(
+        "product_group",
+        created,
+        created.name[:32],
+        {"Name": ""},
+        {"Name": created.name},
+        changed_by,
+    )
+    return created
+
+
+@transaction.atomic
+def update_product_group(group, *, name=None, low_stock_alert=None, isactive=None, changed_by=None):
+    """Rename a group, change its Low Stock Alert, or deactivate/reactivate it.
+    Deactivating dissolves it: its members are unlinked (so each goes back to its
+    own Low Stock Alert) and the change is kept in the group's edit history."""
+    group = ProductGroup.objects.select_for_update().get(pk=group.pk)
+    before = _product_group_snapshot(group)
+
+    if name is not None:
+        group.name = _clean_group_name(name, exclude_pk=group.pk)
+    if low_stock_alert is not None:
+        group.low_stock_alert = low_stock_alert
+
+    unlinked = []
+    if isactive is not None:
+        if group.isactive and not isactive:
+            unlinked = list(Product.objects.filter(group=group).order_by("descript"))
+            Product.objects.filter(group=group).update(group=None)
+        group.isactive = isactive
+    group.save()
+
+    log_record_changes(
+        "product_group",
+        group,
+        group.name[:32],
+        before,
+        _product_group_snapshot(group),
+        changed_by,
+    )
+    for product in unlinked:
+        log_group_membership_change(group, product, joined=False, changed_by=changed_by)
+    return group

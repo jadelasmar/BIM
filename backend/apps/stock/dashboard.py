@@ -27,6 +27,7 @@ from .selectors import (
     overdue_client_upgrade_count,
     overdue_issue_count,
     pending_issue_count,
+    product_group_count,
     pending_repair_count,
     pending_reservation_count,
     recent_receiving_count,
@@ -66,14 +67,14 @@ def stock_dashboard(user):
     if out:
         attention.append(
             _attention(
-                "stock", "out_of_stock", out, "product is out of stock", "products are out of stock",
+                "stock", "out_of_stock", out, "product or group is out of stock", "products or groups are out of stock",
                 f"{inventory}?stock=out", "danger", "package-x",
             )
         )
     if low:
         attention.append(
             _attention(
-                "stock", "low_stock", low, "product is low on stock", "products are low on stock",
+                "stock", "low_stock", low, "product or group is low on stock", "products or groups are low on stock",
                 f"{inventory}?stock=low", "warning", "triangle-alert",
             )
         )
@@ -93,6 +94,11 @@ def stock_dashboard(user):
         "bars": breakdown["bars"],
         "stats": [
             _stat("products", "Products", active_product_count(), inventory),
+            *(
+                [_stat("product_groups", "Product groups", product_group_count(), reverse("inventory_groups"))]
+                if user.has_perm(stock_constants.VIEW_PRODUCT_GROUP)
+                else []
+            ),
             _stat("low_stock", "Low stock", low, f"{inventory}?stock=low", "warning" if low else None),
             _stat("out_of_stock", "Out of stock", out, f"{inventory}?stock=out", "danger" if out else None),
         ],

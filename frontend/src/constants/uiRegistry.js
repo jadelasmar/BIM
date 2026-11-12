@@ -21,6 +21,7 @@ export const toneClasses = {
 
 export const workflowMeta = {
   add_product: { icon: "plus", tone: "green" },
+  product_groups: { icon: "layers", tone: "blue" },
   add_stock_unit: { icon: "package-plus", tone: "blue" },
   receive_stock: { icon: "inbox", tone: "teal" },
   create_delivery: { icon: "delivery", tone: "indigo" },

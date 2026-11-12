@@ -16,6 +16,7 @@ from .models import (
     IssueItem,
     IssueRecord,
     Product,
+    ProductGroup,
     ProductModel,
     ProductUnit,
     ReceivingItem,
@@ -43,6 +44,20 @@ admin.site.register(Brand)
 admin.site.register(ProductModel)
 
 
+# ProductGroup merges the stock view and alerts of interchangeable products.
+# Edits made in the app are logged; use the Groups page for day-to-day changes.
+@admin.register(ProductGroup)
+class ProductGroupAdmin(admin.ModelAdmin):
+    list_display = ("name", "low_stock_alert", "member_count", "isactive", "crdate")
+    list_filter = ("isactive",)
+    search_fields = ("name",)
+    ordering = ("name",)
+
+    @admin.display(description="Members")
+    def member_count(self, obj):
+        return obj.products.filter(isactive=True).count()
+
+
 # Product admin manages the reusable product definition, not physical stock units.
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
@@ -66,8 +81,8 @@ class ProductAdmin(admin.ModelAdmin):
         "crdate",
     )
     search_fields = ("descript", "sku", "barcode")
-    list_filter = ("category", "model__brand", "isactive")
-    list_select_related = ("category", "model__brand")
+    list_filter = ("category", "model__brand", "group", "isactive")
+    list_select_related = ("category", "model__brand", "group")
     readonly_fields = ("sku", "crdate")
     ordering = ("descript", "sku")
 
@@ -78,6 +93,7 @@ class ProductAdmin(admin.ModelAdmin):
         "sku",
         "barcode",
         "reorder_stock_level",
+        "group",
         "image",
         "crdate",
         "isactive",

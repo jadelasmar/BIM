@@ -126,6 +126,11 @@ UI_TOKENS = {
         "icon": "plus",
         "tone": "green",
     },
+    "product_groups": {
+        "label": "Product Groups",
+        "icon": "layers",
+        "tone": "blue",
+    },
     "add_stock_unit": {
         "label": "Add Unit",
         "icon": "package-plus",

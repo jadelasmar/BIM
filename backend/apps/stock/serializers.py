@@ -2,6 +2,7 @@ from rest_framework import serializers
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 
+from . import constants as stock_constants
 from .models import (
     Brand,
     Category,
@@ -16,6 +17,7 @@ from .models import (
     IssueItem,
     IssueRecord,
     Product,
+    ProductGroup,
     ProductModel,
     ProductUnit,
     ReceivingItem,
@@ -28,7 +30,9 @@ from .models import (
     ReservationRecord,
     StockMovement,
     Supplier,
+    is_low_stock_level,
 )
+from .selectors import group_members, group_stock_totals
 from .services import (
     cancel_client_upgrade_record,
     create_client_upgrade_record,
@@ -43,12 +47,15 @@ from .services import (
     create_removal_record,
     create_repair_record,
     create_reservation_record,
+    log_group_membership_change,
     release_reservation_record,
+    resolve_product_group,
     resolve_repair_record,
     return_issue_record,
     update_client_return_record_header,
     update_delivery_record_header,
     update_issue_record_header,
+    update_product_group,
     update_product_unit_details,
     update_receiving_record_header,
     update_repair_record_header,
@@ -215,7 +222,33 @@ class ProductSerializer(serializers.ModelSerializer):
     repair_units = serializers.SerializerMethodField()
     removed_units = serializers.SerializerMethodField()
     is_low_stock = serializers.SerializerMethodField()
+    is_out_of_stock = serializers.SerializerMethodField()
     stock_alert_tone = serializers.SerializerMethodField()
+    group = serializers.PrimaryKeyRelatedField(
+        queryset=ProductGroup.objects.filter(isactive=True),
+        required=False,
+        allow_null=True,
+    )
+    # Typed in the form's "Create group" option; the group is created together
+    # with the product, in the same transaction (like Category and Brand).
+    group_name_input = serializers.CharField(
+        required=False,
+        write_only=True,
+        allow_blank=True,
+    )
+    group_low_stock_alert_input = serializers.IntegerField(
+        required=False,
+        write_only=True,
+        allow_null=True,
+        min_value=0,
+    )
+    group_name = serializers.SerializerMethodField()
+    group_low_stock_alert = serializers.SerializerMethodField()
+    # The Low Stock Alert this product is actually judged by: its group's when it
+    # is in an active group, otherwise its own.
+    effective_low_stock_alert = serializers.SerializerMethodField()
+    # Merged counts across the whole group (null when ungrouped).
+    group_stock = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
@@ -237,6 +270,13 @@ class ProductSerializer(serializers.ModelSerializer):
             "barcode",
             "image",
             "reorder_stock_level",
+            "group",
+            "group_name",
+            "group_name_input",
+            "group_low_stock_alert_input",
+            "group_low_stock_alert",
+            "effective_low_stock_alert",
+            "group_stock",
             "crdate",
             "isactive",
             "total_units",
@@ -247,6 +287,7 @@ class ProductSerializer(serializers.ModelSerializer):
             "repair_units",
             "removed_units",
             "is_low_stock",
+            "is_out_of_stock",
             "stock_alert_tone",
         )
         read_only_fields = (
@@ -260,6 +301,7 @@ class ProductSerializer(serializers.ModelSerializer):
             "repair_units",
             "removed_units",
             "is_low_stock",
+            "is_out_of_stock",
             "stock_alert_tone",
         )
         validators = []
@@ -277,6 +319,14 @@ class ProductSerializer(serializers.ModelSerializer):
         model_name = attrs.get("model_name_input", "").strip()
 
         errors = {}
+        request = self.context.get("request")
+        if (
+            attrs.get("group_name_input", "").strip()
+            and not attrs.get("group")
+            and request is not None
+            and not request.user.has_perm(stock_constants.ADD_PRODUCT_GROUP)
+        ):
+            errors["group_name_input"] = "You do not have permission to create product groups."
         if not category and not category_name:
             errors["category"] = "Select or enter a Category."
         if not model and not ((brand or brand_name) and model_name):
@@ -289,8 +339,27 @@ class ProductSerializer(serializers.ModelSerializer):
 
         return attrs
 
-    def _save_with_model_name(self, attrs, save_func):
+    def _save_with_model_name(self, attrs, save_func, previous_group=None):
         with transaction.atomic():
+            request = self.context.get("request")
+            changed_by = getattr(request, "user", None)
+            group_name = attrs.pop("group_name_input", "").strip()
+            group_alert = attrs.pop("group_low_stock_alert_input", None)
+            if group_name and not attrs.get("group"):
+                member_alert = attrs.get(
+                    "reorder_stock_level",
+                    getattr(self.instance, "reorder_stock_level", 0),
+                )
+                try:
+                    attrs["group"] = resolve_product_group(
+                        name_input=group_name,
+                        low_stock_alert=group_alert,
+                        member_alert=member_alert or 0,
+                        changed_by=changed_by,
+                    )
+                except DjangoValidationError as exc:
+                    raise serializers.ValidationError({"group_name_input": exc.messages}) from exc
+
             category_name = attrs.pop("category_name_input", "").strip()
             if not attrs.get("category") and category_name:
                 attrs["category"], _created = Category.objects.get_or_create(name=category_name)
@@ -306,7 +375,21 @@ class ProductSerializer(serializers.ModelSerializer):
                     brand=brand,
                     modelname=model_name,
                 )
-            return save_func(attrs)
+            product = save_func(attrs)
+            self._log_group_change(product, previous_group, changed_by)
+            return product
+
+    @staticmethod
+    def _log_group_change(product, previous_group, changed_by):
+        """Keep a product joining, leaving or switching groups in the groups' own
+        edit histories."""
+        current = product.group if product.group_id else None
+        if (previous_group.pk if previous_group else None) == (current.pk if current else None):
+            return
+        if previous_group is not None:
+            log_group_membership_change(previous_group, product, joined=False, changed_by=changed_by)
+        if current is not None:
+            log_group_membership_change(current, product, joined=True, changed_by=changed_by)
 
     def create(self, validated_data):
         return self._save_with_model_name(
@@ -315,9 +398,11 @@ class ProductSerializer(serializers.ModelSerializer):
         )
 
     def update(self, instance, validated_data):
+        previous_group = instance.group if instance.group_id else None
         return self._save_with_model_name(
             validated_data,
             lambda attrs: super(ProductSerializer, self).update(instance, attrs),
+            previous_group=previous_group,
         )
 
     def _count(self, obj, annotated_name, fallback_name):
@@ -344,18 +429,149 @@ class ProductSerializer(serializers.ModelSerializer):
     def get_removed_units(self, obj):
         return self._count(obj, "api_removed_units", "removed_units")
 
+    def _merged_group_stock(self, obj):
+        """Merged counts of obj's active group, or None. The per-group totals
+        are computed once per request (shared through the serializer context)."""
+        group = obj.effective_group
+        if group is None:
+            return None
+        totals = self.context.get("_group_stock_totals")
+        if totals is None:
+            totals = group_stock_totals()
+            self.context["_group_stock_totals"] = totals
+        return totals.get(group.pk) or {
+            "total": 0, "available": 0, "reserved": 0, "issued": 0,
+            "repair": 0, "sold": 0, "removed": 0, "member_count": 0,
+        }
+
+    # Low/out of stock follow the whole group when there is one -- the merged
+    # available count against the group's own alert level -- so a member is never
+    # out of stock while another member has stock. Mirrors Product.is_low_stock.
     def get_is_low_stock(self, obj):
-        available_units = self.get_available_units(obj)
-        return (
-            obj.reorder_stock_level > 0
-            and available_units > 0
-            and available_units <= obj.reorder_stock_level
-        )
+        merged = self._merged_group_stock(obj)
+        if merged is not None:
+            return is_low_stock_level(merged["available"], obj.group.low_stock_alert)
+        return is_low_stock_level(self.get_available_units(obj), obj.reorder_stock_level)
+
+    def get_is_out_of_stock(self, obj):
+        merged = self._merged_group_stock(obj)
+        if merged is not None:
+            return merged["available"] == 0
+        return self.get_available_units(obj) == 0
+
+    def get_group_name(self, obj):
+        group = obj.effective_group
+        return group.name if group else ""
+
+    def get_group_low_stock_alert(self, obj):
+        group = obj.effective_group
+        return group.low_stock_alert if group else None
+
+    def get_effective_low_stock_alert(self, obj):
+        group = obj.effective_group
+        return group.low_stock_alert if group else obj.reorder_stock_level
+
+    def get_group_stock(self, obj):
+        merged = self._merged_group_stock(obj)
+        if merged is None:
+            return None
+        return {
+            "total_units": merged["total"],
+            "available_units": merged["available"],
+            "reserved_units": merged["reserved"],
+            "issued_units": merged["issued"],
+            "repair_units": merged["repair"],
+            "sold_units": merged["sold"],
+            "removed_units": merged["removed"],
+            "member_count": merged["member_count"],
+        }
 
     def get_stock_alert_tone(self, obj):
         if self.get_is_low_stock(obj):
             return "warning"
         return "normal"
+
+
+class ProductGroupSerializer(serializers.ModelSerializer):
+    """A group with its members and their merged stock. Edits (rename, alert
+    level, deactivate) go through update_product_group() so they are logged."""
+
+    stock = serializers.SerializerMethodField()
+    members = serializers.SerializerMethodField()
+    is_low_stock = serializers.SerializerMethodField()
+    is_out_of_stock = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProductGroup
+        fields = (
+            "id",
+            "name",
+            "low_stock_alert",
+            "crdate",
+            "isactive",
+            "stock",
+            "members",
+            "is_low_stock",
+            "is_out_of_stock",
+        )
+        read_only_fields = ("crdate",)
+        # Name uniqueness (case-insensitive) is checked in the service.
+        extra_kwargs = {"name": {"validators": []}}
+
+    def _lookups(self):
+        lookups = self.context.get("_group_lookups")
+        if lookups is None:
+            instance = self.instance
+            if instance is None:
+                ids = []
+            elif isinstance(instance, ProductGroup):
+                ids = [instance.pk]
+            else:
+                ids = [group.pk for group in instance]
+            lookups = {"stock": group_stock_totals(), "members": group_members(ids)}
+            self.context["_group_lookups"] = lookups
+        return lookups
+
+    def get_stock(self, obj):
+        if not obj.isactive:
+            return None
+        merged = self._lookups()["stock"].get(obj.pk) or {}
+        return {
+            "total_units": merged.get("total", 0),
+            "available_units": merged.get("available", 0),
+            "reserved_units": merged.get("reserved", 0),
+            "issued_units": merged.get("issued", 0),
+            "repair_units": merged.get("repair", 0),
+        }
+
+    def get_members(self, obj):
+        return self._lookups()["members"].get(obj.pk, []) if obj.isactive else []
+
+    def get_is_low_stock(self, obj):
+        stock = self.get_stock(obj)
+        return bool(stock) and is_low_stock_level(stock["available_units"], obj.low_stock_alert)
+
+    def get_is_out_of_stock(self, obj):
+        stock = self.get_stock(obj)
+        return bool(stock) and stock["available_units"] == 0
+
+    def validate_name(self, value):
+        name = value.strip()
+        if not name:
+            raise serializers.ValidationError("Group name is required.")
+        return name
+
+    def update(self, instance, validated_data):
+        try:
+            return update_product_group(
+                instance,
+                name=validated_data.get("name"),
+                low_stock_alert=validated_data.get("low_stock_alert"),
+                isactive=validated_data.get("isactive"),
+                changed_by=getattr(self.context.get("request"), "user", None),
+            )
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError(exc.messages) from exc
 
 
 class ProductUnitSerializer(serializers.ModelSerializer):
@@ -375,6 +591,8 @@ class ProductUnitSerializer(serializers.ModelSerializer):
     owner_client_name = serializers.CharField(
         source="owner_client.name", read_only=True, default=""
     )
+    group = serializers.SerializerMethodField()
+    group_name = serializers.SerializerMethodField()
 
     class Meta:
         model = ProductUnit
@@ -384,6 +602,8 @@ class ProductUnitSerializer(serializers.ModelSerializer):
             "product_name",
             "product_sku",
             "product_barcode",
+            "group",
+            "group_name",
             "category_id",
             "category_name",
             "brand_id",
@@ -408,6 +628,14 @@ class ProductUnitSerializer(serializers.ModelSerializer):
 
     def get_product_name(self, obj):
         return str(obj.product)
+
+    def get_group(self, obj):
+        group = obj.product.effective_group
+        return group.pk if group else None
+
+    def get_group_name(self, obj):
+        group = obj.product.effective_group
+        return group.name if group else ""
 
     def get_status_label(self, obj):
         return obj.get_status_display()

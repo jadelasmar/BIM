@@ -33,6 +33,7 @@ urlpatterns = [
     path("operations/client-returns/new/", views.module_launcher, name="operations_create_client_return"),
     path("operations/client-returns/<int:pk>/", views.module_launcher, name="operations_client_return_detail"),
     path("inventory/", views.module_launcher, name="inventory"),
+    path("inventory/groups/", views.module_launcher, name="inventory_groups"),
     path("inventory/products/new/", views.module_launcher, name="inventory_add_product"),
     path("inventory/products/<int:pk>/", views.module_launcher, name="inventory_product_detail"),
     path("inventory/products/<int:pk>/edit/", views.module_launcher, name="inventory_edit_product"),

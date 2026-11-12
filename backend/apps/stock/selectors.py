@@ -2,7 +2,7 @@ from collections import defaultdict
 from datetime import date, timedelta
 from urllib.parse import urlencode
 
-from django.db.models import Count, Q
+from django.db.models import Count, Max, Q
 from django.urls import reverse
 from django.utils import timezone
 
@@ -20,6 +20,7 @@ from .models import (
     IssueItem,
     IssueRecord,
     Product,
+    ProductGroup,
     ProductUnit,
     ReceivingRecord,
     RemovalItem,
@@ -28,7 +29,9 @@ from .models import (
     RepairRecord,
     ReservationItem,
     ReservationRecord,
+    StockMovement,
     Supplier,
+    is_low_stock_level,
 )
 
 
@@ -46,6 +49,10 @@ def user_can_use_stock_operations(user):
 
 def active_product_count():
     return Product.objects.filter(isactive=True).count()
+
+
+def product_group_count():
+    return ProductGroup.objects.filter(isactive=True).count()
 
 
 def available_unit_count():
@@ -143,17 +150,168 @@ def client_count():
     return Client.objects.filter(isactive=True).count()
 
 
-def low_stock_counts():
-    products = Product.objects.filter(isactive=True)
-    low_count = 0
-    out_of_stock_count = 0
+def group_stock_totals():
+    """Merged unit counts of every active group, summed across its active member
+    products: {group_id: {total, available, reserved, issued, repair, sold,
+    removed, member_count}}. One query for all groups. Sold excludes a client's
+    own items, the same rule as Product.active_unit_count()."""
+    totals = {}
+    rows = (
+        ProductUnit.objects.filter(
+            isactive=True,
+            product__isactive=True,
+            product__group__isactive=True,
+        )
+        .values("product__group_id", "status")
+        .annotate(count=Count("id"), own=Count("id", filter=Q(owner_client__isnull=True)))
+    )
+    for row in rows:
+        entry = totals.setdefault(row["product__group_id"], _empty_group_totals())
+        status = row["status"]
+        count = row["own"] if status == ProductUnit.STATUS_SOLD else row["count"]
+        if status in ProductUnit.IN_STOCK_STATUSES:
+            entry["total"] += count
+        if status in entry:
+            entry[status] += count
 
+    member_counts = (
+        Product.objects.filter(isactive=True, group__isactive=True)
+        .values("group_id")
+        .annotate(count=Count("id"))
+    )
+    for row in member_counts:
+        totals.setdefault(row["group_id"], _empty_group_totals())["member_count"] = row["count"]
+    return totals
+
+
+def _empty_group_totals():
+    return {
+        "total": 0,
+        "available": 0,
+        "reserved": 0,
+        "issued": 0,
+        "repair": 0,
+        "sold": 0,
+        "removed": 0,
+        "member_count": 0,
+    }
+
+
+def group_members(group_ids):
+    """The active member products of the given groups with their own unit counts:
+    {group_id: [{id, display_name, sku, total_units, available_units,
+    reserved_units, issued_units, repair_units, sold_units, removed_units}]},
+    each list sorted by name. Two queries however many groups there are."""
+    products = list(
+        Product.objects.filter(isactive=True, group_id__in=group_ids).order_by("descript", "sku")
+    )
+    counts = defaultdict(_empty_group_totals)
+    rows = (
+        ProductUnit.objects.filter(isactive=True, product__in=products)
+        .values("product_id", "status")
+        .annotate(count=Count("id"), own=Count("id", filter=Q(owner_client__isnull=True)))
+    )
+    for row in rows:
+        entry = counts[row["product_id"]]
+        status = row["status"]
+        count = row["own"] if status == ProductUnit.STATUS_SOLD else row["count"]
+        if status in ProductUnit.IN_STOCK_STATUSES:
+            entry["total"] += count
+        if status in entry:
+            entry[status] += count
+
+    members = defaultdict(list)
     for product in products:
-        if product.available_units == 0:
-            out_of_stock_count += 1
-        elif product.is_low_stock:
-            low_count += 1
+        entry = counts[product.pk]
+        members[product.group_id].append(
+            {
+                "id": product.pk,
+                "display_name": str(product),
+                "sku": product.sku,
+                "total_units": entry["total"],
+                "available_units": entry["available"],
+                "reserved_units": entry["reserved"],
+                "issued_units": entry["issued"],
+                "repair_units": entry["repair"],
+                "sold_units": entry["sold"],
+                "removed_units": entry["removed"],
+            }
+        )
+    return members
 
+
+def stock_alert_entries():
+    """The things Low Stock / Out of Stock are judged on: one entry per active
+    group (merged available count of its active members, judged against the
+    group's own Low Stock Alert) and one per ungrouped active product (judged
+    against its own). A member of a group is never an entry on its own, so a
+    group that has stock never reports a member as out of stock.
+
+    Every place that counts or lists low/out-of-stock stock -- Inventory
+    filters, KPI cards, Command Center, the summary API -- goes through this."""
+    available = dict(
+        ProductUnit.objects.filter(
+            isactive=True,
+            product__isactive=True,
+            status=ProductUnit.STATUS_AVAILABLE,
+        )
+        .values_list("product_id")
+        .annotate(count=Count("id"))
+    )
+    last_movement = dict(
+        StockMovement.objects.values_list("product_id").annotate(last=Max("movement_date"))
+    )
+
+    entries = []
+    by_group = {}
+    products = (
+        Product.objects.filter(isactive=True)
+        .select_related("category", "group")
+        .order_by("descript", "sku")
+    )
+    for product in products:
+        count = available.get(product.pk, 0)
+        moved = last_movement.get(product.pk) or date.min
+        group = product.group if product.group_id and product.group.isactive else None
+        if group is None:
+            entries.append(
+                {
+                    "name": str(product),
+                    "category": product.category.name if product.category_id else "",
+                    "product": product,
+                    "group": None,
+                    "available": count,
+                    "threshold": product.reorder_stock_level,
+                    "last_movement": moved,
+                }
+            )
+            continue
+        entry = by_group.get(group.pk)
+        if entry is None:
+            entry = by_group[group.pk] = {
+                "name": group.name,
+                "category": product.category.name if product.category_id else "",
+                # Alerts link to the first member; its page shows the whole group.
+                "product": product,
+                "group": group,
+                "available": 0,
+                "threshold": group.low_stock_alert,
+                "last_movement": date.min,
+            }
+            entries.append(entry)
+        entry["available"] += count
+        entry["last_movement"] = max(entry["last_movement"], moved)
+
+    for entry in entries:
+        entry["is_out"] = entry["available"] == 0
+        entry["is_low"] = is_low_stock_level(entry["available"], entry["threshold"])
+    return entries
+
+
+def low_stock_counts():
+    entries = stock_alert_entries()
+    low_count = sum(1 for entry in entries if entry["is_low"])
+    out_of_stock_count = sum(1 for entry in entries if entry["is_out"])
     return low_count, out_of_stock_count
 
 
@@ -215,6 +373,7 @@ def returnable_units(query="", delivery_id=None, limit=30):
             Q(serial_number__icontains=query)
             | Q(product__descript__icontains=query)
             | Q(product__sku__icontains=query)
+            | Q(product__group__name__icontains=query)
         )
 
     rows = []
@@ -528,58 +687,46 @@ def recent_activity_page(user, limit=RECENT_ACTIVITY_LIMIT, offset=0):
 
 
 def low_stock_alerts(limit=4):
-    products = Product.objects.filter(isactive=True).select_related("category", "model")
-
-    candidates = [
-        product
-        for product in products
-        if product.available_units > 0 and product.is_low_stock
-    ]
+    candidates = [entry for entry in stock_alert_entries() if entry["is_low"]]
     # Closest to zero first -- the most urgent restocks lead the preview,
     # not whichever products happen to sort first alphabetically.
-    candidates.sort(key=lambda product: (product.available_units, str(product)))
+    candidates.sort(key=lambda entry: (entry["available"], entry["name"]))
 
     return [
         {
-            "productName": str(product),
-            "category": product.category.name if product.category_id else "",
-            "availableQuantity": product.available_units,
-            "reorderThreshold": product.reorder_stock_level,
-            "href": reverse("inventory_product_detail", kwargs={"pk": product.pk}),
+            "productName": entry["name"],
+            "category": entry["category"],
+            "availableQuantity": entry["available"],
+            "reorderThreshold": entry["threshold"],
+            "isGroup": entry["group"] is not None,
+            "href": reverse("inventory_product_detail", kwargs={"pk": entry["product"].pk}),
             "status": "Low Stock",
             "status_class": "low_stock",
         }
-        for product in candidates[:limit]
+        for entry in candidates[:limit]
     ]
 
 
-def _last_movement_date(product):
-    movement = product.stock_movements.order_by("-movement_date", "-crdate").first()
-    return movement.movement_date if movement else date.min
-
-
 def out_of_stock_products(limit=4):
-    products = Product.objects.filter(isactive=True).select_related("category", "model")
-
-    candidates = [product for product in products if product.available_units == 0]
+    candidates = [entry for entry in stock_alert_entries() if entry["is_out"]]
     # Most-recently-gone-out-of-stock first. There's no dedicated "went out
     # of stock at" timestamp and no sales/demand history to rank by instead,
     # so the latest StockMovement touching the product (received, sold,
-    # removed, etc.) is the best available proxy for "when did this
-    # actually run out" -- a product with fresher history is more likely to
-    # need immediate attention than one that's been sitting empty for a
-    # long time. Products with no movement history at all sort last.
-    candidates.sort(key=_last_movement_date, reverse=True)
+    # removed, etc.) -- for a group, any of its members -- is the best
+    # available proxy for "when did this actually run out". Entries with no
+    # movement history at all sort last.
+    candidates.sort(key=lambda entry: entry["last_movement"], reverse=True)
 
     return [
         {
-            "productName": str(product),
-            "category": product.category.name if product.category_id else "",
-            "href": reverse("inventory_product_detail", kwargs={"pk": product.pk}),
+            "productName": entry["name"],
+            "category": entry["category"],
+            "isGroup": entry["group"] is not None,
+            "href": reverse("inventory_product_detail", kwargs={"pk": entry["product"].pk}),
             "status": "Out of Stock",
             "status_class": "out_of_stock",
         }
-        for product in candidates[:limit]
+        for entry in candidates[:limit]
     ]
 
 
@@ -640,6 +787,7 @@ def global_search(user, query, limit=GLOBAL_SEARCH_RESULT_LIMIT):
             Q(descript__icontains=query)
             | Q(sku__icontains=query)
             | Q(barcode__icontains=query)
+            | Q(group__name__icontains=query)
         ).order_by("descript")
         group = _search_group(
             "products",
@@ -650,6 +798,23 @@ def global_search(user, query, limit=GLOBAL_SEARCH_RESULT_LIMIT):
                 "title": product.descript,
                 "subtitle": product.sku,
                 "href": reverse("inventory_product_detail", kwargs={"pk": product.pk}),
+            },
+            limit,
+        )
+        if group:
+            groups.append(group)
+
+    if user.has_perm(stock_constants.VIEW_PRODUCT_GROUP):
+        matches = ProductGroup.objects.filter(isactive=True, name__icontains=query).order_by("name")
+        group = _search_group(
+            "product_groups",
+            "Product Groups",
+            matches,
+            lambda product_group: {
+                "id": product_group.pk,
+                "title": product_group.name,
+                "subtitle": "Product group",
+                "href": reverse("inventory_groups") + "?" + urlencode({"open": product_group.pk}),
             },
             limit,
         )

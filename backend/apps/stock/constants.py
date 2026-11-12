@@ -42,6 +42,10 @@ CHANGE_CLIENT_UPGRADE_RECORD = f"{APP_LABEL}.change_clientupgraderecord"
 
 VIEW_STOCK_MOVEMENT = f"{APP_LABEL}.view_stockmovement"
 
+VIEW_PRODUCT_GROUP = f"{APP_LABEL}.view_productgroup"
+ADD_PRODUCT_GROUP = f"{APP_LABEL}.add_productgroup"
+CHANGE_PRODUCT_GROUP = f"{APP_LABEL}.change_productgroup"
+
 ADD_CATEGORY = f"{APP_LABEL}.add_category"
 ADD_BRAND = f"{APP_LABEL}.add_brand"
 

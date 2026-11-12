@@ -45,6 +45,50 @@ class ProductModel(models.Model):
         return f"{self.brand} - {self.modelname}"
 
 
+# ProductGroup ties together interchangeable products (e.g. two cash drawer
+# models) so their stock is counted and alerted on as one. It changes only how
+# stock is counted and shown: units, receiving and every workflow stay on the
+# real Product. Once a product is in an active group, the group's
+# low_stock_alert replaces the members' own Low Stock Alert.
+class ProductGroup(models.Model):
+    name = models.CharField(max_length=150, unique=True)
+    low_stock_alert = models.PositiveIntegerField(default=0)
+    crdate = models.DateTimeField(default=timezone.now)
+    isactive = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ("name",)
+
+    def __str__(self):
+        return self.name
+
+    def active_members(self):
+        return self.products.filter(isactive=True)
+
+    @property
+    def available_units(self):
+        return ProductUnit.objects.filter(
+            product__group=self,
+            product__isactive=True,
+            isactive=True,
+            status=ProductUnit.STATUS_AVAILABLE,
+        ).count()
+
+    @property
+    def is_out_of_stock(self):
+        return self.available_units == 0
+
+    @property
+    def is_low_stock(self):
+        return is_low_stock_level(self.available_units, self.low_stock_alert)
+
+
+def is_low_stock_level(available, threshold):
+    """Low = an alert level is set, there is stock, and it is at or below it.
+    Zero available is "out of stock", never "low"."""
+    return threshold > 0 and 0 < available <= threshold
+
+
 # Product is the reusable product definition.
 # Create this after Category, Brand, and ProductModel exist.
 # It is not one physical stock item; physical stock is stored in ProductUnit.
@@ -53,6 +97,14 @@ class Product(models.Model):
 
     category = models.ForeignKey(Category, on_delete=models.PROTECT)
     model = models.ForeignKey(ProductModel, on_delete=models.PROTECT)
+    # At most one group. Only an active group counts (see effective_group).
+    group = models.ForeignKey(
+        ProductGroup,
+        on_delete=models.PROTECT,
+        blank=True,
+        null=True,
+        related_name="products",
+    )
 
     sku = models.CharField(max_length=100, unique=True, blank=True, editable=False)
     barcode = models.CharField(max_length=100, blank=True, null=True)
@@ -129,12 +181,29 @@ class Product(models.Model):
         return self.active_unit_count(ProductUnit.STATUS_REMOVED)
 
     @property
+    def effective_group(self):
+        """The group whose merged stock this product is judged by, or None."""
+        if self.group_id and self.group.isactive:
+            return self.group
+        return None
+
+    # Low and out of stock are judged on the whole group when there is one:
+    # the group's merged available count against the group's own alert level
+    # (members' own levels are ignored), so a member is never "out of stock"
+    # while its group has stock.
+    @property
+    def is_out_of_stock(self):
+        group = self.effective_group
+        if group is not None:
+            return group.is_out_of_stock
+        return self.available_units == 0
+
+    @property
     def is_low_stock(self):
-        return (
-            self.reorder_stock_level > 0
-            and self.available_units > 0
-            and self.available_units <= self.reorder_stock_level
-        )
+        group = self.effective_group
+        if group is not None:
+            return group.is_low_stock
+        return is_low_stock_level(self.available_units, self.reorder_stock_level)
 
     @property
     def stock_alert_tone(self):

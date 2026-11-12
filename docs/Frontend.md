@@ -247,6 +247,21 @@ Current Delivery Records integration:
   - Wrong delivered unit, product, or serial mistakes are handled by cancelling and recreating the record when linked units are still untouched sold units.
 - If cancellation is blocked because a linked stock unit is no longer an untouched sold unit, the detail screen shows the backend operational message.
 
+## Inventory CSV Export
+
+The Inventory page Export button (`exportCurrentView` in `AppRouter.jsx`) downloads the current view through `downloadCsv` (UTF-8 BOM so Excel opens it directly). It is the only product-level stock export in the app.
+
+Products view (`inventory-<date>.csv`): one row per ungrouped product and one row per product group, in the on-screen sort order. A group's row uses the group name and its merged stock numbers; its member products are not listed, and its Category/Brand/Model are empty. Columns, in order:
+
+`Product, Category, Brand, Model, Total In Stock, Available, Reserved, Issued (temporary), In Repair, Reserved For, Assigned To, Repair At, Status`
+
+- SKU, Barcode, Sold, Removed, Low Stock Alert and Group are not exported here (SKU is in the Stock Units export).
+- Total In Stock is available + reserved + issued + repair; sold and removed units never count toward it. Counts come from the inventory row (`total_units`, `available_units`, `reserved_units`, `issued_units`, `repair_units`; for a group, its merged `group_stock` numbers).
+- Reserved For / Assigned To / Repair At list each party with its unit count, e.g. `Acme Ltd (2); Beta Co (1)`, empty when none. They are derived from the same per-unit "where" text as the Stock Units view ("Reserved for X", "With X", "At <vendor>"), fetched on export from the existing `product-units?with_location=1` endpoint (only when a listed product has reserved, issued or repair units). A repair with no supplier shows as `No supplier`. If that fetch fails, a toast is shown and nothing is downloaded.
+- "Assigned To" is the UI's own term for the Issue workflow's party (Temporary Assignments).
+
+Stock Units view (`stock-units-<date>.csv`): `Serial Number, Product, SKU, Status, Where, Supplier, Cost, Purchase Date, Notes, Group`.
+
 ## Role-Aware Actions
 
 - Admin / IT lead accounts can use Django Admin when `is_staff` or superuser access is granted.

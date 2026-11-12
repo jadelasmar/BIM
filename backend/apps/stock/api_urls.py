@@ -159,6 +159,12 @@ urlpatterns = [
         api_views.ReceivingRecordDetailAPIView.as_view(),
         name="receiving-record-detail",
     ),
+    path("product-groups/", api_views.ProductGroupListAPIView.as_view(), name="product-groups"),
+    path(
+        "product-groups/<int:pk>/",
+        api_views.ProductGroupDetailAPIView.as_view(),
+        name="product-group-detail",
+    ),
     path("suppliers/", api_views.SupplierListAPIView.as_view(), name="suppliers"),
     path("suppliers/<int:pk>/", api_views.SupplierDetailAPIView.as_view(), name="supplier-detail"),
     path("clients/", api_views.ClientListCreateAPIView.as_view(), name="clients"),

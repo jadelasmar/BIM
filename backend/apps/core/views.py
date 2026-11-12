@@ -208,6 +208,9 @@ def _command_center_initial_data(
         "permissions": {
             "canCreateProduct": user.has_perm(stock_constants.ADD_PRODUCT),
             "canEditProduct": user.has_perm(stock_constants.CHANGE_PRODUCT),
+            "canViewProductGroups": user.has_perm(stock_constants.VIEW_PRODUCT_GROUP),
+            "canCreateProductGroup": user.has_perm(stock_constants.ADD_PRODUCT_GROUP),
+            "canEditProductGroup": user.has_perm(stock_constants.CHANGE_PRODUCT_GROUP),
             "canAddStockUnit": user.has_perm(stock_constants.ADD_PRODUCT_UNIT),
             "canEditStockUnit": can_change_product_unit,
             "canReceiveStock": can_receive_stock,
@@ -268,6 +271,7 @@ def _command_center_initial_data(
             "productDetail": "/api/stock/products/{id}/",
             "productMovements": "/api/stock/products/{id}/movements/",
             "productUnits": "/api/stock/product-units/",
+            "productGroups": "/api/stock/product-groups/",
             "productUnitDetail": "/api/stock/product-units/{id}/",
             "deliveries": "/api/stock/deliveries/",
             "deliveryDetail": "/api/stock/deliveries/{id}/",
@@ -295,6 +299,7 @@ def _command_center_initial_data(
         },
         "routes": {
             "inventory": reverse("inventory"),
+            "productGroups": reverse("inventory_groups"),
             "operationsPending": reverse("operations_pending"),
             "availableStock": f"{reverse('inventory')}?status={ProductUnit.STATUS_AVAILABLE}",
             "outOfStock": f"{reverse('inventory')}?stock=out",
@@ -508,6 +513,14 @@ def _build_command_center_initial_data(request, current_path=None):
             "enabled": user.has_perm(stock_constants.ADD_PRODUCT),
             "description": "Register new item to catalogue",
             **ui_item("add_product"),
+        },
+        {
+            "href": reverse("inventory_groups")
+            if user.has_perm(stock_constants.VIEW_PRODUCT_GROUP)
+            else None,
+            "enabled": user.has_perm(stock_constants.VIEW_PRODUCT_GROUP),
+            "description": "Merge interchangeable products into one stock view",
+            **ui_item("product_groups"),
         },
         {
             "href": reverse("operations_create_delivery")

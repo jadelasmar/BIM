@@ -19,6 +19,7 @@ from .models import (
     InternalParty,
     IssueRecord,
     Product,
+    ProductGroup,
     ProductModel,
     ProductUnit,
     ReceivingRecord,
@@ -30,6 +31,7 @@ from .models import (
 )
 from .selectors import (
     RECENT_ACTIVITY_LIMIT,
+    low_stock_counts,
     unit_locations,
     global_search,
     recent_activity_page,
@@ -50,6 +52,7 @@ from .serializers import (
     IssueRecordCorrectionSerializer,
     IssueRecordSerializer,
     IssueReturnSerializer,
+    ProductGroupSerializer,
     ProductModelSerializer,
     ProductSerializer,
     ProductUnitSerializer,
@@ -101,7 +104,7 @@ def _active_unit_filter(status=None):
 def _product_queryset():
     return (
         Product.objects.filter(isactive=True)
-        .select_related("category", "model__brand")
+        .select_related("category", "model__brand", "group")
         .annotate(
             # Total Stock excludes sold (and inactive-status) units -- they've
             # permanently left inventory. See ProductUnit.IN_STOCK_STATUSES.
@@ -166,6 +169,7 @@ class ProductListCreateAPIView(WritePermissionRequiredMixin, generics.ListCreate
                 Q(descript__icontains=query)
                 | Q(sku__icontains=query)
                 | Q(barcode__icontains=query)
+                | Q(group__name__icontains=query)
                 | Q(units__serial_number__icontains=query)
             ).distinct()
         if category:
@@ -212,6 +216,7 @@ class ProductUnitListCreateAPIView(WritePermissionRequiredMixin, generics.ListCr
                 "product",
                 "product__category",
                 "product__model__brand",
+                "product__group",
                 "supplier",
             )
             .order_by("product__descript", "serial_number")
@@ -233,6 +238,7 @@ class ProductUnitListCreateAPIView(WritePermissionRequiredMixin, generics.ListCr
                 | Q(product__descript__icontains=query)
                 | Q(product__sku__icontains=query)
                 | Q(product__barcode__icontains=query)
+                | Q(product__group__name__icontains=query)
             )
         if status:
             queryset = queryset.filter(status=status)
@@ -290,6 +296,7 @@ class ProductUnitDetailAPIView(WritePermissionRequiredMixin, generics.RetrieveUp
             "product",
             "product__category",
             "product__model__brand",
+            "product__group",
             "supplier",
         )
 
@@ -327,6 +334,7 @@ class ProductUnitCorrectionAPIView(WritePermissionRequiredMixin, generics.Update
             "product",
             "product__category",
             "product__model__brand",
+            "product__group",
             "supplier",
         )
 
@@ -1062,7 +1070,7 @@ class InventorySummaryAPIView(APIView):
     def get(self, request):
         _require_perm(request.user, stock_constants.VIEW_PRODUCT)
         active_units = ProductUnit.objects.filter(isactive=True)
-        products = _product_queryset()
+        low_stock_products, out_of_stock_products = low_stock_counts()
         return Response(
             {
                 "total_products": Product.objects.filter(isactive=True).count(),
@@ -1085,14 +1093,10 @@ class InventorySummaryAPIView(APIView):
                 "repair_units": active_units.filter(
                     status=ProductUnit.STATUS_REPAIR,
                 ).count(),
-                "out_of_stock_products": sum(
-                    1 for product in products if product.available_units == 0
-                ),
-                "low_stock_products": sum(
-                    1
-                    for product in products
-                    if product.is_low_stock
-                ),
+                # Per group (merged available vs the group's own alert level)
+                # or per ungrouped product -- see selectors.stock_alert_entries().
+                "out_of_stock_products": out_of_stock_products,
+                "low_stock_products": low_stock_products,
             }
         )
 
@@ -1143,6 +1147,41 @@ class ProductModelListAPIView(generics.ListAPIView):
             "brand__brandname",
             "modelname",
         )
+
+
+class ProductGroupListAPIView(generics.ListAPIView):
+    """Active groups with their members and merged stock (?all=1 includes
+    deactivated ones). Groups are created from the product form."""
+
+    serializer_class = ProductGroupSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get_queryset(self):
+        _require_perm(self.request.user, stock_constants.VIEW_PRODUCT_GROUP)
+        queryset = ProductGroup.objects.order_by("name")
+        if self.request.query_params.get("all") != "1":
+            queryset = queryset.filter(isactive=True)
+        query = self.request.query_params.get("q", "").strip()
+        if query:
+            queryset = queryset.filter(
+                Q(name__icontains=query)
+                | Q(products__descript__icontains=query)
+                | Q(products__sku__icontains=query)
+            ).distinct()
+        return queryset
+
+
+class ProductGroupDetailAPIView(WritePermissionRequiredMixin, generics.RetrieveUpdateAPIView):
+    serializer_class = ProductGroupSerializer
+    permission_classes = (permissions.IsAuthenticated,)
+    write_permissions = {
+        "PUT": (stock_constants.CHANGE_PRODUCT_GROUP,),
+        "PATCH": (stock_constants.CHANGE_PRODUCT_GROUP,),
+    }
+
+    def get_queryset(self):
+        _require_perm(self.request.user, stock_constants.VIEW_PRODUCT_GROUP)
+        return ProductGroup.objects.all()
 
 
 class SupplierListAPIView(WritePermissionRequiredMixin, generics.ListCreateAPIView):
@@ -1374,6 +1413,7 @@ class RecordHistoryAPIView(APIView):
         "client_return": stock_constants.VIEW_CLIENT_RETURN_RECORD,
         "client_upgrade": stock_constants.VIEW_CLIENT_UPGRADE_RECORD,
         "product_unit": stock_constants.VIEW_PRODUCT_UNIT,
+        "product_group": stock_constants.VIEW_PRODUCT_GROUP,
     }
 
     def get(self, request):

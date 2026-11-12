@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+﻿import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Camera,
   Check,
@@ -2343,7 +2343,7 @@ function CreateReservationPage({ data }) {
   const filteredUnits = units
     .filter((unit) => !selectedIds.has(unit.id))
     .filter((unit) => {
-      const text = `${unit.product_name} ${unit.product_sku} ${unit.product_barcode || ""} ${unit.serial_number}`.toLowerCase();
+      const text = `${unit.product_name} ${unit.product_sku} ${unit.product_barcode || ""} ${unit.group_name || ""} ${unit.serial_number}`.toLowerCase();
       return query && text.includes(query.toLowerCase());
     })
     .slice(0, 8);
@@ -3129,7 +3129,7 @@ function CreateIssuePage({ data }) {
   const filteredUnits = units
     .filter((unit) => !selectedIds.has(unit.id))
     .filter((unit) => {
-      const text = `${unit.product_name} ${unit.product_sku} ${unit.product_barcode || ""} ${unit.serial_number}`.toLowerCase();
+      const text = `${unit.product_name} ${unit.product_sku} ${unit.product_barcode || ""} ${unit.group_name || ""} ${unit.serial_number}`.toLowerCase();
       return query && text.includes(query.toLowerCase());
     })
     .slice(0, 8);
@@ -3993,7 +3993,7 @@ function CreateRepairPage({ data }) {
   const filteredUnits = units
     .filter((unit) => !selectedIds.has(unit.id))
     .filter((unit) => {
-      const text = `${unit.product_name} ${unit.product_sku} ${unit.product_barcode || ""} ${unit.serial_number}`.toLowerCase();
+      const text = `${unit.product_name} ${unit.product_sku} ${unit.product_barcode || ""} ${unit.group_name || ""} ${unit.serial_number}`.toLowerCase();
       return query && text.includes(query.toLowerCase());
     })
     .slice(0, 8);
@@ -5456,7 +5456,7 @@ function CreateRemovalPage({ data }) {
   const filteredUnits = units
     .filter((unit) => !selectedIds.has(unit.id))
     .filter((unit) => {
-      const text = `${unit.product_name} ${unit.product_sku} ${unit.product_barcode || ""} ${unit.serial_number}`.toLowerCase();
+      const text = `${unit.product_name} ${unit.product_sku} ${unit.product_barcode || ""} ${unit.group_name || ""} ${unit.serial_number}`.toLowerCase();
       return query && text.includes(query.toLowerCase());
     })
     .slice(0, 8);
@@ -7176,6 +7176,7 @@ function deliveryStatusClass(record) {
 }
 
 function InventoryPage({ data }) {
+  const { showError } = useToast();
   const initialInventoryParams = new URLSearchParams(window.location.search);
   const [products, setProducts] = useState([]);
   const [summary, setSummary] = useState(null);
@@ -7254,41 +7255,45 @@ function InventoryPage({ data }) {
     return () => controller.abort();
   }, [brand, category, data.api.brands, data.api.categories, data.api.products, data.api.summary, query, status]);
 
+  // Low / out of stock are judged per group (the server sets the same flags on
+  // every member), so a group's members pass or fail this filter together.
   const visibleProducts = useMemo(() => {
     if (stockFilter === "out") {
-      return products.filter((product) => product.available_units === 0);
+      return products.filter((product) => product.is_out_of_stock);
     }
     if (stockFilter === "low") {
-      return products.filter((product) => product.available_units > 0 && product.is_low_stock);
+      return products.filter((product) => product.is_low_stock);
     }
     return products;
   }, [products, stockFilter]);
 
+  // A grouped product joins its group's row; ungrouped products keep their own.
+  const inventoryRows = useMemo(() => buildInventoryRows(visibleProducts), [visibleProducts]);
+
   // Click Product or Stock to sort; click again to reverse. No sort keeps the
-  // server's order.
-  const sortedProducts = useMemo(() => {
-    if (!sort.key) return visibleProducts;
-    const value = (product) =>
-      sort.key === "stock" ? Number(product.available_units) || 0 : String(product.display_name || "").toLowerCase();
-    const sorted = [...visibleProducts].sort((left, right) => {
+  // server's order. A group sorts by its name and its merged available count.
+  const sortedRows = useMemo(() => {
+    if (!sort.key) return inventoryRows;
+    const value = (row) => (sort.key === "stock" ? inventoryRowStock(row) : inventoryRowName(row));
+    const sorted = [...inventoryRows].sort((left, right) => {
       const a = value(left);
       const b = value(right);
       return a < b ? -1 : a > b ? 1 : 0;
     });
     return sort.direction === "desc" ? sorted.reverse() : sorted;
-  }, [visibleProducts, sort]);
+  }, [inventoryRows, sort]);
 
   const selectedProduct = useMemo(
     () => visibleProducts.find((product) => product.id === selectedId) || visibleProducts[0] || null,
     [visibleProducts, selectedId]
   );
 
-  function exportCurrentView() {
+  async function exportCurrentView() {
     const stamp = todayLocal();
     if (view === "units") {
       downloadCsv(
         `stock-units-${stamp}.csv`,
-        ["Serial Number", "Product", "SKU", "Status", "Where", "Supplier", "Cost", "Purchase Date", "Notes"],
+        ["Serial Number", "Product", "SKU", "Status", "Where", "Supplier", "Cost", "Purchase Date", "Notes", "Group"],
         unitRows.map((unit) => [
           unit.serial_number,
           unit.product_name,
@@ -7298,30 +7303,60 @@ function InventoryPage({ data }) {
           unit.supplier_name || "",
           unit.cost,
           unit.purchase_date || "",
-          unit.notes || ""
+          unit.notes || "",
+          unit.group_name || ""
         ])
       );
       return;
     }
+    // One row per ungrouped product and one per group (the group's merged
+    // numbers, its members not listed), in the on-screen order.
+    const stockOf = (row) => (row.kind === "group" ? row.summary : row.product);
+    // Who holds the reserved / issued / repair units is per-unit data, so it is
+    // fetched when exporting (only if some row has such units).
+    let holders = new Map();
+    if (sortedRows.some((row) => stockOf(row).reserved_units || stockOf(row).issued_units || stockOf(row).repair_units)) {
+      try {
+        const params = new URLSearchParams({ with_location: "1", exclude_status: "available,sold,removed,inactive" });
+        const response = await fetch(`${data.api.productUnits}?${params.toString()}`);
+        if (!response.ok) throw new Error("unit locations unavailable");
+        holders = inventoryHolders(await response.json());
+      } catch {
+        showError("Could not load who holds the reserved, issued and repair units, so nothing was exported. Try again.");
+        return;
+      }
+    }
     downloadCsv(
       `inventory-${stamp}.csv`,
-      ["Product", "SKU", "Barcode", "Category", "Brand", "Model", "Available", "Reserved", "Total In Stock", "Low Stock Alert", "Status"],
-      sortedProducts.map((product) => [
-        product.display_name,
-        product.sku,
-        product.barcode || "",
-        product.category_name,
-        product.brand_name,
-        product.model_name,
-        product.available_units,
-        product.reserved_units,
-        product.total_units,
-        product.reorder_stock_level,
-        productStatusInfo(product).label
-      ])
+      [
+        "Product", "Category", "Brand", "Model", "Total In Stock", "Available", "Reserved", "Issued (temporary)",
+        "In Repair", "Reserved For", "Assigned To", "Repair At", "Status"
+      ],
+      sortedRows.map((row) => {
+        const stock = stockOf(row);
+        const isGroup = row.kind === "group";
+        const held = holders.get(row.key);
+        return [
+          isGroup ? row.name : stock.display_name,
+          // A group mixes products, so it has no single category/brand/model.
+          isGroup ? "" : stock.category_name,
+          isGroup ? "" : stock.brand_name,
+          isGroup ? "" : stock.model_name,
+          stock.total_units,
+          stock.available_units,
+          stock.reserved_units,
+          stock.issued_units,
+          stock.repair_units,
+          held?.reserved || "",
+          held?.issued || "",
+          held?.repair || "",
+          productStatusInfo(stock).label
+        ];
+      })
     );
   }
-  const lowStockCount = visibleProducts.filter((product) => product.is_low_stock).length;
+  const rowStock = (row) => (row.kind === "group" ? row.summary : row.product);
+  const lowStockCount = inventoryRows.filter((row) => rowStock(row).is_low_stock).length;
 
   // The detail panel only sits beside the table on wide screens; below that it
   // would be under the whole table, so a row opens the product page instead.
@@ -7332,8 +7367,8 @@ function InventoryPage({ data }) {
     }
     setSelectedId(productId);
   }
-  const outOfStockCount = visibleProducts.filter((product) => product.available_units === 0).length;
-  const inactiveCount = visibleProducts.filter((product) => !product.isactive || product.available_units === 0).length;
+  const outOfStockCount = inventoryRows.filter((row) => rowStock(row).is_out_of_stock).length;
+  const inactiveCount = inventoryRows.filter((row) => !rowStock(row).isactive || rowStock(row).is_out_of_stock).length;
   const inventoryKpis = [
     // First 3 match Command Center's current card order (Command Center has
     // no Total Stock/Available Stock cards of its own -- those two stayed
@@ -7350,7 +7385,7 @@ function InventoryPage({ data }) {
     {
       label: "Low Stock Alerts",
       value: formatCount(summary?.low_stock_products ?? 0),
-      detail: "products at or below threshold",
+      detail: "products or groups at or below threshold",
       icon: "triangle-alert",
       tone: (summary?.low_stock_products ?? 0) > 0 ? "warning" : "neutral",
       href: data.routes.lowStock
@@ -7358,7 +7393,7 @@ function InventoryPage({ data }) {
     {
       label: "Out of Stock Products",
       value: formatCount(summary?.out_of_stock_products ?? outOfStockCount),
-      detail: "products with no available units",
+      detail: "products or groups with no available units",
       icon: "package-x",
       tone: (summary?.out_of_stock_products ?? outOfStockCount) > 0 ? "danger" : "neutral",
       href: data.routes.outOfStock
@@ -7490,7 +7525,7 @@ function InventoryPage({ data }) {
           </section>
 
           <InventoryTable
-            products={sortedProducts}
+            rows={sortedRows}
             sort={sort}
             onSort={toggleSort}
             selectedId={selectedProduct?.id}
@@ -7540,6 +7575,44 @@ function downloadCsv(filename, header, rows) {
   window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+// Per product, who holds its reserved / issued / repair units, as
+// "Acme Ltd (2); Beta Co (1)". Built from the per-unit "where" text the Stock
+// Units view shows ("Reserved for X", "With X", "At <vendor>"), so the wording
+// stays the same. Returns Map(row key -> {reserved, issued, repair}), where the
+// row key is the inventory row's (`group-<id>` or `product-<id>`), so a group's
+// parties are merged across all its products.
+const HOLDER_TEXT_PREFIX = { reserved: "Reserved for ", issued: "With ", repair: "At " };
+
+function inventoryHolders(units) {
+  const counts = new Map();
+  for (const unit of units) {
+    const prefix = HOLDER_TEXT_PREFIX[unit.status];
+    const text = unit.location?.text || "";
+    let party = "";
+    if (prefix && text.startsWith(prefix)) party = text.slice(prefix.length);
+    else if (unit.status === "repair" && text === "In repair, no supplier") party = "No supplier";
+    if (!party) continue;
+    const rowKey = unit.group ? `group-${unit.group}` : `product-${unit.product}`;
+    const byStatus = counts.get(rowKey) || { reserved: new Map(), issued: new Map(), repair: new Map() };
+    byStatus[unit.status].set(party, (byStatus[unit.status].get(party) || 0) + 1);
+    counts.set(rowKey, byStatus);
+  }
+  const holders = new Map();
+  for (const [rowKey, byStatus] of counts) {
+    const cell = (parties) =>
+      [...parties]
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .map(([party, count]) => `${party} (${count})`)
+        .join("; ");
+    holders.set(rowKey, {
+      reserved: cell(byStatus.reserved),
+      issued: cell(byStatus.issued),
+      repair: cell(byStatus.repair)
+    });
+  }
+  return holders;
+}
+
 const INVENTORY_UNIT_ROW_LIMIT = 100;
 
 // The unit's product page, opened on its Stock Units tab filtered to it.
@@ -7561,11 +7634,16 @@ function UnitWhere({ location }) {
 
 // Inventory > Stock Units: every serial across all products, with where it is
 // now (computed by the server: ?with_location=1), searchable and scannable,
-// each editable with the same form as the product page.
+// each editable with the same form as the product page. Units of grouped
+// products sit under their group's row (merged numbers, expand arrow); a search
+// or status filter opens them so a scanned serial is never hidden.
 function InventoryUnitsView({ data, onRowsChange }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
   const [units, setUnits] = useState([]);
+  const [groups, setGroups] = useState({});
+  const [expanded, setExpanded] = useState(() => new Set());
+  const [showEmpty, setShowEmpty] = useState(() => new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [editingUnit, setEditingUnit] = useState(null);
@@ -7601,11 +7679,169 @@ function InventoryUnitsView({ data, onRowsChange }) {
     };
   }, [data.api.productUnits, query, status]);
 
+  // Merged numbers and the member breakdown of every group, from the product list.
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(data.api.products, { signal: controller.signal })
+      .then((response) => (response.ok ? response.json() : []))
+      .then((products) => {
+        const next = {};
+        for (const row of buildInventoryRows(products)) {
+          if (row.kind === "group") next[row.groupId] = row;
+        }
+        setGroups(next);
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [data.api.products]);
+
   useEffect(() => {
     onRowsChange?.(units);
   }, [units, onRowsChange]);
 
-  const visibleUnits = units.slice(0, INVENTORY_UNIT_ROW_LIMIT);
+  const visibleUnits = useMemo(() => units.slice(0, INVENTORY_UNIT_ROW_LIMIT), [units]);
+
+  // Ungrouped units stay one row each; a group's units gather under one row,
+  // placed where its first unit would have been.
+  const entries = useMemo(() => {
+    const list = [];
+    const byGroup = new Map();
+    for (const unit of visibleUnits) {
+      if (!unit.group) {
+        list.push({ key: `unit-${unit.id}`, unit });
+        continue;
+      }
+      let entry = byGroup.get(unit.group);
+      if (!entry) {
+        entry = { key: `group-${unit.group}`, groupId: unit.group, name: unit.group_name, units: [] };
+        byGroup.set(unit.group, entry);
+        list.push(entry);
+      }
+      entry.units.push(unit);
+    }
+    return list;
+  }, [visibleUnits]);
+
+  const filtering = Boolean(query.trim() || status);
+  const isOpen = (groupId) => filtering || expanded.has(groupId);
+
+  function toggleIn(setter, id) {
+    setter((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const groupSummaryText = (entry) => {
+    const summary = groups[entry.groupId]?.summary;
+    if (!summary) return `${entry.units.length} ${entry.units.length === 1 ? "unit" : "units"}`;
+    return `${summary.total_units} in stock - ${summary.available_units} available - ${summary.reserved_units} reserved - ${summary.issued_units} issued - ${summary.repair_units} in repair`;
+  };
+
+  // Each member's own numbers; members with nothing in stock stay hidden until
+  // "Show empty" is on.
+  const renderGroupMembers = (entry) => {
+    const members = groups[entry.groupId]?.members || [];
+    const empty = members.filter((member) => member.total_units === 0);
+    const shown = showEmpty.has(entry.groupId) ? members : members.filter((member) => member.total_units > 0);
+    if (!members.length) return null;
+    return (
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-zinc-400">
+        {shown.map((member) => (
+          <span key={member.id}>
+            <span className="font-semibold text-zinc-200">{member.display_name}</span>: {member.available_units} available / {member.total_units} in stock
+          </span>
+        ))}
+        {empty.length ? (
+          <button
+            type="button"
+            onClick={() => toggleIn(setShowEmpty, entry.groupId)}
+            className="font-semibold text-[var(--bim-orange-text)] hover:text-white"
+          >
+            {showEmpty.has(entry.groupId) ? "Hide empty" : `Show empty (${empty.length})`}
+          </button>
+        ) : null}
+      </div>
+    );
+  };
+
+  const renderGroupToggle = (entry) => (
+    <button
+      type="button"
+      aria-expanded={isOpen(entry.groupId)}
+      aria-label={`${isOpen(entry.groupId) ? "Collapse" : "Expand"} ${entry.name}`}
+      onClick={(event) => {
+        event.stopPropagation();
+        toggleIn(setExpanded, entry.groupId);
+      }}
+      className="grid h-6 w-6 shrink-0 place-items-center rounded text-zinc-400 hover:text-white"
+    >
+      <ChevronRight className={`h-4 w-4 transition-transform ${isOpen(entry.groupId) ? "rotate-90" : ""}`} />
+    </button>
+  );
+
+  const renderMobileUnit = (unit, nested = false) => (
+    <li key={unit.id} className={`py-3 ${nested ? "bg-black/20 pl-8 pr-4" : "px-4"}`}>
+      <div className="flex items-start justify-between gap-3">
+        <a href={unitProductHref(unit)} className="min-w-0 break-all font-mono text-sm font-semibold text-[var(--bim-orange-text)]">
+          {unit.serial_number}
+        </a>
+        <Status status={unit.status_label || unit.status} statusClass={unit.status} />
+      </div>
+      <p className="mt-1 text-sm font-semibold text-white">{unit.product_name}</p>
+      <div className="mt-1 flex items-center justify-between gap-3 text-sm text-zinc-400">
+        <UnitWhere location={unit.location} />
+        {canEdit ? (
+          <button
+            type="button"
+            onClick={() => setEditingUnit(unit)}
+            className="inline-flex shrink-0 items-center gap-1.5 text-xs font-semibold text-[var(--bim-orange-text)]"
+          >
+            <Edit3 className="h-3.5 w-3.5" />
+            Edit
+          </button>
+        ) : null}
+      </div>
+    </li>
+  );
+
+  const renderDesktopUnit = (unit, nested = false) => (
+    <tr key={unit.id} className={`border-t border-nexus-line hover:bg-nexus-panel2/60 ${nested ? "bg-black/20" : ""}`}>
+      <td className={`py-3 ${nested ? "pl-12 pr-4" : "px-4"}`}>
+        <a href={unitProductHref(unit)} className="font-mono text-xs font-semibold text-[var(--bim-orange-text)] hover:text-white">
+          {unit.serial_number}
+        </a>
+      </td>
+      <td className="px-4 py-3">
+        <p className="font-semibold text-white">{unit.product_name}</p>
+        <p className="mt-0.5 font-mono text-xs text-zinc-500">{unit.product_sku}</p>
+      </td>
+      <td className="px-4 py-3">
+        <Status status={unit.status_label || unit.status} statusClass={unit.status} />
+      </td>
+      <td className="px-4 py-3 text-zinc-300">
+        <UnitWhere location={unit.location} />
+      </td>
+      <td className="px-4 py-3 text-zinc-400">{unit.supplier_name || "-"}</td>
+      <td className="px-4 py-3 text-zinc-400">{formatDate(unit.purchase_date)}</td>
+      {canEdit ? (
+        <td className="px-4 py-3 text-right">
+          <button
+            type="button"
+            onClick={() => setEditingUnit(unit)}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--bim-orange-text)] hover:text-white"
+          >
+            <Edit3 className="h-3.5 w-3.5" />
+            Edit
+          </button>
+        </td>
+      ) : null}
+    </tr>
+  );
+
+  const columnCount = canEdit ? 7 : 6;
 
   return (
     <>
@@ -7617,7 +7853,7 @@ function InventoryUnitsView({ data, onRowsChange }) {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             onScan={setQuery}
-            placeholder="Search serial number, product, SKU, or barcode..."
+            placeholder="Search serial number, product, group, SKU, or barcode..."
           />
           <Select
             value={status}
@@ -7647,30 +7883,24 @@ function InventoryUnitsView({ data, onRowsChange }) {
         ) : (
           <>
           <ul className="divide-y divide-nexus-line md:hidden">
-            {visibleUnits.map((unit) => (
-              <li key={unit.id} className="px-4 py-3">
-                <div className="flex items-start justify-between gap-3">
-                  <a href={unitProductHref(unit)} className="min-w-0 break-all font-mono text-sm font-semibold text-[var(--bim-orange-text)]">
-                    {unit.serial_number}
-                  </a>
-                  <Status status={unit.status_label || unit.status} statusClass={unit.status} />
-                </div>
-                <p className="mt-1 text-sm font-semibold text-white">{unit.product_name}</p>
-                <div className="mt-1 flex items-center justify-between gap-3 text-sm text-zinc-400">
-                  <UnitWhere location={unit.location} />
-                  {canEdit ? (
-                    <button
-                      type="button"
-                      onClick={() => setEditingUnit(unit)}
-                      className="inline-flex shrink-0 items-center gap-1.5 text-xs font-semibold text-[var(--bim-orange-text)]"
-                    >
-                      <Edit3 className="h-3.5 w-3.5" />
-                      Edit
-                    </button>
-                  ) : null}
-                </div>
-              </li>
-            ))}
+            {entries.map((entry) =>
+              entry.unit ? (
+                renderMobileUnit(entry.unit)
+              ) : (
+                <Fragment key={entry.key}>
+                  <li className="bg-nexus-panel2/40 px-4 py-3" onClick={() => toggleIn(setExpanded, entry.groupId)}>
+                    <div className="flex items-center gap-2">
+                      {renderGroupToggle(entry)}
+                      <p className="min-w-0 flex-1 truncate text-sm font-semibold text-white">{entry.name}</p>
+                      <span className="text-xs text-zinc-500">Group</span>
+                    </div>
+                    <p className="mt-1 pl-8 text-xs text-zinc-400">{groupSummaryText(entry)}</p>
+                    {isOpen(entry.groupId) ? <div className="mt-2 pl-8">{renderGroupMembers(entry)}</div> : null}
+                  </li>
+                  {isOpen(entry.groupId) ? entry.units.map((unit) => renderMobileUnit(unit, true)) : null}
+                </Fragment>
+              )
+            )}
           </ul>
           <div className="hidden overflow-x-auto md:block">
             <table className="min-w-full text-left text-sm">
@@ -7686,39 +7916,39 @@ function InventoryUnitsView({ data, onRowsChange }) {
                 </tr>
               </thead>
               <tbody>
-                {visibleUnits.map((unit) => (
-                  <tr key={unit.id} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
-                    <td className="px-4 py-3">
-                      <a href={unitProductHref(unit)} className="font-mono text-xs font-semibold text-[var(--bim-orange-text)] hover:text-white">
-                        {unit.serial_number}
-                      </a>
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="font-semibold text-white">{unit.product_name}</p>
-                      <p className="mt-0.5 font-mono text-xs text-zinc-500">{unit.product_sku}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <Status status={unit.status_label || unit.status} statusClass={unit.status} />
-                    </td>
-                    <td className="px-4 py-3 text-zinc-300">
-                      <UnitWhere location={unit.location} />
-                    </td>
-                    <td className="px-4 py-3 text-zinc-400">{unit.supplier_name || "-"}</td>
-                    <td className="px-4 py-3 text-zinc-400">{formatDate(unit.purchase_date)}</td>
-                    {canEdit ? (
-                      <td className="px-4 py-3 text-right">
-                        <button
-                          type="button"
-                          onClick={() => setEditingUnit(unit)}
-                          className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--bim-orange-text)] hover:text-white"
-                        >
-                          <Edit3 className="h-3.5 w-3.5" />
-                          Edit
-                        </button>
-                      </td>
-                    ) : null}
-                  </tr>
-                ))}
+                {entries.map((entry) =>
+                  entry.unit ? (
+                    renderDesktopUnit(entry.unit)
+                  ) : (
+                    <Fragment key={entry.key}>
+                      <tr
+                        className="cursor-pointer border-t border-nexus-line bg-nexus-panel2/40 hover:bg-zinc-900/70"
+                        onClick={() => toggleIn(setExpanded, entry.groupId)}
+                      >
+                        <td className="px-4 py-3" colSpan={columnCount}>
+                          <div className="flex items-center gap-3">
+                            {renderGroupToggle(entry)}
+                            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-zinc-800 text-[var(--bim-orange-text)]">
+                              <Icon name={workflowMeta.product_groups.icon} className="h-4 w-4" />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="truncate font-semibold text-white">
+                                {entry.name} <span className="ml-1 text-xs font-normal text-zinc-500">Group</span>
+                              </p>
+                              <p className="mt-0.5 text-xs text-zinc-400">{groupSummaryText(entry)}</p>
+                            </div>
+                          </div>
+                          {isOpen(entry.groupId) ? (
+                            <div className="mt-2 pl-[3.75rem]" onClick={(event) => event.stopPropagation()}>
+                              {renderGroupMembers(entry)}
+                            </div>
+                          ) : null}
+                        </td>
+                      </tr>
+                      {isOpen(entry.groupId) ? entry.units.map((unit) => renderDesktopUnit(unit, true)) : null}
+                    </Fragment>
+                  )
+                )}
               </tbody>
             </table>
           </div>
@@ -7751,6 +7981,7 @@ function InventoryUnitsView({ data, onRowsChange }) {
 
 function InventoryHeader({ actions, onExport }) {
   const addProduct = actions.find((action) => action.label === "Add Product");
+  const groupsLink = actions.find((action) => action.label === "Product Groups");
   return (
     <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
       <div>
@@ -7767,6 +7998,16 @@ function InventoryHeader({ actions, onExport }) {
           <Icon name="upload" className="h-4 w-4" />
           Export
         </button>
+        {groupsLink?.enabled && groupsLink.href ? (
+          <a
+            href={groupsLink.href}
+            title="Interchangeable products counted and alerted on as one"
+            className="inline-flex h-9 items-center gap-2 rounded-md px-3 font-semibold text-zinc-200 hover:bg-nexus-panel"
+          >
+            <Icon name={workflowMeta.product_groups.icon} className="h-4 w-4" />
+            Groups
+          </a>
+        ) : null}
         {addProduct?.enabled && addProduct.href ? (
           <a className="inline-flex h-9 items-center gap-2 rounded-md bg-nexus-orange px-4 font-semibold text-black" href={addProduct.href}>
             <Plus className="h-4 w-4" />
@@ -7810,7 +8051,82 @@ function SortableHeader({ label, sortKey, sort, onSort }) {
   );
 }
 
-function InventoryTable({ products, sort, onSort, selectedId, onSelect, loading, error, statusFilter }) {
+// A product's group, only while that group is active (the API leaves the group
+// stock out otherwise).
+function groupIdOf(product) {
+  return product.group_stock ? product.group : null;
+}
+
+// Inventory rows: one per ungrouped product and one per group, the group's
+// members nested inside it. Built from the products the API returned, so a
+// filter that hides a member just leaves it out of the expansion; the group's
+// own numbers are always the merged ones for the whole group.
+function buildInventoryRows(products) {
+  const rows = [];
+  const groups = new Map();
+  for (const product of products) {
+    const groupId = groupIdOf(product);
+    if (!groupId) {
+      rows.push({ key: `product-${product.id}`, kind: "product", product });
+      continue;
+    }
+    let row = groups.get(groupId);
+    if (!row) {
+      row = {
+        key: `group-${groupId}`,
+        kind: "group",
+        groupId,
+        name: product.group_name,
+        // Same field names as a product, so StockBar and ProductStatus take it as is.
+        summary: {
+          ...product.group_stock,
+          isactive: true,
+          display_name: product.group_name,
+          is_low_stock: product.is_low_stock,
+          is_out_of_stock: product.is_out_of_stock
+        },
+        members: []
+      };
+      groups.set(groupId, row);
+      rows.push(row);
+    }
+    row.members.push(product);
+  }
+  return rows;
+}
+
+function inventoryRowStock(row) {
+  return Number((row.kind === "group" ? row.summary : row.product).available_units) || 0;
+}
+
+function inventoryRowName(row) {
+  return String(row.kind === "group" ? row.name : row.product.display_name || "").toLowerCase();
+}
+
+function flattenInventoryRows(rows) {
+  return rows.flatMap((row) => (row.kind === "group" ? row.members : [row.product]));
+}
+
+// A member with nothing in stock (and nothing under the Status filter, if one
+// is set). Hidden in a group's expansion until "Show empty" is pressed.
+function isEmptyMember(product, statusFilter) {
+  const field = STOCK_COLUMN_STATUS_FIELD[statusFilter];
+  return product.total_units === 0 && (!field || (product[field] ?? 0) === 0);
+}
+
+function InventoryTable({ rows, sort, onSort, selectedId, onSelect, loading, error, statusFilter }) {
+  const [expanded, setExpanded] = useState(() => new Set());
+  const [showEmpty, setShowEmpty] = useState(() => new Set());
+
+  function toggleIn(setter, id) {
+    setter((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   return (
     <section className="mt-4 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
       <div className="overflow-x-auto">
@@ -7834,38 +8150,30 @@ function InventoryTable({ products, sort, onSort, selectedId, onSelect, loading,
               <TableMessage message="Loading Inventory..." />
             ) : error ? (
               <TableMessage message={error} />
-            ) : products.length ? (
-              products.map((product) => (
-                <tr
-                  key={product.id}
-                  className={`cursor-pointer border-t border-nexus-line hover:bg-zinc-900/70 ${
-                    selectedId === product.id ? "bg-amber-950/20 outline outline-1 outline-[rgb(var(--bim-orange-focus-rgb)/50%)]" : ""
-                  }`}
-                  onClick={() => onSelect(product.id)}
-                >
-                  <td className="px-3 py-4 md:px-4">
-                    <div className="flex min-w-0 items-center gap-3">
-                      <Avatar product={product} />
-                      <div className="min-w-0">
-                        <p className="truncate font-semibold text-white">{product.display_name}</p>
-                        <p className="mt-1 truncate font-mono text-xs text-zinc-500">{product.sku}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="hidden truncate px-4 py-4 text-zinc-400 md:table-cell">{product.category_name}</td>
-                  <td className="hidden px-4 py-4 md:table-cell">
-                    <p className="truncate text-zinc-200">{product.brand_name}</p>
-                    <p className="mt-1 truncate font-mono text-xs text-zinc-500">{product.model_name}</p>
-                  </td>
-                  <td className="hidden truncate px-4 py-4 font-mono text-xs text-[var(--bim-orange-text)] md:table-cell">{product.sku}</td>
-                  <td className="px-3 py-4 md:px-4">
-                    <StockBar product={product} statusFilter={statusFilter} />
-                  </td>
-                  <td className="px-3 py-4 md:px-4">
-                    <ProductStatus product={product} />
-                  </td>
-                </tr>
-              ))
+            ) : rows.length ? (
+              rows.map((row) =>
+                row.kind === "group" ? (
+                  <InventoryGroupRows
+                    key={row.key}
+                    row={row}
+                    expanded={expanded.has(row.groupId)}
+                    onToggle={() => toggleIn(setExpanded, row.groupId)}
+                    showEmpty={showEmpty.has(row.groupId)}
+                    onToggleEmpty={() => toggleIn(setShowEmpty, row.groupId)}
+                    selectedId={selectedId}
+                    onSelect={onSelect}
+                    statusFilter={statusFilter}
+                  />
+                ) : (
+                  <InventoryProductRow
+                    key={row.key}
+                    product={row.product}
+                    selected={selectedId === row.product.id}
+                    onSelect={onSelect}
+                    statusFilter={statusFilter}
+                  />
+                )
+              )
             ) : (
               <TableMessage message="No products found." />
             )}
@@ -7873,6 +8181,125 @@ function InventoryTable({ products, sort, onSort, selectedId, onSelect, loading,
         </table>
       </div>
     </section>
+  );
+}
+
+function InventoryProductRow({ product, selected, onSelect, statusFilter, nested = false }) {
+  return (
+    <tr
+      className={`cursor-pointer border-t border-nexus-line hover:bg-zinc-900/70 ${nested ? "bg-black/20" : ""} ${
+        selected ? "bg-amber-950/20 outline outline-1 outline-[rgb(var(--bim-orange-focus-rgb)/50%)]" : ""
+      }`}
+      onClick={() => onSelect(product.id)}
+    >
+      <td className={`py-4 ${nested ? "pl-9 pr-3 md:pl-12 md:pr-4" : "px-3 md:px-4"}`}>
+        <div className="flex min-w-0 items-center gap-3">
+          <Avatar product={product} />
+          <div className="min-w-0">
+            <p className="truncate font-semibold text-white">{product.display_name}</p>
+            <p className="mt-1 truncate font-mono text-xs text-zinc-500">{product.sku}</p>
+          </div>
+        </div>
+      </td>
+      <td className="hidden truncate px-4 py-4 text-zinc-400 md:table-cell">{product.category_name}</td>
+      <td className="hidden px-4 py-4 md:table-cell">
+        <p className="truncate text-zinc-200">{product.brand_name}</p>
+        <p className="mt-1 truncate font-mono text-xs text-zinc-500">{product.model_name}</p>
+      </td>
+      <td className="hidden truncate px-4 py-4 font-mono text-xs text-[var(--bim-orange-text)] md:table-cell">{product.sku}</td>
+      <td className="px-3 py-4 md:px-4">
+        <StockBar product={product} statusFilter={statusFilter} />
+      </td>
+      <td className="px-3 py-4 md:px-4">
+        <ProductStatus product={product} />
+      </td>
+    </tr>
+  );
+}
+
+// A group's row (merged numbers, expand arrow) and, when open, its members with
+// their own numbers. Members with nothing in stock stay hidden unless "Show
+// empty" is on.
+function InventoryGroupRows({ row, expanded, onToggle, showEmpty, onToggleEmpty, selectedId, onSelect, statusFilter }) {
+  const summary = row.summary;
+  const emptyMembers = row.members.filter((member) => isEmptyMember(member, statusFilter));
+  const visibleMembers = showEmpty ? row.members : row.members.filter((member) => !isEmptyMember(member, statusFilter));
+  const categories = [...new Set(row.members.map((member) => member.category_name))];
+
+  return (
+    <>
+      <tr className="cursor-pointer border-t border-nexus-line bg-nexus-panel2/40 hover:bg-zinc-900/70" onClick={onToggle}>
+        <td className="px-3 py-4 md:px-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              type="button"
+              aria-expanded={expanded}
+              aria-label={`${expanded ? "Collapse" : "Expand"} ${row.name}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                onToggle();
+              }}
+              className="grid h-6 w-6 shrink-0 place-items-center rounded text-zinc-400 hover:text-white"
+            >
+              <ChevronRight className={`h-4 w-4 transition-transform ${expanded ? "rotate-90" : ""}`} />
+            </button>
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-zinc-800 text-[var(--bim-orange-text)]">
+              <Icon name={workflowMeta.product_groups.icon} className="h-4 w-4" />
+            </span>
+            <div className="min-w-0">
+              <p className="truncate font-semibold text-white">{row.name}</p>
+              <p className="mt-1 truncate text-xs text-zinc-500">
+                Group - {summary.member_count} {summary.member_count === 1 ? "product" : "products"}
+              </p>
+            </div>
+          </div>
+        </td>
+        <td className="hidden truncate px-4 py-4 text-zinc-400 md:table-cell">{categories.length === 1 ? categories[0] : "Various"}</td>
+        <td className="hidden px-4 py-4 text-zinc-500 md:table-cell">-</td>
+        <td className="hidden px-4 py-4 text-zinc-500 md:table-cell">-</td>
+        <td className="px-3 py-4 md:px-4">
+          <StockBar product={summary} statusFilter={statusFilter} />
+        </td>
+        <td className="px-3 py-4 md:px-4">
+          <ProductStatus product={summary} />
+        </td>
+      </tr>
+      {expanded ? (
+        <>
+          {visibleMembers.map((member) => (
+            <InventoryProductRow
+              key={member.id}
+              product={member}
+              nested
+              selected={selectedId === member.id}
+              onSelect={onSelect}
+              statusFilter={statusFilter}
+            />
+          ))}
+          {emptyMembers.length || !visibleMembers.length ? (
+            <tr className="border-t border-nexus-line bg-black/20">
+              <td colSpan="6" className="px-4 py-2.5 pl-9 text-xs text-zinc-500 md:pl-12">
+                {!visibleMembers.length ? "No member has stock. " : null}
+                {emptyMembers.length ? (
+                  <>
+                    {showEmpty
+                      ? `Showing ${emptyMembers.length} empty ${emptyMembers.length === 1 ? "member" : "members"}. `
+                      : `${emptyMembers.length} empty ${emptyMembers.length === 1 ? "member" : "members"} hidden. `}
+                    <button
+                      type="button"
+                      onClick={onToggleEmpty}
+                      className="font-semibold text-[var(--bim-orange-text)] hover:text-white"
+                    >
+                      {showEmpty ? "Hide empty" : "Show empty"}
+                    </button>
+                  </>
+                ) : null}
+              </td>
+            </tr>
+          ) : null}
+        </>
+      ) : null}
+    </>
   );
 }
 
@@ -7983,7 +8410,7 @@ const STOCK_COLUMN_STATUS_ACCENT = {
 function StockBar({ product, statusFilter }) {
   const total = Math.max(product.total_units, 1);
   const low = product.is_low_stock;
-  const outOfStock = product.available_units === 0;
+  const outOfStock = product.is_out_of_stock;
   const field = STOCK_COLUMN_STATUS_FIELD[statusFilter];
 
   if (field && STOCK_COLUMN_NO_TOTAL_STATUSES.has(statusFilter)) {
@@ -8032,7 +8459,7 @@ function StockBar({ product, statusFilter }) {
 
 function productStatusInfo(product) {
   if (!product.isactive) return { label: "Inactive", statusKey: "inactive" };
-  if (product.available_units === 0) return { label: "Out of Stock", statusKey: "out_of_stock" };
+  if (product.is_out_of_stock) return { label: "Out of Stock", statusKey: "out_of_stock" };
   if (product.is_low_stock) return { label: "Low Stock", statusKey: "low_stock" };
   return { label: "Active", statusKey: "active" };
 }
@@ -8089,6 +8516,7 @@ function ProductDetail({ product, canEditProduct = false }) {
           <DetailRow label="Category" value={product.category_name} />
           <DetailRow label="Brand" value={product.brand_name} />
           <DetailRow label="Model" value={product.model_name} />
+          {product.group_stock ? <DetailRow label="Group" value={product.group_name} /> : null}
         </dl>
 
         <div className="border-t border-nexus-line pt-5">
@@ -8106,7 +8534,13 @@ function ProductDetail({ product, canEditProduct = false }) {
           <DetailRow label="Reserved Stock" value={product.reserved_units} />
           <DetailRow label="Total Stock" value={product.total_units} strong />
           <DetailRow label="Sold Stock" value={product.sold_units} />
-          <DetailRow label="Low Stock Alert" value={product.reorder_stock_level} />
+          {product.group_stock ? (
+            <DetailRow label="Group Available" value={product.group_stock.available_units} highlight />
+          ) : null}
+          <DetailRow label="Low Stock Alert" value={product.effective_low_stock_alert ?? product.reorder_stock_level} />
+          {product.group_stock ? (
+            <p className="mt-2 text-xs text-zinc-500">The group's alert applies; this product's own is ignored.</p>
+          ) : null}
         </div>
 
       </div>
@@ -8143,6 +8577,69 @@ function ProductDetail({ product, canEditProduct = false }) {
   );
 }
 
+// "Part of <group>" on a product page: the group's merged stock and Low Stock
+// Alert, and the other products counted with it.
+function ProductGroupPanel({ product, groupDetail, canViewGroups, data }) {
+  const stock = product.group_stock;
+  const others = (groupDetail?.members || []).filter((member) => member.id !== product.id);
+  const tiles = [
+    ["Available", stock.available_units],
+    ["Reserved", stock.reserved_units],
+    ["Issued", stock.issued_units],
+    ["Repair", stock.repair_units],
+    ["Total", stock.total_units],
+    ["Low Stock Alert", product.group_low_stock_alert]
+  ];
+
+  return (
+    <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5" aria-label="Product group">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <SectionTitle title={`Part of ${product.group_name}`} />
+        {canViewGroups ? (
+          <a
+            href={`${data.routes.productGroups}?open=${product.group}`}
+            className="text-sm font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]"
+          >
+            Open group
+          </a>
+        ) : null}
+      </div>
+      <p className="-mt-1 text-xs text-zinc-500">
+        Stock is counted with the group. Low and out-of-stock alerts use the merged available count and the group's own alert.
+      </p>
+      <dl className="mt-4 grid grid-cols-3 gap-3 md:grid-cols-6">
+        {tiles.map(([label, value]) => (
+          <div key={label} className="rounded-md border border-nexus-line bg-nexus-panel2 px-3 py-2">
+            <dt className="text-xs text-zinc-400">{label}</dt>
+            <dd className="mt-1 text-lg font-semibold text-white">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      <div className="mt-4">
+        <h3 className="bim-label">Other products in this group</h3>
+        {others.length ? (
+          <ul className="mt-2 divide-y divide-nexus-line rounded-md border border-nexus-line">
+            {others.map((member) => (
+              <li key={member.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                <a href={`/inventory/products/${member.id}/`} className="min-w-0 truncate font-semibold text-white hover:text-[var(--bim-orange-hover)]">
+                  {member.display_name}
+                </a>
+                <span className="shrink-0 text-xs text-zinc-400">
+                  {member.available_units} available / {member.total_units} in stock
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-sm text-zinc-500">
+            {stock.member_count > 1 && !canViewGroups ? "Member list needs group access." : "No other products in this group."}
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function ProductDetailsPage({ data }) {
   const productId = data.currentPath?.match(/\/inventory\/products\/(\d+)\//)?.[1];
   const [product, setProduct] = useState(null);
@@ -8150,6 +8647,7 @@ function ProductDetailsPage({ data }) {
   const [movements, setMovements] = useState([]);
   const [unitsAccessDenied, setUnitsAccessDenied] = useState(false);
   const [movementsAccessDenied, setMovementsAccessDenied] = useState(false);
+  const [groupDetail, setGroupDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   // ?unit=<serial> (from global search) opens the Stock Units tab on that unit.
@@ -8207,6 +8705,23 @@ function ProductDetailsPage({ data }) {
     return () => controller.abort();
   }, [data.api.productDetail, data.api.productMovements, data.api.productUnits, productId]);
 
+  // The group's member list, for "Part of <group>" (needs group access; without
+  // it the merged numbers from the product itself are still shown).
+  const productGroupId = product?.group_stock ? product.group : null;
+  const canViewGroups = Boolean(data.permissions?.canViewProductGroups);
+  useEffect(() => {
+    if (!productGroupId || !canViewGroups) {
+      setGroupDetail(null);
+      return undefined;
+    }
+    const controller = new AbortController();
+    fetch(`${data.api.productGroups}${productGroupId}/`, { signal: controller.signal })
+      .then((response) => (response.ok ? response.json() : null))
+      .then(setGroupDetail)
+      .catch(() => {});
+    return () => controller.abort();
+  }, [canViewGroups, data.api.productGroups, productGroupId]);
+
   if (loading) {
     return (
       <Shell data={data}>
@@ -8249,6 +8764,15 @@ function ProductDetailsPage({ data }) {
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="bim-page-title">{product.display_name}</h1>
                 <ProductStatus product={product} />
+                {product.group_stock ? (
+                  <a
+                    href={canViewGroups ? `${data.routes.productGroups}?open=${product.group}` : undefined}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-zinc-800 px-2 py-1 text-xs font-semibold text-zinc-200 hover:text-white"
+                  >
+                    <Icon name={workflowMeta.product_groups.icon} className="h-3.5 w-3.5" />
+                    Part of {product.group_name}
+                  </a>
+                ) : null}
               </div>
               <p className="mt-2 text-sm text-zinc-400">
                 <span className="font-mono font-bold text-[var(--bim-orange-text)]">{product.sku}</span>
@@ -8281,10 +8805,15 @@ function ProductDetailsPage({ data }) {
           value={product.available_units}
           detail={`${stockPercent}% in stock`}
           warning={product.is_low_stock}
-          danger={product.available_units === 0}
+          danger={product.is_out_of_stock}
         />
         <ProductDetailMetric label="Reserved" value={product.reserved_units} detail="pending allocation" />
-        <ProductDetailMetric label="Low Stock Alert" value={product.reorder_stock_level} detail="alert threshold" info />
+        <ProductDetailMetric
+          label="Low Stock Alert"
+          value={product.effective_low_stock_alert ?? product.reorder_stock_level}
+          detail={product.group_stock ? "group alert threshold" : "alert threshold"}
+          info
+        />
       </section>
 
       <nav className="mt-5 flex gap-1 overflow-x-auto border-b border-nexus-line text-sm font-semibold">
@@ -8309,6 +8838,9 @@ function ProductDetailsPage({ data }) {
       {activeTab === "Overview" ? (
         <div className="mt-4 grid gap-5 xl:grid-cols-[minmax(0,1fr)_280px]">
           <div className="space-y-5">
+            {product.group_stock ? (
+              <ProductGroupPanel product={product} groupDetail={groupDetail} canViewGroups={canViewGroups} data={data} />
+            ) : null}
             <div className="grid gap-5 xl:grid-cols-2">
               <section className="rounded-lg border border-nexus-line bg-nexus-panel p-5">
                   <SectionTitle title="Product Information" />
@@ -8348,7 +8880,7 @@ function ProductDetailsPage({ data }) {
                     <DetailRow label="Available" value={product.available_units} highlight />
                     <DetailRow label="Reserved" value={product.reserved_units} />
                     <DetailRow label="Total" value={product.total_units} strong />
-                    <DetailRow label="Low Stock Alert" value={product.reorder_stock_level} />
+                    <DetailRow label="Low Stock Alert" value={product.effective_low_stock_alert ?? product.reorder_stock_level} />
                   </dl>
                 </section>
               </div>
@@ -8842,11 +9374,13 @@ function AddProductPage({ data, isNew = true }) {
     modelName: "",
     barcode: "",
     reorderStockLevel: "",
+    group: "",
+    groupLowStockAlert: "",
     imageFile: null,
     isactive: true
   };
   const [form, setForm] = useState(emptyForm);
-  const [refs, setRefs] = useState({ categories: [], brands: [] });
+  const [refs, setRefs] = useState({ categories: [], brands: [], groups: [] });
   const [refsLoading, setRefsLoading] = useState(true);
   const [productLoading, setProductLoading] = useState(!isNew);
   const [existingImageUrl, setExistingImageUrl] = useState("");
@@ -8873,14 +9407,19 @@ function AddProductPage({ data, isNew = true }) {
 
     async function loadRefs() {
       setRefsLoading(true);
-      const [categoriesResponse, brandsResponse] = await Promise.all([
+      const groupsRequest = data.permissions?.canViewProductGroups
+        ? fetch(data.api.productGroups, { signal: controller.signal })
+        : null;
+      const [categoriesResponse, brandsResponse, groupsResponse] = await Promise.all([
         fetch(data.api.categories, { signal: controller.signal }),
-        fetch(data.api.brands, { signal: controller.signal })
+        fetch(data.api.brands, { signal: controller.signal }),
+        groupsRequest
       ]);
 
       setRefs({
         categories: categoriesResponse.ok ? await categoriesResponse.json() : [],
-        brands: brandsResponse.ok ? await brandsResponse.json() : []
+        brands: brandsResponse.ok ? await brandsResponse.json() : [],
+        groups: groupsResponse?.ok ? await groupsResponse.json() : []
       });
       setRefsLoading(false);
     }
@@ -8893,7 +9432,7 @@ function AddProductPage({ data, isNew = true }) {
     });
 
     return () => controller.abort();
-  }, [data.api.brands, data.api.categories]);
+  }, [data.api.brands, data.api.categories, data.api.productGroups, data.permissions]);
 
   useEffect(() => {
     if (isNew || !productId) return undefined;
@@ -8917,6 +9456,8 @@ function AddProductPage({ data, isNew = true }) {
           modelName: record.model_name || "",
           barcode: record.barcode || "",
           reorderStockLevel: record.reorder_stock_level != null ? String(record.reorder_stock_level) : "",
+          group: record.group != null && record.group_stock ? String(record.group) : "",
+          groupLowStockAlert: "",
           imageFile: null,
           isactive: record.isactive !== false
         };
@@ -8938,6 +9479,7 @@ function AddProductPage({ data, isNew = true }) {
 
   const selectedCategory = refs.categories.find((category) => String(category.id) === String(form.category));
   const selectedBrand = refs.brands.find((brand) => String(brand.id) === String(form.brand));
+  const selectedGroup = refs.groups.find((group) => String(group.id) === String(form.group));
   const requiredDone = [form.descript, form.category, form.brand, form.modelName].filter(Boolean).length;
   const requiredTotal = 4;
   const requiredProgress = Math.round((requiredDone / requiredTotal) * 100);
@@ -9024,6 +9566,12 @@ function AddProductPage({ data, isNew = true }) {
         labelField: "brandname",
         formField: "brand",
         buildPending: (id, trimmedName) => ({ id, brandname: trimmedName, __pending: true })
+      },
+      group: {
+        listName: "groups",
+        labelField: "name",
+        formField: "group",
+        buildPending: (id, trimmedName) => ({ id, name: trimmedName, __pending: true })
       }
     };
     const config = lookupConfig[kind];
@@ -9056,6 +9604,17 @@ function AddProductPage({ data, isNew = true }) {
         payload.append("brand", form.brand);
       }
       payload.append("model_name_input", form.modelName);
+      if (selectedGroup?.__pending) {
+        // A new group is created together with the product, like a new Category or Brand.
+        payload.append("group_name_input", selectedGroup.name);
+        if (form.groupLowStockAlert.trim()) {
+          payload.append("group_low_stock_alert_input", form.groupLowStockAlert.trim());
+        }
+      } else if (form.group) {
+        payload.append("group", form.group);
+      } else if (!isNew) {
+        payload.append("group", "");
+      }
       payload.append("barcode", form.barcode);
       if (form.reorderStockLevel.trim()) {
         payload.append("reorder_stock_level", form.reorderStockLevel);
@@ -9175,8 +9734,22 @@ function AddProductPage({ data, isNew = true }) {
                 <Field label="Barcode">
                   <TextInput value={form.barcode} onChange={(value) => updateField("barcode", value)} placeholder="EAN-13 or UPC barcode (optional)" />
                 </Field>
+                <ProductGroupField
+                  value={form.group}
+                  onChange={(value) => updateField("group", value)}
+                  groups={refs.groups}
+                  selectedGroup={selectedGroup}
+                  loading={refsLoading}
+                  onCreate={data.permissions?.canCreateProductGroup ? (name) => createLookupOption("group", name) : undefined}
+                  alertValue={form.groupLowStockAlert}
+                  onAlertChange={(value) => updateField("groupLowStockAlert", value)}
+                  productAlert={form.reorderStockLevel.trim()}
+                />
                 <Field label="Low Stock Alert">
                   <TextInput value={form.reorderStockLevel} onChange={(value) => updateField("reorderStockLevel", value)} placeholder="When available stock is at or below this number, BIM Nexus shows low stock alerts" />
+                  {selectedGroup ? (
+                    <span className="mt-2 block text-xs text-zinc-500">Ignored while this product is in a group: the group's alert applies.</span>
+                  ) : null}
                 </Field>
               </div>
 
@@ -9278,6 +9851,7 @@ function AddProductPage({ data, isNew = true }) {
             form={form}
             selectedCategory={selectedCategory}
             selectedBrand={selectedBrand}
+            selectedGroup={selectedGroup}
             skuPreview={skuPreview}
             requiredDone={requiredDone}
             requiredTotal={requiredTotal}
@@ -9897,9 +10471,11 @@ function QuickAddProductModal({ data, initialName = "", onClose, onCreated }) {
     brand: "",
     modelName: "",
     barcode: "",
-    reorderStockLevel: ""
+    reorderStockLevel: "",
+    group: "",
+    groupLowStockAlert: ""
   });
-  const [refs, setRefs] = useState({ categories: [], brands: [] });
+  const [refs, setRefs] = useState({ categories: [], brands: [], groups: [] });
   const [refsLoading, setRefsLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -9908,13 +10484,18 @@ function QuickAddProductModal({ data, initialName = "", onClose, onCreated }) {
     const controller = new AbortController();
 
     async function loadRefs() {
-      const [categoriesResponse, brandsResponse] = await Promise.all([
+      const groupsRequest = data.permissions?.canViewProductGroups
+        ? fetch(data.api.productGroups, { signal: controller.signal })
+        : null;
+      const [categoriesResponse, brandsResponse, groupsResponse] = await Promise.all([
         fetch(data.api.categories, { signal: controller.signal }),
-        fetch(data.api.brands, { signal: controller.signal })
+        fetch(data.api.brands, { signal: controller.signal }),
+        groupsRequest
       ]);
       setRefs({
         categories: categoriesResponse.ok ? await categoriesResponse.json() : [],
-        brands: brandsResponse.ok ? await brandsResponse.json() : []
+        brands: brandsResponse.ok ? await brandsResponse.json() : [],
+        groups: groupsResponse?.ok ? await groupsResponse.json() : []
       });
       setRefsLoading(false);
     }
@@ -9927,7 +10508,7 @@ function QuickAddProductModal({ data, initialName = "", onClose, onCreated }) {
     });
 
     return () => controller.abort();
-  }, [data.api.brands, data.api.categories]);
+  }, [data.api.brands, data.api.categories, data.api.productGroups, data.permissions]);
 
   useEffect(() => {
     function handleKeyDown(event) {
@@ -9939,6 +10520,7 @@ function QuickAddProductModal({ data, initialName = "", onClose, onCreated }) {
 
   const selectedCategory = refs.categories.find((category) => String(category.id) === String(form.category));
   const selectedBrand = refs.brands.find((brand) => String(brand.id) === String(form.brand));
+  const selectedGroup = refs.groups.find((group) => String(group.id) === String(form.group));
 
   function updateField(name, value) {
     setForm((current) => ({ ...current, [name]: value }));
@@ -9952,12 +10534,12 @@ function QuickAddProductModal({ data, initialName = "", onClose, onCreated }) {
       throw new Error("Enter a name before creating a catalogue value.");
     }
     const pendingId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const isCategory = kind === "category";
-    const pending = isCategory
-      ? { id: pendingId, name: trimmedName, __pending: true }
-      : { id: pendingId, brandname: trimmedName, __pending: true };
-    const listName = isCategory ? "categories" : "brands";
-    const labelField = isCategory ? "name" : "brandname";
+    const { listName, labelField } = {
+      category: { listName: "categories", labelField: "name" },
+      brand: { listName: "brands", labelField: "brandname" },
+      group: { listName: "groups", labelField: "name" }
+    }[kind];
+    const pending = { id: pendingId, [labelField]: trimmedName, __pending: true };
     setRefs((current) => ({
       ...current,
       [listName]: [...current[listName], pending].sort((left, right) =>
@@ -9989,6 +10571,14 @@ function QuickAddProductModal({ data, initialName = "", onClose, onCreated }) {
         payload.append("brand", form.brand);
       }
       payload.append("model_name_input", form.modelName.trim());
+      if (selectedGroup?.__pending) {
+        payload.append("group_name_input", selectedGroup.name);
+        if (form.groupLowStockAlert.trim()) {
+          payload.append("group_low_stock_alert_input", form.groupLowStockAlert.trim());
+        }
+      } else if (form.group) {
+        payload.append("group", form.group);
+      }
       payload.append("barcode", form.barcode.trim());
       if (form.reorderStockLevel.trim()) {
         payload.append("reorder_stock_level", form.reorderStockLevel);
@@ -10065,8 +10655,22 @@ function QuickAddProductModal({ data, initialName = "", onClose, onCreated }) {
           <Field label="Barcode">
             <TextInput value={form.barcode} onChange={(value) => updateField("barcode", value)} placeholder="EAN-13 or UPC barcode (optional)" />
           </Field>
+          <ProductGroupField
+            value={form.group}
+            onChange={(value) => updateField("group", value)}
+            groups={refs.groups}
+            selectedGroup={selectedGroup}
+            loading={refsLoading}
+            onCreate={data.permissions?.canCreateProductGroup ? (name) => createLookupOption("group", name) : undefined}
+            alertValue={form.groupLowStockAlert}
+            onAlertChange={(value) => updateField("groupLowStockAlert", value)}
+            productAlert={form.reorderStockLevel.trim()}
+          />
           <Field label="Low Stock Alert">
             <TextInput value={form.reorderStockLevel} onChange={(value) => updateField("reorderStockLevel", value)} placeholder="Optional" />
+            {selectedGroup ? (
+              <span className="mt-2 block text-xs text-zinc-500">Ignored while this product is in a group: the group's alert applies.</span>
+            ) : null}
           </Field>
         </div>
         <div className="flex justify-end gap-3 border-t border-nexus-line px-5 py-4">
@@ -10180,7 +10784,7 @@ function CreateDeliveryPage({ data }) {
   const filteredUnits = units
     .filter((unit) => !selectedIds.has(unit.id))
     .filter((unit) => {
-      const text = `${unit.product_name} ${unit.product_sku} ${unit.product_barcode || ""} ${unit.serial_number}`.toLowerCase();
+      const text = `${unit.product_name} ${unit.product_sku} ${unit.product_barcode || ""} ${unit.group_name || ""} ${unit.serial_number}`.toLowerCase();
       return query && text.includes(query.toLowerCase());
     })
     .slice(0, 8);
@@ -10895,6 +11499,352 @@ function PartyLink({ party, fallback = "-" }) {
   );
 }
 
+// The Group picker of the product forms: pick a group, or type a new name to
+// create it together with the product (nothing is saved until the product is).
+// A new group's Low Stock Alert starts at this product's own level.
+function ProductGroupField({ value, onChange, groups, selectedGroup, loading, onCreate, alertValue, onAlertChange, productAlert }) {
+  const existing = selectedGroup && !selectedGroup.__pending ? selectedGroup : null;
+  return (
+    <>
+      <SearchableCreatableSelect
+        label="Group"
+        value={value}
+        onChange={onChange}
+        options={groups}
+        getOptionLabel={(item) => item.name}
+        onCreate={onCreate}
+        placeholder={onCreate ? "Search or create group (optional)..." : "Search group (optional)..."}
+        helperText="Interchangeable products in one group share a merged stock count and one Low Stock Alert."
+        loading={loading}
+      />
+      {value ? (
+        <button
+          type="button"
+          onClick={() => onChange("")}
+          className="-mt-3 justify-self-start text-xs font-semibold text-[var(--bim-orange-text)] hover:text-white"
+        >
+          Remove from group
+        </button>
+      ) : null}
+      {selectedGroup?.__pending ? (
+        <Field label="Group Low Stock Alert">
+          <TextInput
+            value={alertValue}
+            onChange={onAlertChange}
+            placeholder={productAlert ? `Starts at ${productAlert}, this product's own alert` : "Optional"}
+          />
+        </Field>
+      ) : null}
+      {existing ? (
+        <p className="-mt-3 text-xs text-zinc-500">
+          This group's Low Stock Alert is {existing.low_stock_alert}. It applies to every product in the group.
+        </p>
+      ) : null}
+    </>
+  );
+}
+
+// Inventory > Groups: interchangeable products counted and alerted on as one.
+// Groups are created from a product's Group field; here they are renamed, given
+// a Low Stock Alert, deactivated, and their members and merged stock are shown.
+function InventoryGroupsPage({ data }) {
+  const canEdit = Boolean(data.permissions?.canEditProductGroup);
+  const [groups, setGroups] = useState([]);
+  const [query, setQuery] = useState("");
+  const [showInactive, setShowInactive] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+  // ?open=<id> (from a product page or search) opens that group.
+  const [openIds, setOpenIds] = useState(() => {
+    const id = Number(new URLSearchParams(window.location.search).get("open"));
+    return new Set(id ? [id] : []);
+  });
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    async function loadGroups() {
+      setError("");
+      try {
+        const response = await fetch(`${data.api.productGroups}?all=1`, { signal: controller.signal });
+        if (response.status === 401 || response.status === 403) {
+          throw new Error("Viewing product groups requires group access.");
+        }
+        if (!response.ok) throw new Error("Could not load product groups.");
+        setGroups(await response.json());
+      } catch (loadError) {
+        if (loadError.name !== "AbortError") setError(loadError.message);
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }
+
+    loadGroups();
+    return () => controller.abort();
+  }, [data.api.productGroups, reloadKey]);
+
+  const needle = query.trim().toLowerCase();
+  const visibleGroups = groups.filter(
+    (group) =>
+      (showInactive || group.isactive) &&
+      (!needle ||
+        group.name.toLowerCase().includes(needle) ||
+        group.members.some(
+          (member) => member.display_name.toLowerCase().includes(needle) || member.sku.toLowerCase().includes(needle)
+        ))
+  );
+  const inactiveCount = groups.filter((group) => !group.isactive).length;
+
+  function toggleOpen(groupId) {
+    setOpenIds((current) => {
+      const next = new Set(current);
+      if (next.has(groupId)) next.delete(groupId);
+      else next.add(groupId);
+      return next;
+    });
+  }
+
+  return (
+    <Shell data={data}>
+      <header className="mb-5 border-b border-nexus-line pb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <a href={data.routes.inventory} className="mb-2 inline-flex text-sm font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
+            Back to Inventory
+          </a>
+          <h1 className="bim-page-title">Product Groups</h1>
+          <p className="bim-page-description">
+            Interchangeable products share one merged stock count and one Low Stock Alert. Units and records stay on the real product.
+          </p>
+        </div>
+      </header>
+
+      <section className="rounded-lg border border-nexus-line bg-nexus-panel p-3">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <SearchBar
+            className="flex-1"
+            inputClassName="placeholder:text-zinc-500"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search groups by name or member product..."
+          />
+          {inactiveCount ? (
+            <label className="inline-flex items-center gap-2 text-sm text-zinc-400">
+              <input
+                type="checkbox"
+                checked={showInactive}
+                onChange={(event) => setShowInactive(event.target.checked)}
+                className="h-4 w-4 rounded border-nexus-line bg-black"
+              />
+              Show inactive ({inactiveCount})
+            </label>
+          ) : null}
+          <span className="text-xs text-zinc-500">{groups.filter((group) => group.isactive).length} active</span>
+        </div>
+      </section>
+
+      <div className="mt-4 space-y-3">
+        {loading ? (
+          <p className="rounded-lg border border-nexus-line bg-nexus-panel px-4 py-6 text-sm text-zinc-500">Loading groups...</p>
+        ) : error ? (
+          <p className="rounded-lg border border-nexus-line bg-nexus-panel px-4 py-6 text-sm text-[var(--tone-red-text)]">{error}</p>
+        ) : visibleGroups.length ? (
+          visibleGroups.map((group) => (
+            <ProductGroupCard
+              key={group.id}
+              data={data}
+              group={group}
+              open={openIds.has(group.id)}
+              onToggle={() => toggleOpen(group.id)}
+              canEdit={canEdit}
+              onChanged={() => setReloadKey((current) => current + 1)}
+            />
+          ))
+        ) : (
+          <EmptyState
+            className="rounded-lg border border-nexus-line bg-nexus-panel"
+            title={groups.length ? "No group matches this search." : "No product groups yet."}
+            description={
+              groups.length
+                ? "Try another name or product."
+                : "Open a product, choose Edit Product, and use its Group field to create a group."
+            }
+          />
+        )}
+      </div>
+    </Shell>
+  );
+}
+
+function ProductGroupCard({ data, group, open, onToggle, canEdit, onChanged }) {
+  const { showSuccess, showError } = useToast();
+  const [name, setName] = useState(group.name);
+  const [alertLevel, setAlertLevel] = useState(String(group.low_stock_alert));
+  const [saving, setSaving] = useState(false);
+  const [showEmpty, setShowEmpty] = useState(false);
+  const [historyKey, setHistoryKey] = useState(0);
+
+  useEffect(() => {
+    setName(group.name);
+    setAlertLevel(String(group.low_stock_alert));
+  }, [group.name, group.low_stock_alert]);
+
+  const stock = group.stock;
+  const members = group.members || [];
+  const emptyMembers = members.filter((member) => member.total_units === 0);
+  const shownMembers = showEmpty ? members : members.filter((member) => member.total_units > 0);
+  const changed = name.trim() !== group.name || alertLevel.trim() !== String(group.low_stock_alert);
+
+  async function save(body, message) {
+    setSaving(true);
+    try {
+      const response = await fetch(`${data.api.productGroups}${group.id}/`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": data.csrfToken },
+        body: JSON.stringify(body)
+      });
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        throw new Error(firstApiError(details) || "Could not save the group.");
+      }
+      showSuccess(message);
+      setHistoryKey((current) => current + 1);
+      onChanged();
+    } catch (saveError) {
+      showError(saveError.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function saveDetails() {
+    const level = alertLevel.trim();
+    if (!name.trim()) {
+      showError("Group name is required.");
+      return;
+    }
+    if (!/^\d+$/.test(level)) {
+      showError("Low Stock Alert must be a whole number, 0 or more.");
+      return;
+    }
+    save({ name: name.trim(), low_stock_alert: Number(level) }, "Group saved.");
+  }
+
+  function deactivate() {
+    const count = members.length;
+    const confirmed = window.confirm(
+      `Deactivate ${group.name}? ${count ? `Its ${count} ${count === 1 ? "product leaves" : "products leave"} the group and ${count === 1 ? "goes" : "go"} back to ${count === 1 ? "its" : "their"} own Low Stock Alert. ` : ""}Units and records are not affected.`
+    );
+    if (confirmed) save({ isactive: false }, "Group deactivated.");
+  }
+
+  return (
+    <article className={`overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel ${group.isactive ? "" : "opacity-75"}`}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex w-full items-center gap-3 px-4 py-4 text-left hover:bg-nexus-panel2"
+      >
+        <ChevronRight className={`h-4 w-4 shrink-0 text-zinc-400 transition-transform ${open ? "rotate-90" : ""}`} />
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-zinc-800 text-[var(--bim-orange-text)]">
+          <Icon name={workflowMeta.product_groups.icon} className="h-4 w-4" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate font-semibold text-white">{group.name}</span>
+          <span className="mt-1 block truncate text-xs text-zinc-500">
+            {group.isactive
+              ? `${members.length} ${members.length === 1 ? "product" : "products"} - Low Stock Alert ${group.low_stock_alert}`
+              : "Deactivated"}
+          </span>
+        </span>
+        {stock ? (
+          <span className="hidden shrink-0 text-right text-xs text-zinc-400 sm:block">
+            <span className="block text-sm font-semibold text-white">{stock.available_units} available</span>
+            {stock.total_units} in stock
+          </span>
+        ) : null}
+        <ProductStatus product={{ isactive: group.isactive, is_low_stock: group.is_low_stock, is_out_of_stock: group.is_out_of_stock }} />
+      </button>
+
+      {open ? (
+        <div className="space-y-5 border-t border-nexus-line p-4">
+          {group.isactive ? (
+            <>
+              <div>
+                <h3 className="bim-label">Members</h3>
+                {shownMembers.length ? (
+                  <ul className="mt-2 divide-y divide-nexus-line rounded-md border border-nexus-line">
+                    {shownMembers.map((member) => (
+                      <li key={member.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-3 py-2 text-sm">
+                        <span className="min-w-0">
+                          <a href={`/inventory/products/${member.id}/`} className="font-semibold text-white hover:text-[var(--bim-orange-hover)]">
+                            {member.display_name}
+                          </a>
+                          <span className="ml-2 font-mono text-xs text-zinc-500">{member.sku}</span>
+                        </span>
+                        <span className="text-xs text-zinc-400">
+                          {member.available_units} available - {member.reserved_units} reserved - {member.total_units} in stock
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 text-sm text-zinc-500">{members.length ? "No member has stock." : "No products in this group."}</p>
+                )}
+                {emptyMembers.length ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowEmpty((current) => !current)}
+                    className="mt-2 text-xs font-semibold text-[var(--bim-orange-text)] hover:text-white"
+                  >
+                    {showEmpty ? "Hide empty" : `Show empty (${emptyMembers.length})`}
+                  </button>
+                ) : null}
+              </div>
+
+              {canEdit ? (
+                <div>
+                  <h3 className="bim-label">Group details</h3>
+                  <div className="mt-2 grid gap-4 md:grid-cols-2">
+                    <Field label="Group Name">
+                      <TextInput value={name} onChange={setName} placeholder="Group name" />
+                    </Field>
+                    <Field label="Low Stock Alert">
+                      <TextInput value={alertLevel} onChange={setAlertLevel} placeholder="0 turns the alert off" />
+                    </Field>
+                  </div>
+                  <p className="mt-2 text-xs text-zinc-500">
+                    The group is low on stock when its merged available count is at or below this number. Members' own alerts are ignored.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-3">
+                    <Button type="button" variant="primary" loading={saving} disabled={!changed || saving} onClick={saveDetails}>
+                      <Save className="h-4 w-4" />
+                      Save Group
+                    </Button>
+                    <Button type="button" variant="outline" disabled={saving} onClick={deactivate}>
+                      Deactivate
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+            </>
+          ) : canEdit ? (
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-sm text-zinc-400">This group is deactivated and has no members. Reactivate it to use it again.</p>
+              <Button type="button" variant="outline" loading={saving} onClick={() => save({ isactive: true }, "Group reactivated.")}>
+                Reactivate
+              </Button>
+            </div>
+          ) : null}
+
+          <RecordHistory data={data} type="product_group" id={group.id} refreshKey={historyKey} />
+        </div>
+      ) : null}
+    </article>
+  );
+}
+
 function SearchableCreatableSelect({
   label,
   required = false,
@@ -11027,6 +11977,7 @@ function AddProductPreview({
   form,
   selectedCategory,
   selectedBrand,
+  selectedGroup,
   skuPreview,
   requiredDone,
   requiredTotal,
@@ -11041,6 +11992,7 @@ function AddProductPreview({
   ];
   const optionalFields = [
     ["Barcode", form.barcode],
+    ["Group", selectedGroup?.name],
     ["Low Stock Alert", form.reorderStockLevel],
     ["Product Image", form.imageFile]
   ];
@@ -11078,6 +12030,7 @@ function AddProductPreview({
           <DetailRow label="Category" value={selectedCategory?.name || "-"} />
           <DetailRow label="Brand" value={selectedBrand?.brandname || "-"} />
           <DetailRow label="Model" value={form.modelName || "-"} />
+          <DetailRow label="Group" value={selectedGroup?.name || "-"} />
           <DetailRow label="Tracking Method" value="Serial Number Tracking" strong />
         </dl>
 
@@ -11118,7 +12071,9 @@ function AddProductPreview({
 const API_FIELD_LABELS = {
   descript: "Product Name",
   model_name_input: "Model",
-  reorder_stock_level: "Low Stock Alert"
+  reorder_stock_level: "Low Stock Alert",
+  group_name_input: "Group",
+  group_low_stock_alert_input: "Group Low Stock Alert"
 };
 
 function humanizeFieldName(field) {
@@ -11901,6 +12856,10 @@ const appRoutes = [
   {
     match: (path) => path.startsWith("/operations"),
     render: (data) => <OperationsPage data={data} />
+  },
+  {
+    match: (path) => path === "/inventory/groups/",
+    render: (data) => <InventoryGroupsPage data={data} />
   },
   {
     match: (path) => path.startsWith("/inventory/products/new"),
