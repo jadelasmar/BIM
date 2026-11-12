@@ -35,6 +35,39 @@ if not ENV_FILE.exists():
 environ.Env.read_env(ENV_FILE, overwrite=True)
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "bim.settings")
 
+# Must match the development default in bim/settings.py.
+INSECURE_SECRET_KEY = "django-insecure-*85%i(ofy9ff93u84@&*-6)w$wy0b)9cr7ft^^rya@s=blcwao"
+
+
+def check_production_config():
+    """Return a list of problems that make this config unsafe to serve."""
+    problems = []
+    secret = os.environ.get("DJANGO_SECRET_KEY", "").strip()
+    if not secret:
+        problems.append("DJANGO_SECRET_KEY is missing from .env.production.")
+    elif secret == INSECURE_SECRET_KEY or secret.startswith("django-insecure-"):
+        problems.append("DJANGO_SECRET_KEY is the insecure development default; set a real secret.")
+    if os.environ.get("DJANGO_DEBUG", "").strip().lower() in {"1", "true", "yes", "on"}:
+        problems.append("DJANGO_DEBUG is true; set DJANGO_DEBUG=False for production.")
+    return problems
+
+
+_problems = check_production_config()
+if _problems:
+    raise SystemExit(
+        "Refusing to start BIM Nexus in production:\n  - " + "\n  - ".join(_problems)
+    )
+
+_email_backend = os.environ.get("BIM_EMAIL_BACKEND", "")
+if not _email_backend or _email_backend.endswith((".console.EmailBackend", ".dummy.EmailBackend", ".locmem.EmailBackend")):
+    print(
+        "WARNING: no real email backend configured (BIM_EMAIL_BACKEND="
+        f"{_email_backend or 'unset -> console'}). Password-setup emails will be "
+        "printed to this log, not delivered. Set BIM_EMAIL_BACKEND/BIM_EMAIL_HOST/... "
+        "in .env.production.",
+        file=sys.stderr,
+    )
+
 if __name__ == "__main__":
     from waitress import serve
 

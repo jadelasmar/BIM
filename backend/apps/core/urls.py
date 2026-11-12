@@ -47,5 +47,4 @@ urlpatterns = [
     path("assets/", views.module_launcher, name="assets"),
     path("knowledge-base/", views.module_launcher, name="knowledge_base"),
     path("settings/", views.module_launcher, name="settings"),
-    path("test/print-label/", views.module_launcher, name="test_print_label"),
 ]

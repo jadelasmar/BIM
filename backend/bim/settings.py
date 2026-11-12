@@ -110,6 +110,15 @@ DATABASES = {
         # 'db.sqlite3' for local dev; production sets DJANGO_DB_NAME=db_prod.sqlite3
         # via .env.production (see run_production.py) so the two never collide.
         'NAME': BASE_DIR.parent / env('DJANGO_DB_NAME', default='db.sqlite3'),
+        'OPTIONS': {
+            # select_for_update() is a no-op on SQLite, so the services' read-validate-write
+            # relies on the write lock instead. IMMEDIATE takes that lock when an atomic
+            # block begins, so overlapping workflows queue (up to `timeout` seconds)
+            # rather than race or fail with "database is locked". WAL is deliberately off:
+            # deploy/rollback.ps1 copy the main .sqlite3 file only, not -wal/-shm.
+            'transaction_mode': 'IMMEDIATE',
+            'timeout': 20,
+        },
     }
 }
 

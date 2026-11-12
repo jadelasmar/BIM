@@ -62,9 +62,6 @@ class ProductGroup(models.Model):
     def __str__(self):
         return self.name
 
-    def active_members(self):
-        return self.products.filter(isactive=True)
-
     @property
     def available_units(self):
         return ProductUnit.objects.filter(

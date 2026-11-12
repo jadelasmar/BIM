@@ -107,13 +107,13 @@ class ProductAdminTests(SimpleTestCase):
         )
         self.assertEqual(
             self.product_admin.list_filter,
-            ("category", "model__brand", "isactive"),
+            ("category", "model__brand", "group", "isactive"),
         )
         self.assertEqual(self.product_admin.readonly_fields, ("sku", "crdate"))
         self.assertEqual(self.product_admin.ordering, ("descript", "sku"))
         self.assertEqual(
             self.product_admin.list_select_related,
-            ("category", "model__brand"),
+            ("category", "model__brand", "group"),
         )
 
 
@@ -1843,6 +1843,7 @@ class BIMPOSAccessTests(TestCase):
             set(actions_by_label),
             {
                 "Add Product",
+                "Product Groups",
                 "Create Delivery",
                 "Create Reservation",
                 "Create Temporary Assignment",
@@ -2084,6 +2085,7 @@ class BIMPOSAccessTests(TestCase):
             set(actions_by_label),
             {
                 "Add Product",
+                "Product Groups",
                 "Create Delivery",
                 "Create Reservation",
                 "Create Temporary Assignment",
@@ -6945,3 +6947,80 @@ class InventoryUnitLocationTests(TestCase):
         row = self.client.get("/api/stock/product-units/").json()[0]
 
         self.assertNotIn("location", row)
+
+
+class WriteEndpointPermissionMatrixTests(TestCase):
+    """Every write route in api_urls.py refuses Viewer, and the record-permission +
+    CHANGE_PRODUCT_UNIT pairing (CLAUDE.md convention 2) holds on unit-mutating routes."""
+
+    WRITE_METHODS = ("post", "put", "patch", "delete")
+
+    # (path, record permission) for routes that also mutate units and so need both.
+    PAIRED = [
+        ("deliveries/", "add_deliveryrecord"),
+        ("deliveries/1/cancel/", "change_deliveryrecord"),
+        ("reservations/", "add_reservationrecord"),
+        ("reservations/1/release/", "change_reservationrecord"),
+        ("reservations/1/cancel/", "change_reservationrecord"),
+        ("issues/", "add_issuerecord"),
+        ("issues/1/return/", "change_issuerecord"),
+        ("repairs/", "add_repairrecord"),
+        ("repairs/1/resolve/", "change_repairrecord"),
+        ("removals/", "add_removalrecord"),
+        ("client-returns/", "add_clientreturnrecord"),
+        ("client-returns/1/cancel/", "change_clientreturnrecord"),
+    ]
+
+    def _write_routes(self):
+        from django.urls import get_resolver
+        from rest_framework.views import APIView
+
+        routes = []
+        for pattern in get_resolver().url_patterns:
+            if "api/stock" not in str(pattern.pattern):
+                continue
+            for sub in pattern.url_patterns:
+                view_class = getattr(sub.callback, "view_class", None) or sub.callback.cls
+                assert issubclass(view_class, APIView)
+                allowed = [m for m in self.WRITE_METHODS if m in view_class.http_method_names and hasattr(view_class, m)]
+                path = str(sub.pattern).replace("<int:pk>", "1")
+                for method in allowed:
+                    routes.append((method, "/api/stock/" + path))
+        return routes
+
+    def _user(self, name, *codenames):
+        user = User.objects.create_user(username=name, password="test-pass")
+        user.groups.clear()
+        user.user_permissions.set(Permission.objects.filter(codename__in=codenames))
+        return user
+
+    def test_viewer_is_refused_on_every_write_route(self):
+        from apps.stock.roles import prepare_bimpos_groups
+
+        prepare_bimpos_groups()
+        viewer = User.objects.create_user(username="matrix-viewer", password="test-pass")
+        viewer.groups.set(Group.objects.filter(name="Viewer"))
+        self.client.force_login(viewer)
+
+        routes = self._write_routes()
+        self.assertGreater(len(routes), 25)
+        for method, url in routes:
+            response = getattr(self.client, method)(url, {}, content_type="application/json")
+            self.assertEqual(response.status_code, 403, f"{method.upper()} {url} -> {response.status_code}")
+
+    def test_unauthenticated_is_refused_on_every_write_route(self):
+        for method, url in self._write_routes():
+            response = getattr(self.client, method)(url, {}, content_type="application/json")
+            self.assertIn(response.status_code, (401, 403), f"{method.upper()} {url}")
+
+    def test_unit_mutating_routes_need_both_permissions(self):
+        for index, (path, record_perm) in enumerate(self.PAIRED):
+            url = "/api/stock/" + path
+            method = "post"
+            record_only = self._user(f"rec-only-{index}", record_perm)
+            unit_only = self._user(f"unit-only-{index}", "change_productunit")
+            for user in (record_only, unit_only):
+                self.client.force_login(user)
+                response = self.client.post(url, {}, content_type="application/json")
+                self.assertEqual(response.status_code, 403, f"{method.upper()} {url} as {user.username}")
+

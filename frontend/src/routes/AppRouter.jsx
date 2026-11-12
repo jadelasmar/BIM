@@ -8103,10 +8103,6 @@ function inventoryRowName(row) {
   return String(row.kind === "group" ? row.name : row.product.display_name || "").toLowerCase();
 }
 
-function flattenInventoryRows(rows) {
-  return rows.flatMap((row) => (row.kind === "group" ? row.members : [row.product]));
-}
-
 // A member with nothing in stock (and nothing under the Status filter, if one
 // is set). Hidden in a group's expansion until "Show empty" is pressed.
 function isEmptyMember(product, statusFilter) {
