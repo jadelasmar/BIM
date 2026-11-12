@@ -13,7 +13,8 @@ $RepoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 
 $DbFile     = Join-Path $RepoRoot "db_prod.sqlite3"
 $BackupDir  = Join-Path $RepoRoot "backend\backups"
-$MaxBackups = 10
+$ShareDir   = "\\hostserver\Technical Dep\Jad\BIM Nexus"   # off-machine backup copy
+$KeepBackups = 1   # newest timestamped backups to keep, locally and on the share
 $PythonExe  = Join-Path $RepoRoot ".venv\Scripts\python.exe"
 
 function Fail($msg) {
@@ -30,19 +31,43 @@ if (-not (Test-Path $BackupDir)) { New-Item -ItemType Directory -Force -Path $Ba
 
 $timestamp  = Get-Date -Format "yyyyMMdd_HHmmss"
 $backupFile = Join-Path $BackupDir "db_prod_$timestamp.sqlite3"
-try {
-    Copy-Item $DbFile $backupFile -ErrorAction Stop
-} catch {
-    Fail "could not create backup: $($_.Exception.Message)"
+# Use SQLite's online backup API (safe while the service is running), then check
+# the copy with PRAGMA integrity_check. A failed copy is renamed, never deleted.
+$backupScript = "import sqlite3,sys; s=sqlite3.connect(sys.argv[1]); d=sqlite3.connect(sys.argv[2]); s.backup(d); r=d.execute('PRAGMA integrity_check').fetchone()[0]; d.close(); s.close(); sys.exit(0 if r == 'ok' else 1)"
+& $PythonExe -c $backupScript $DbFile $backupFile
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path $backupFile) -or (Get-Item $backupFile).Length -eq 0) {
+    if (Test-Path $backupFile) { Move-Item $backupFile "$backupFile.failed" }
+    Fail "could not create a valid backup of db_prod.sqlite3 - nothing was changed"
 }
-Write-Host "Backup created: $backupFile"
+Write-Host "Backup created and verified: $backupFile"
 
-$existingBackups = Get-ChildItem $BackupDir -Filter "db_prod_*.sqlite3" | Sort-Object LastWriteTime -Descending
-if ($existingBackups.Count -gt $MaxBackups) {
-    $existingBackups | Select-Object -Skip $MaxBackups | ForEach-Object {
-        Remove-Item $_.FullName -Force
-        Write-Host "Pruned old backup: $($_.Name)"
-    }
+# Off-machine copy: the verified backup is also copied to the network share and the
+# copy is checked by hash. Only after BOTH copies are confirmed are older backups removed.
+if (-not (Test-Path -LiteralPath $ShareDir)) {
+    Fail "backup share not reachable: $ShareDir - nothing was changed. Check the network/permissions and run the deploy again."
+}
+try {
+    Copy-Item -LiteralPath $backupFile -Destination $ShareDir -ErrorAction Stop
+} catch {
+    Fail "could not copy the backup to $ShareDir : $($_.Exception.Message) - nothing was changed"
+}
+$shareCopy = Join-Path $ShareDir (Split-Path $backupFile -Leaf)
+if (-not (Test-Path -LiteralPath $shareCopy) -or
+    (Get-FileHash -LiteralPath $shareCopy).Hash -ne (Get-FileHash -LiteralPath $backupFile).Hash) {
+    Fail "the copy on $ShareDir does not match the local backup - nothing was changed"
+}
+Write-Host "Backup copied and verified on share: $shareCopy"
+
+# Keep only the newest $KeepBackups timestamped backups, locally and on the share.
+# Pre-rollback safety copies (db_prod_prerollback_*) are never removed.
+foreach ($dir in @($BackupDir, $ShareDir)) {
+    Get-ChildItem -LiteralPath $dir -Filter "db_prod_20*.sqlite3" |
+        Sort-Object Name -Descending |
+        Select-Object -Skip $KeepBackups |
+        ForEach-Object {
+            Remove-Item -LiteralPath $_.FullName -Force
+            Write-Host "Removed old backup: $($_.FullName)"
+        }
 }
 
 # 2. git pull (fast-forward only: never creates a merge on the server)

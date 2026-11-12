@@ -98,3 +98,12 @@ The user tests changes manually in the browser and reports back specific bugs or
 - When reordering fields on a form, also check and update any summary/preview panel showing the same fields, so both stay in sync — don't treat them as separate tasks unless told otherwise.
 - After a fix, state plainly what to test and how (e.g. "reload the receiving page and confirm the cancel button now works for IT Support users") so the user's manual pass is fast and targeted.
 - If a reported bug turns out to require a larger or riskier change than described, say so and propose the plan/spec path before proceeding, rather than quietly expanding scope.
+
+## Tooling
+
+- Tailwind is v3.4, not v4. Don't use v4 syntax (`@import "tailwindcss"`, `@theme`, CSS-first config).
+- Use Context7 (MCP) for current Django 6, React 19, Vite 8 and Tailwind docs instead of relying on memory.
+- Use the `frontend-design` plugin for new UI, within the existing primitives and design system (`docs/DesignSystem.md`).
+- Verify UI with Playwright (MCP) against the local dev server (`http://127.0.0.1:8000/`, `db.sqlite3`) — that is a development database, so writes are fine. Never point it at production (`db_prod.sqlite3`). The user logs in themselves; don't create users or store credentials. A throwaway database is optional — see "UI smoke testing" in `docs/Development.md`.
+- `C:\Projects\BIM-Release` is the production checkout (a separate clone of the same repo, with `db_prod.sqlite3` and the deploy scripts). Development happens only in `C:\Projects\BIM`; never edit files in, or run anything against, `BIM-Release` unless the user explicitly asks. Changes reach it by commit and push from `BIM`, then the user runs `deploy.bat` in `BIM-Release` (it pulls from GitHub). Never run `deploy.bat` / `rollback.bat` yourself.
+- `.claude/hooks/guard.mjs` blocks edits to generated files (`backend/static/frontend/`, `backend/staticfiles/`) and asks before any `.status` assignment outside `services.py` (convention 1).

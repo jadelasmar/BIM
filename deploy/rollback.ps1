@@ -57,6 +57,16 @@ if ($backupChoice) {
         Write-Host "Backup file not found: $backupPath - not restarting service" -ForegroundColor Red
         exit 1
     }
+
+    # Never overwrite the live database without keeping a copy of it first.
+    $safetyFile = Join-Path $BackupDir ("db_prod_prerollback_{0}.sqlite3" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
+    try {
+        Copy-Item $DbFile $safetyFile -ErrorAction Stop
+    } catch {
+        Write-Host "Could not save the current database before restoring - not restoring: $($_.Exception.Message)" -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "Current database saved as: $safetyFile"
     Write-Host "`n--- restoring DB from $backupChoice ---"
     Copy-Item $backupPath $DbFile -Force
     Write-Host "Restored: $DbFile"

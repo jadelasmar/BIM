@@ -12,26 +12,25 @@ Use a fresh local virtual environment. Do not use checked-in `venv` or `.venv` f
 
 Recommended extensions:
 
+- Claude Code
 - Codex / OpenAI coding agent
 - Python
 - Pylance
 - Django
-- Djaneiro - Django Snippets
 - Error Lens
-- ESLint
-- Prettier
 - SQLite Viewer
 - Tailwind CSS IntelliSense
 
 Purpose:
 
 - Python and Pylance are used for Django backend development.
-- Django and Djaneiro provide Django template and project support.
+- Django provides Django template and project support.
 - Error Lens surfaces editor diagnostics inline.
-- ESLint and Prettier are available for frontend editing, but are not run automatically because the project does not currently include their configuration.
+- ESLint and Prettier are intentionally not recommended: the project has no configuration for them. Add them back to `.vscode/extensions.json` together with their config.
 - SQLite Viewer supports inspection of the local development database.
 - Tailwind CSS IntelliSense is used for Tailwind class autocomplete and validation.
-- Codex is used as the coding assistant.
+- Claude Code and Codex are used as coding assistants. Claude Code project tooling (plugins, MCP servers, hooks) is configured in `.claude/settings.json`, `.mcp.json` and `.claude/hooks/`.
+- The Claude Code LSP plugins (`typescript-lsp`, `pyright-lsp`) need their language servers installed separately (`typescript-language-server`, `pyright`).
 
 Ruff is not currently configured as a project tool. Add it only with project configuration and a documented verification command; do not enable formatter-on-save globally.
 
@@ -169,6 +168,24 @@ Do not commit local database files.
 
 For first office testing, take a copy of `db.sqlite3` before entering real test data and after each test session. Also back up `backend/media/` if uploaded product images or files are used.
 
+## UI smoke testing (Playwright)
+
+The project `.mcp.json` registers a Playwright MCP server so Claude Code can drive the app in a browser. `db.sqlite3` is the local development database, so Playwright may run against the normal dev server at `http://127.0.0.1:8000/` and create or edit records there. Log in yourself in the Playwright browser window; Claude does not create users or store credentials. Never point it at production (`db_prod.sqlite3`); production changes only go out through a build and release.
+
+Optionally, to keep dev data untouched, run a second dev server against a throwaway database. `DJANGO_DB_NAME` selects the SQLite filename at the repo root (see `backend/bim/settings.py`):
+
+```powershell
+cd backend
+$env:DJANGO_DB_NAME = "smoke_ui.sqlite3"
+python manage.py migrate
+python manage.py createsuperuser
+python manage.py runserver 8001
+```
+
+Point Playwright at `http://127.0.0.1:8001/`. Migrating the throwaway file also creates the Administrator / IT Support / Viewer groups. `*.sqlite3` is already in `.gitignore`, so the file is never committed; delete it any time to reset. Create the test user and enter its password yourself; Claude should not create users or store credentials. If you want Vite hot reload, also set `BIM_VITE_DEV_SERVER` as described above.
+
+The first time Claude Code opens this project it asks you to approve the project-scoped `playwright` and `context7` MCP servers (`claude mcp list` shows them as "Pending approval" until then). On native Windows they are wrapped as `cmd /c npx ...`, because Claude Code cannot spawn `npx` directly there.
+
 ## Deployment Notes
 
 - Set a real `DJANGO_SECRET_KEY`.
@@ -179,11 +196,17 @@ For first office testing, take a copy of `db.sqlite3` before entering real test 
 - Replace SQLite if production requires a server database.
 - Use [Office Testing](OfficeTesting.md) for the first internal deployment checklist, user roles, database backups, and stock workflow smoke tests.
 
+### Release checkout
+
+`C:\Projects\BIM-Release` is a separate clone of the same repository used for production. It holds `db_prod.sqlite3` and runs the scripts below. Develop and test in `C:\Projects\BIM`. Once a change is verified, commit and push it to GitHub, then run `deploy.bat` in `BIM-Release`. It is a thin wrapper (with `rollback.bat`) around the versioned `deploy\deploy.ps1`, which pulls from GitHub, so nothing is copied from `BIM` directly and unpushed work never reaches production.
+
 ### Production deploy scripts
 
 The scripts live in `deploy/` and are run on the production server (see `backend/run_production.py` for how the app itself runs):
 
-- `deploy\deploy.ps1` backs up `db_prod.sqlite3`, runs `git pull --ff-only`, rebuilds the frontend, runs `collectstatic` and `migrate`, restarts the `BIMNexus` service, then checks that the site answers and serves the new frontend build. It stops on the first failure and prints which step failed.
-- `deploy\rollback.ps1` stops the service, lets you pick a commit and/or a database backup to go back to, and starts it again.
+- `deploy\deploy.ps1` backs up `db_prod.sqlite3` to `backend\backups\` using SQLite's online backup, verifies the copy with `PRAGMA integrity_check` and stops if it is not valid. The verified backup is also copied to `\\hostserver\Technical Dep\Jad\BIM Nexus` and checked by hash; if the share is unreachable or the copy does not match, the deploy stops before changing anything. Only after both copies are confirmed does it delete older timestamped backups, locally and on the share, keeping the newest `$KeepBackups` (default 1, set at the top of the script). `db_prod_prerollback_*` safety copies are never deleted. Then it runs `git pull --ff-only`, rebuilds the frontend, runs `collectstatic` and `migrate`, restarts the `BIMNexus` service, then checks that the site answers and serves the new frontend build. It stops on the first failure and prints which step failed.
+- `deploy\rollback.ps1` stops the service, lets you pick a commit and/or a database backup to go back to, and starts it again. Before restoring a backup it saves the current database as `db_prod_prerollback_<timestamp>.sqlite3`, so a restore never destroys data.
+
+`db_prod.sqlite3` and `backend\backups\` are ignored by git and are never touched by `git pull`. The share copy protects against a disk failure on the server. The deploying Windows account needs write access to the share.
 - `deploy\grant-restart-permission.ps1` is a **one-time** setup, run in an Administrator PowerShell. It lets the deploying Windows account start and stop only the `BIMNexus` service, so `deploy.ps1` finishes without an elevated prompt. Without it the deploy completes every step except the restart, which then needs an Administrator window.
 
