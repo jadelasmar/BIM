@@ -178,6 +178,7 @@ Current ProductUnit status badges:
 - `issued`
 - `sold`
 - `repair`
+- `removed`
 - `inactive`
 
 Do not expose `returned` or `damaged` as active stock-unit badge statuses.

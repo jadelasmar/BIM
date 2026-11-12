@@ -156,6 +156,14 @@ Django reads these values from the OS environment, or from `backend/.env` if pre
 - `BIM_ADMIN_EMAIL`: recipient for login-page account access requests; defaults to `jad.alasmar@bimpos.com` when unset.
 - `BIM_VITE_DEV_SERVER`
 
+## Database Concurrency
+
+Production runs under Waitress with several threads on one SQLite file. `select_for_update()` does nothing on SQLite, so `backend/bim/settings.py` sets `OPTIONS = {"transaction_mode": "IMMEDIATE", "timeout": 20}`: every `transaction.atomic` block (all of `services.py`) takes the write lock when it starts, so overlapping workflows queue instead of racing, and the second one re-reads the unit, sees its new status and is refused with a normal validation error (HTTP 400) rather than "database is locked". WAL mode is deliberately not enabled: `deploy\rollback.ps1` copies only the main `.sqlite3` file, which would lose or corrupt `-wal`/`-shm` data.
+
+## Production Launcher Checks
+
+`backend/run_production.py` refuses to start when `DJANGO_SECRET_KEY` is missing or still the insecure development default, or when `DJANGO_DEBUG` is true. It prints a warning at start-up when `BIM_EMAIL_BACKEND` is unset or console/dummy/locmem, because password-setup emails would then be printed to the log instead of delivered.
+
 ## Local Database
 
 Local SQLite database:

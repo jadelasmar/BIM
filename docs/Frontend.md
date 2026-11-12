@@ -111,7 +111,7 @@ Keep components small and extract only when reused or clearly feature-specific.
 - `constants/statusStyles.js`: status badge classes and status icon metadata.
 - `constants/uiRegistry.js`: frontend tones and workflow metadata.
 
-Inventory stock status filters and badges use the office-ready ProductUnit set: available, reserved, issued, sold, repair, and inactive. Returned and damaged are not exposed as active stock statuses.
+Inventory stock status filters and badges use the office-ready ProductUnit set: available, reserved, issued, sold, repair, removed, and inactive. Returned and damaged are not exposed as active stock statuses.
 
 ## Hooks
 

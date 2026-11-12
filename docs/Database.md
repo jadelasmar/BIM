@@ -115,6 +115,7 @@ Statuses:
 - `issued`
 - `sold`
 - `repair`
+- `removed`
 - `inactive`
 
 When a unit is saved as sold, `sold_date` is filled if empty.

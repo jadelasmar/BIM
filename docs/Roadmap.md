@@ -24,6 +24,11 @@ This roadmap documents product direction, not implementation history.
 - Issue and return-from-issue workflow
 - Repair workflow
 - Client return workflow using sold-to-available and sold-to-repair transitions
+- Removal workflow (`RemovalRecord`, `RMV-YYYY-####`): permanently removes units from stock as damaged, lost, stolen, written off or other; create-only, no undo
+- Client Upgrade workflow (`ClientUpgradeRecord`, `/operations/upgrades/...`): tracks which clients still need a software upgrade and which are done; it never touches stock units
+- Product edit (`/inventory/products/<id>/edit/`) and Product Groups (`/inventory/groups/`)
+- Global search across products, groups, units, suppliers, clients and every record type, permission-gated
+- Record edit history (`RecordChange`) shown on detail pages, plus the per-unit journey from `StockMovement`
 - Office-ready ProductUnit status vocabulary
 - First office testing/deployment checklist
 - Supplier and Client master data modules
@@ -37,17 +42,17 @@ This roadmap documents product direction, not implementation history.
 
 ## Current Product Focus
 
-Prepare and run first internal office testing before moving to reports or secondary modules.
+First internal office testing is complete and passed. BIM Nexus is moving to shared use by several office users at once; the focus is stability, backups and keeping the docs current before reports or secondary modules.
 
 Receiving and delivery records now have operational create/list/detail workflows under `/operations/...`. Manual Add Unit remains a direct stock unit workflow under inventory.
 
-StockMovement now records receiving, receiving cancellation, delivery, delivery cancellation, reservation, reservation release, issue, issue return, repair creation, repair resolution, client return creation, manual Add Unit, and direct product-unit status update movements going forward. The ProductUnit status set is now available, reserved, issued, sold, repair, and inactive. Client Return v1 moves sold units to available or repair without adding a permanent returned status.
+StockMovement now records receiving, receiving cancellation, delivery, delivery cancellation, reservation, reservation release, issue, issue return, repair creation, repair resolution, client return creation, manual Add Unit, and direct product-unit status update movements going forward. The ProductUnit status set is available, reserved, issued, sold, repair, removed and inactive (`removed` is the permanent write-off status set by a Removal Record; `inactive` is only set by cancelling a receiving record or resolving a repair as deactivated). Client Return v1 moves sold units to available or repair without adding a permanent returned status.
 
 ## Near-Term Modules
 
-- Product edit workflow
 - Better stock history views
-- Broader office stock polish around search, audit views, and operational usability
+- Broader office stock polish around operational usability
+- Move uploaded media (`/media/`) behind authentication and include `backend/media/` in deploy backups
 
 ## Future Modules
 
@@ -57,8 +62,7 @@ StockMovement now records receiving, receiving cancellation, delivery, delivery 
 - Reports
 - Forms/Documents
 - Notifications
-- Audit logs
-- Search
+- A dedicated audit-log browser (record history and stock movements are recorded and shown per record/unit today; there is no system-wide log page)
 - Users/Roles operational UI
 
 ## Explicit Non-Goals

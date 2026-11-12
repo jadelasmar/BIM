@@ -20,6 +20,7 @@ Test these areas end to end:
 - Receive Stock
 - Receiving edit and cancel
 - Reservation create, release, and cancel
+- Removal (permanent write-off) and Client Upgrade records
 - Issue create and return
 - Repair create and resolve
 - Delivery create, edit, and cancel
@@ -189,7 +190,7 @@ Client Return:
 Dashboard and inventory:
 
 - Counts match the actual stock statuses.
-- Filters work for available, reserved, issued, sold, repair, and inactive.
+- Filters work for available, reserved, issued, sold, repair, removed, and inactive.
 
 Product movement history:
 

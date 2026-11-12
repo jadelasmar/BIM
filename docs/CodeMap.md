@@ -242,6 +242,7 @@ ProductUnit status vocabulary:
 - `issued`
 - `sold`
 - `repair`
+- `removed`
 - `inactive`
 
 `returned` and `damaged` are not active stock-unit statuses.

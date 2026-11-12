@@ -105,7 +105,10 @@ Stock API views:
 - repair resolve
 - supplier list/create/detail/update
 - client list/create/detail/update
-- client return list/create/detail
+- client return list/create/detail/cancel
+- removal list/create/detail (create-only)
+- client upgrade list/create/detail/cancel
+- record history, global search, recent activity, product groups, product unit journey
 - product movement history
 - inventory summary
 - lookup endpoints for categories, brands, models, suppliers, clients
@@ -148,7 +151,7 @@ Recent delivery panels and delivery activity are based on real active `DeliveryR
 
 Product movement history is based on real `StockMovement` rows. Product detail can read recent movement rows through `/api/stock/products/<id>/movements/`, which requires the stock movement view permission.
 
-Product unit statuses for office deployment are `available`, `reserved`, `issued`, `sold`, `repair`, and `inactive`. `returned` and `damaged` are not active status values. Client Return moves sold units back to available or repair through its own operational record.
+Product unit statuses for office deployment are `available`, `reserved`, `issued`, `sold`, `repair`, `removed`, and `inactive`. `removed` is the permanent status set by a Removal Record (damaged, lost, stolen, written off); `inactive` is only set by cancelling a receiving record or resolving a repair as deactivated. `returned` and `damaged` are not status values. Client Return moves sold units back to available or repair through its own operational record.
 
 Reservation record list search supports reservation number, reserved-for text, reason, product-unit serial number, product description, and product SKU. Reservation list/detail access uses the reservation record view permission. Creating a reservation requires both the reservation record add permission and product-unit change permission because selected stock units are marked reserved. Releasing or cancelling a reservation requires both reservation record change permission and product-unit change permission because linked units return to available stock.
 
