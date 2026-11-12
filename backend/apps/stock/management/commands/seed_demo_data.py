@@ -408,7 +408,7 @@ class Command(BaseCommand):
             cancelled = services.create_reservation_record(
                 unit_ids=[unit.pk for unit in reserved_released[2:]],
                 reserved_for_type="client",
-                reserved_for_client=clients[SEED_CLIENT_NAMES[1 %% len(SEED_CLIENT_NAMES)]],
+                reserved_for_client=clients[SEED_CLIENT_NAMES[1 % len(SEED_CLIENT_NAMES)]],
                 reason="Tentative hold pending budget approval",
                 notes=SEED_NOTE + "Demo reservation.",
                 reserved_by=performed_by,
