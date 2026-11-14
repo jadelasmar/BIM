@@ -24,7 +24,7 @@ $commitLines = @(git log --oneline -20)
 
 Write-Host "=== Recent DB backups ===" -ForegroundColor Cyan
 $backupFiles = @(Get-ChildItem $BackupDir -Filter "db_prod_*.sqlite3" -ErrorAction SilentlyContinue |
-    Sort-Object LastWriteTime -Descending | Select-Object -First 20)
+    Sort-Object LastWriteTime -Descending | Select-Object -First 30)
 
 $maxRows = [Math]::Max($commitLines.Count, $backupFiles.Count)
 Write-Host ""

@@ -215,8 +215,48 @@ The first time Claude Code opens this project it asks you to approve the project
 The scripts live in `deploy/` and are run on the production server (see `backend/run_production.py` for how the app itself runs):
 
 - `deploy\deploy.ps1` backs up `db_prod.sqlite3` to `backend\backups\` using SQLite's online backup, verifies the copy with `PRAGMA integrity_check` and stops if it is not valid. The verified backup is also copied to `\\hostserver\Technical Dep\Jad\BIM Nexus` and checked by hash; if the share is unreachable or the copy does not match, the deploy stops before changing anything. It then copies `backend\media` to a `media` folder on the same share with `robocopy /E` (adds and updates files, never deletes from the share; robocopy exit codes 0-7 are success, 8 or more stops the deploy; skipped with a message if `backend\media` does not exist). Only after the database copy is confirmed does it delete older timestamped backups, locally and on the share, keeping the newest `$KeepBackups` (default 1, set at the top of the script). `db_prod_prerollback_*` safety copies are never deleted. Then it runs `git pull --ff-only`, rebuilds the frontend, runs `collectstatic` and `migrate`, restarts the `BIMNexus` service, then checks that the site answers and serves the new frontend build. It stops on the first failure and prints which step failed.
-- `deploy\rollback.ps1` stops the service, lets you pick a commit and/or a database backup to go back to, and starts it again. Before restoring a backup it saves the current database as `db_prod_prerollback_<timestamp>.sqlite3`, so a restore never destroys data.
+- `deploy\rollback.ps1` stops the service, lets you pick a commit and/or a database backup to go back to, and starts it again. It lists the newest 30 `db_prod_*.sqlite3` files in `backend\backups\`, which includes deploy backups, daily backups (`db_prod_daily_*`) and pre-rollback safety copies. Before restoring a backup it saves the current database as `db_prod_prerollback_<timestamp>.sqlite3`, so a restore never destroys data.
+- `deploy\backup.ps1` is the scheduled daily backup (see [Scheduled daily backup](#scheduled-daily-backup) below).
 
 `db_prod.sqlite3` and `backend\backups\` are ignored by git and are never touched by `git pull`. The share copy protects against a disk failure on the server. The deploying Windows account needs write access to the share.
 - `deploy\grant-restart-permission.ps1` is a **one-time** setup, run in an Administrator PowerShell. It lets the deploying Windows account start and stop only the `BIMNexus` service, so `deploy.ps1` finishes without an elevated prompt. Without it the deploy completes every step except the restart, which then needs an Administrator window.
 
+
+### Scheduled daily backup
+
+`deploy\deploy.ps1` only backs up when a deploy runs. `deploy\backup.ps1` is meant to be run by Windows Task Scheduler so there is a recent backup on every working day. It does not stop the service and never changes the live database:
+
+1. Takes a SQLite online backup of `db_prod.sqlite3` into `backend\backups\db_prod_daily_YYYYMMDD_HHMMSS.sqlite3` with the project's python and checks the copy with `PRAGMA integrity_check`. A copy that fails the check is renamed to `*.failed`, never deleted.
+2. Copies the backup to `\\hostserver\Technical Dep\Jad\BIM Nexus` and verifies it by hash. A copy that does not match is renamed to `*.failed` on the share.
+3. Copies `backend\media` to the share's `media` folder with `robocopy /E` (adds and updates, never deletes from the share; exit codes 0-7 are success, 8 or more is a failure; skipped if `backend\media` does not exist).
+4. Keeps the newest 14 daily backups, locally and on the share. It only deletes files named `db_prod_daily_*.sqlite3`. Deploy backups, `db_prod_prerollback_*` copies and `*.failed` files are never touched, and `deploy.ps1`'s own pruning (`db_prod_20*.sqlite3`) never matches daily backups.
+
+Every run appends one line to `backend\backups\backup.log`: `OK` with a summary, or `FAILED` with the reason. Any failure exits non-zero, so Task Scheduler shows a non-zero "Last Run Result". If the share is unreachable the local backup is still kept. With two runs a day, 14 backups cover about one week; change `-KeepDaily` to keep more.
+
+The parameters `-DbFile`, `-BackupDir`, `-ShareDir`, `-MediaDir`, `-PythonExe` and `-KeepDaily` default to the production values. Pass others to test against a throwaway copy of `db.sqlite3` and temp folders; do not test against `db_prod.sqlite3`.
+
+#### Scheduling it
+
+Run once on the production server, in an Administrator prompt, replacing `DOMAIN\user` with the Windows account that can write to the share. `/RP *` asks for that account's password; it must be stored so the task runs when nobody is logged in and can still reach the network share. A task takes one daily start time, so there are two tasks:
+
+```bat
+schtasks /Create /TN "BIM Nexus Backup 1300" /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Projects\BIM-Release\deploy\backup.ps1" /SC DAILY /ST 13:00 /RU "DOMAIN\user" /RP *
+schtasks /Create /TN "BIM Nexus Backup 2300" /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Projects\BIM-Release\deploy\backup.ps1" /SC DAILY /ST 23:00 /RU "DOMAIN\user" /RP *
+```
+
+Run one immediately with `schtasks /Run /TN "BIM Nexus Backup 1300"`, then check the last line of `backend\backups\backup.log` and that the new file is on the share.
+
+#### Restoring from the share
+
+Database:
+
+1. If the backup you want is no longer in `backend\backups\`, copy it there from the share, for example `copy "\\hostserver\Technical Dep\Jad\BIM Nexus\db_prod_daily_20261114_130000.sqlite3" C:\Projects\BIM-Release\backend\backups\`.
+2. Run `rollback.bat`, leave the commit blank, and enter the backup filename. The script stops the service, saves the current database as `db_prod_prerollback_<timestamp>.sqlite3`, restores the chosen file and starts the service again.
+
+Media (uploaded product images): copy the share's `media` folder back over `backend\media`. The service can stay running.
+
+```bat
+robocopy "\\hostserver\Technical Dep\Jad\BIM Nexus\media" C:\Projects\BIM-Release\backend\media /E
+```
+
+The media folder on the share is a running copy, not a dated snapshot: files deleted in the app stay on the share, and a file replaced in the app is replaced on the share at the next backup.
