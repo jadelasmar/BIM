@@ -242,7 +242,10 @@ One-time setup on the production server: right-click `deploy\schedule-backup.bat
 1. Checks it is running as Administrator and that `C:\Projects\BIM-Release\deploy\backup.ps1` exists.
 2. Asks for the Windows account name the tasks should run as. Use the account that can write to the share; it also needs the "Log on as a batch job" right, read access to `db_prod.sqlite3` and write access to `backend\backups`.
 3. Creates two tasks, "BIM Nexus Backup 1300" and "BIM Nexus Backup 2300" (a task takes one daily start time, so there are two). Windows asks for the account's password once per task (`/RP *`) and stores it, so the tasks run when nobody is logged in and can still reach the network share. The batch file never sees the password.
-4. Runs the 13:00 task once and prints the last line of `backend\backups\backup.log`, which should start with `OK`.
+4. Runs the 13:00 task once and prints the last line of `backend\backups\backup.log`. A log line is `date time LEVEL message`; the test passed when the level is `OK`.
+5. Only if that line says `OK`, disables the older scheduled task "BIMNexus Nightly DB Backup" and prints that it was disabled. The task is disabled, not deleted (`schtasks /Change /TN "BIMNexus Nightly DB Backup" /ENABLE` turns it back on), and its script `backend\backup_db.ps1` is left in place. If the line is not `OK` (or no line is written within 2 minutes), the old task is left enabled and the batch file says so, so the server is never without a nightly backup. If the old task does not exist, it says there was nothing to disable.
+
+The old task has to go because its script (untracked, production server only) copies the database to `db_prod_<timestamp>.sqlite3` at 01:00 and then keeps only the newest 30 files matching `db_prod_*.sqlite3`. That pattern also matches `db_prod_daily_*` and `db_prod_prerollback_*`, so in time it would delete the daily backups and the pre-rollback safety copies. Its own files also match `deploy.ps1`'s pruning pattern (`db_prod_20*.sqlite3`), so each deploy cuts them down to one. None of the scripts look inside subfolders of `backend\backups\` (they list that folder only, without recursion), so a subfolder such as `backend\backups\nightly-archive-20261114\` is a safe place for copies that must not be pruned.
 
 The tasks run `backup.ps1 -KeepDaily 28`, so with two runs a day they keep about two weeks of daily backups. It is safe to run the batch file again (for example after a password change): existing tasks are replaced. The commands it runs are:
 
@@ -250,6 +253,8 @@ The tasks run `backup.ps1 -KeepDaily 28`, so with two runs a day they keep about
 schtasks /Create /F /TN "BIM Nexus Backup 1300" /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Projects\BIM-Release\deploy\backup.ps1 -KeepDaily 28" /SC DAILY /ST 13:00 /RU "DOMAIN\user" /RP *
 schtasks /Create /F /TN "BIM Nexus Backup 2300" /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Projects\BIM-Release\deploy\backup.ps1 -KeepDaily 28" /SC DAILY /ST 23:00 /RU "DOMAIN\user" /RP *
 schtasks /Run /TN "BIM Nexus Backup 1300"
+rem only when the last line of backup.log says OK:
+schtasks /Change /TN "BIMNexus Nightly DB Backup" /DISABLE
 ```
 
 To remove the schedule: `schtasks /Delete /TN "BIM Nexus Backup 1300" /F` and the same for `2300`.
