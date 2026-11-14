@@ -3,3 +3,6 @@
 
 # Git hooks execute through a POSIX shell and require LF shebang lines on Windows.
 .githooks/* text eol=lf
+
+# Batch files need CRLF line endings for cmd.exe labels and goto.
+*.bat text eol=crlf

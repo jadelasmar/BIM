@@ -231,20 +231,28 @@ The scripts live in `deploy/` and are run on the production server (see `backend
 3. Copies `backend\media` to the share's `media` folder with `robocopy /E` (adds and updates, never deletes from the share; exit codes 0-7 are success, 8 or more is a failure; skipped if `backend\media` does not exist).
 4. Keeps the newest 14 daily backups, locally and on the share. It only deletes files named `db_prod_daily_*.sqlite3`. Deploy backups, `db_prod_prerollback_*` copies and `*.failed` files are never touched, and `deploy.ps1`'s own pruning (`db_prod_20*.sqlite3`) never matches daily backups.
 
-Every run appends one line to `backend\backups\backup.log`: `OK` with a summary, or `FAILED` with the reason. Any failure exits non-zero, so Task Scheduler shows a non-zero "Last Run Result". If the share is unreachable the local backup is still kept. With two runs a day, 14 backups cover about one week; change `-KeepDaily` to keep more.
+Every run appends one line to `backend\backups\backup.log`: `OK` with a summary, or `FAILED` with the reason. Any failure exits non-zero, so Task Scheduler shows a non-zero "Last Run Result". If the share is unreachable the local backup is still kept. With two runs a day, the default of 14 backups covers about one week; the scheduled tasks pass `-KeepDaily 28` for about two weeks.
 
 The parameters `-DbFile`, `-BackupDir`, `-ShareDir`, `-MediaDir`, `-PythonExe` and `-KeepDaily` default to the production values. Pass others to test against a throwaway copy of `db.sqlite3` and temp folders; do not test against `db_prod.sqlite3`.
 
 #### Scheduling it
 
-Run once on the production server, in an Administrator prompt, replacing `DOMAIN\user` with the Windows account that can write to the share. `/RP *` asks for that account's password; it must be stored so the task runs when nobody is logged in and can still reach the network share. A task takes one daily start time, so there are two tasks:
+One-time setup on the production server: right-click `deploy\schedule-backup.bat` and choose "Run as administrator". It:
+
+1. Checks it is running as Administrator and that `C:\Projects\BIM-Release\deploy\backup.ps1` exists.
+2. Asks for the Windows account name the tasks should run as. Use the account that can write to the share; it also needs the "Log on as a batch job" right, read access to `db_prod.sqlite3` and write access to `backend\backups`.
+3. Creates two tasks, "BIM Nexus Backup 1300" and "BIM Nexus Backup 2300" (a task takes one daily start time, so there are two). Windows asks for the account's password once per task (`/RP *`) and stores it, so the tasks run when nobody is logged in and can still reach the network share. The batch file never sees the password.
+4. Runs the 13:00 task once and prints the last line of `backend\backups\backup.log`, which should start with `OK`.
+
+The tasks run `backup.ps1 -KeepDaily 28`, so with two runs a day they keep about two weeks of daily backups. It is safe to run the batch file again (for example after a password change): existing tasks are replaced. The commands it runs are:
 
 ```bat
-schtasks /Create /TN "BIM Nexus Backup 1300" /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Projects\BIM-Release\deploy\backup.ps1" /SC DAILY /ST 13:00 /RU "DOMAIN\user" /RP *
-schtasks /Create /TN "BIM Nexus Backup 2300" /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Projects\BIM-Release\deploy\backup.ps1" /SC DAILY /ST 23:00 /RU "DOMAIN\user" /RP *
+schtasks /Create /F /TN "BIM Nexus Backup 1300" /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Projects\BIM-Release\deploy\backup.ps1 -KeepDaily 28" /SC DAILY /ST 13:00 /RU "DOMAIN\user" /RP *
+schtasks /Create /F /TN "BIM Nexus Backup 2300" /TR "powershell.exe -NoProfile -ExecutionPolicy Bypass -File C:\Projects\BIM-Release\deploy\backup.ps1 -KeepDaily 28" /SC DAILY /ST 23:00 /RU "DOMAIN\user" /RP *
+schtasks /Run /TN "BIM Nexus Backup 1300"
 ```
 
-Run one immediately with `schtasks /Run /TN "BIM Nexus Backup 1300"`, then check the last line of `backend\backups\backup.log` and that the new file is on the share.
+To remove the schedule: `schtasks /Delete /TN "BIM Nexus Backup 1300" /F` and the same for `2300`.
 
 #### Restoring from the share
 
