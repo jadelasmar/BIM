@@ -1,6 +1,69 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "PowerShell(Start-Process -FilePath \"C:\\nssm-2.24\\win64\\nssm.exe\" *)"
+    ],
+    "deny": [
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/db*.sqlite3)"
+    ],
+    "ask": [
+      "Bash(python manage.py flush:*)",
+      "Bash(python manage.py migrate * zero)",
+      "Bash(python manage.py dbshell:*)",
+      "Bash(python manage.py shell:*)",
+      "Bash(dropdb:*)",
+      "Bash(rm -rf:*)",
+      "PowerShell(Remove-Item*-Recurse*)",
+      "PowerShell(Remove-Item*-Force*)",
+      "PowerShell(*deploy.ps1*)",
+      "PowerShell(*rollback.ps1*)",
+      "PowerShell(*grant-restart-permission.ps1*)",
+      "PowerShell(*deploy.bat*)",
+      "PowerShell(*rollback.bat*)",
+      "Bash(*deploy.bat*)",
+      "Bash(*rollback.bat*)",
+      "PowerShell(*db_prod*)",
+      "Bash(*db_prod*)",
+      "PowerShell(git push*)",
+      "Bash(git push:*)"
+    ]
+  },
   "model": "opusplan",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PROJECT_DIR}/.claude/hooks/guard.mjs\""
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "frontend-design@claude-plugins-official": true,
+    "security-guidance@claude-plugins-official": true,
+    "typescript-lsp@claude-plugins-official": true,
+    "pyright-lsp@claude-plugins-official": true,
+    "superpowers@claude-plugins-official": true
+  },
+  "enabledMcpjsonServers": [
+    "playwright",
+    "context7"
+  ],
+  "extraKnownMarketplaces": {
+    "claude-plugins-official": {
+      "source": {
+        "source": "github",
+        "repo": "anthropics/claude-plugins-official"
+      }
+    }
+  },
   "effortLevel": "high",
   "initialPermissionMode": "acceptEdits",
   "allowedTools": [
@@ -11,21 +74,5 @@
     "Read",
     "Glob",
     "Grep"
-  ],
-  "permissions": {
-    "allow": [
-      "PowerShell(Start-Process -FilePath \"C:\\nssm-2.24\\win64\\nssm.exe\" *)"
-    ],
-    "ask": [
-      "Bash(python manage.py flush:*)",
-      "Bash(python manage.py migrate * zero)",
-      "Bash(python manage.py dbshell:*)",
-      "Bash(python manage.py shell:*)",
-      "Bash(dropdb:*)",
-      "Bash(rm -rf:*)",
-      "PowerShell(Remove-Item*-Recurse*)",
-      "PowerShell(Remove-Item*-Force*)"
-    ]
-    
-  }
+  ]
 }

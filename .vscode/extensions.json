@@ -1,13 +1,11 @@
 {
   "recommendations": [
+    "anthropic.claude-code",
     "openai.chatgpt",
     "ms-python.python",
     "ms-python.vscode-pylance",
     "batisteo.vscode-django",
-    "thebarkman.vscode-djaneiro",
     "usernamehw.errorlens",
-    "dbaeumer.vscode-eslint",
-    "esbenp.prettier-vscode",
     "qwtel.sqlite-viewer",
     "bradlc.vscode-tailwindcss"
   ]
