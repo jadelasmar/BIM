@@ -247,6 +247,16 @@ Current Delivery Records integration:
   - Wrong delivered unit, product, or serial mistakes are handled by cancelling and recreating the record when linked units are still untouched sold units.
 - If cancellation is blocked because a linked stock unit is no longer an untouched sold unit, the detail screen shows the backend operational message.
 
+## Generic (no-serial) units in the UI
+
+- Receive Stock sends only typed/scanned serials plus `auto_serial_count`; Add Unit omits `serial_number` when none was typed. The backend makes and flags the serials. A blank serial box means "generic unit".
+- The unit pickers (Create Delivery, Reservation, Temporary Assignment/Issue, Repair, Removal, Client Return) share `buildUnitPickerRows`, `UnitPickerResults`, `GenericUnitRow` and `groupSelectedUnits` in `AppRouter.jsx`. Per product (and status), generic units are one row: "No serial - N available" with a quantity input and Add. The quantity takes the oldest units first (`oldestGenericUnits`: receiving/entry date, undated last, then id). Real-serial units stay one row each, and mixing both in one record is allowed. A generic unit is found by product text, not by its made-up serial; scanning an exact serial (generated or real) still selects that unit.
+- Selected lists show generic units of one product as one row with a count and one remove button. Create Delivery's reference sale price is one input per merged row, applied to each unit in it.
+- Client Return takes generic units from `returnable-generic-groups/`: one row per product and client ("N returnable"), oldest delivery first; once a unit is picked only that client's rows are offered.
+- Record detail item tables (Receiving, Delivery, Reservation, Issue, Repair, Removal, Client Return) merge identical generic lines through `groupGenericItems` into "No serial / N units"; real serials list individually. The Receiving and Delivery edit panels edit a merged line for every item in it.
+- Inventory Stock Units view still lists every unit with its serial and adds a Serial Type column (Generated / Real); its CSV gains `Serial Type` after `Serial Number`. The Product Details unit register tags generated serials.
+- There is no printed note/PDF view in the app; if one is added it must reuse `groupGenericItems`.
+
 ## Inventory CSV Export
 
 The Inventory page Export button (`exportCurrentView` in `AppRouter.jsx`) downloads the current view through `downloadCsv` (UTF-8 BOM so Excel opens it directly). It is the only product-level stock export in the app.
@@ -260,7 +270,7 @@ Products view (`inventory-<date>.csv`): one row per ungrouped product and one ro
 - Reserved For / Assigned To / Repair At list each party with its unit count, e.g. `Acme Ltd (2); Beta Co (1)`, empty when none. They are derived from the same per-unit "where" text as the Stock Units view ("Reserved for X", "With X", "At <vendor>"), fetched on export from the existing `product-units?with_location=1` endpoint (only when a listed product has reserved, issued or repair units). A repair with no supplier shows as `No supplier`. If that fetch fails, a toast is shown and nothing is downloaded.
 - "Assigned To" is the UI's own term for the Issue workflow's party (Temporary Assignments).
 
-Stock Units view (`stock-units-<date>.csv`): `Serial Number, Product, SKU, Status, Where, Supplier, Cost, Purchase Date, Notes, Group`.
+Stock Units view (`stock-units-<date>.csv`): `Serial Number, Serial Type, Product, SKU, Status, Where, Supplier, Cost, Purchase Date, Notes, Group` (`Serial Type` is `Generated` or `Real`).
 
 ## Role-Aware Actions
 

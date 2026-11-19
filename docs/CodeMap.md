@@ -102,6 +102,7 @@ Inventory business app:
 - `api_urls.py`: stock API routing
 - `selectors.py`: reusable read queries for dashboards/app shell
 - `services.py`: multi-model stock write workflows
+- `serials.py`: generates serials for units with no typed serial (flagged `serial_is_generated` by the serializers)
 - `constants.py`: app label and permission strings
 - `roles.py`: prepared Administrator, IT Support, and Viewer stock permissions; removes the legacy Operations Manager group
 - `tests.py`: backend and source-inspection tests
@@ -500,6 +501,21 @@ React Create Client Return page
   -> redirects to /operations/client-returns/<id>/ when the API responds with an id
 ```
 
+### Generic Units In Pickers
+
+```text
+React unit picker (Delivery, Reservation, Issue, Repair, Removal)
+  -> GET /api/stock/product-units/?status=available (rows carry serial_is_generated)
+  -> buildUnitPickerRows merges generic units per product into one quantity row
+  -> quantity resolves to the oldest unit ids in the browser
+  -> the usual POST with unit_ids (services unchanged)
+
+React Create Client Return
+  -> GET /api/stock/client-returns/returnable-units/ (real serials)
+  -> GET /api/stock/client-returns/returnable-generic-groups/ (generic units per product and client, oldest delivery first)
+  -> POST /api/stock/client-returns/ with unit_ids
+```
+
 ### Client Return Records List
 
 ```text
@@ -535,9 +551,10 @@ GET /operations/deliveries/<id>/
 ```text
 React Receive Stock page
   -> GET /operations/receiving/new/
-  -> POST /api/stock/receiving-records/
-  -> ReceivingRecordSerializer.create()
-  -> services.create_receiving_record()
+  -> POST /api/stock/receiving-records/ (typed serial_numbers + auto_serial_count)
+  -> ReceivingRecordSerializer.create() generates the missing serials (serials.py)
+  -> services.create_receiving_record() (unchanged)
+  -> the serializer flags the generated units serial_is_generated in the same transaction
   -> creates ReceivingRecord and ReceivingItem rows
   -> creates/links ProductUnit rows when serial numbers are supplied
   -> writes StockMovement received rows for linked units

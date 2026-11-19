@@ -139,6 +139,17 @@ Receiving correction is intentionally limited:
 - Cancellation is blocked when any linked product unit is not active and available, or has already been delivered.
 - Successful cancellation marks the receiving record cancelled/inactive, marks its receiving items inactive, and marks linked available product units inactive.
 
+## Generic (no-serial) units
+
+Units received without a typed serial are "generic": `ProductUnit.serial_is_generated=True`. `backend/apps/stock/serials.py` generates the serial (`generate_receiving_serials`, `generate_unit_serial`; unique against existing serials) but never changes a status or writes a movement. `services.py` is not involved in this feature.
+
+- Receive Stock: each item input takes `serial_numbers` (typed/scanned only) and `auto_serial_count`; `len(serial_numbers) + auto_serial_count` must equal `quantity`. `ReceivingRecordSerializer.create` generates the missing serials, calls `create_receiving_record` unchanged, then flags exactly those units, all inside one `transaction.atomic()`.
+- Add Unit (`POST /api/stock/product-units/`): `serial_number` may be omitted or blank on create; the backend generates it and flags the unit. Blank is still rejected on update.
+- `serial_is_generated` is read-only on `ProductUnitSerializer` and appears on every item serializer (receiving, delivery, reservation, issue, repair, removal, client return) so record pages can group generic lines.
+- Replacing a generated serial with a typed one (unit edit `details/`, `PATCH product-units/<id>/`, Django admin) sets the flag to `False`.
+- `GET /api/stock/client-returns/returnable-generic-groups/` (`q`, `delivery`; needs the client return view permission) returns generic sold units grouped per product and client: `count` and `unit_ids` ordered oldest delivery first. Only units `create_client_return_record` would accept are included. `returnable-units/` no longer lists generic units unless `q` equals the serial exactly.
+- The pickers resolve a quantity to specific unit ids before submitting, so every workflow endpoint receives the usual `unit_ids`. If a picked unit was taken meanwhile, the existing service validation answers with a normal 400 message.
+
 ## Selectors
 
 Stock read/query helpers live in `backend/apps/stock/selectors.py`.

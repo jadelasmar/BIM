@@ -98,6 +98,7 @@ Fields:
 
 - `product`
 - `serial_number`
+- `serial_is_generated`
 - `status`
 - `supplier`
 - `cost`
@@ -117,6 +118,8 @@ Statuses:
 - `repair`
 - `removed`
 - `inactive`
+
+`serial_is_generated` marks a **generic** unit: nobody typed or scanned a serial, so the backend made one (`apps/stock/serials.py`). Real typed/scanned serials stay `False`. Formats, built from the product's own SKU: Receive Stock `<SKU>-<6-digit batch>-<line, 2 digits>-<index, 3 digits>`, Add Unit `<SKU>-<6-digit batch>-<index, 3 digits>`. The flag is read-only in the API and is set only where the serial is generated (receiving and Add Unit, in the serializer, in the same transaction that creates the unit). Client-owned repair intake, Django admin and `seed_demo_data` take typed serials, so those units are real. When a person later replaces a generated serial with a typed one (unit edit, unit API, admin), the flag becomes `False`. Workflow pickers offer generic units by quantity; record pages show them as one line with a count. Migration `0044` marked existing units `True` only when the serial is exactly the product's own SKU plus one of the two formats (matched in Python); other generated-looking serials were reported as near-misses and left `False`.
 
 When a unit is saved as sold, `sold_date` is filled if empty.
 Reserved units are operational holds and must be released back to available before delivery.
@@ -173,7 +176,7 @@ Fields:
 Rules:
 
 - `quantity` supports non-serialized receiving.
-- Serialized receiving creates one item per serial number and links each item to a `ProductUnit`.
+- Serialized receiving creates one item per serial number and links each item to a `ProductUnit`. A line may mix typed serials with `auto_serial_count` units whose serials are generated (flagged `serial_is_generated`).
 - `cost` is operational/reference cost only; it does not create accounting, invoice, tax, payment, or voucher behavior.
 - Product, serial number, product-unit link, and line `isactive` support future item receiving reports and serial traceability.
 - Correction workflows may update line cost and notes. Product, product-unit link, quantity, and serial number are not directly editable after creation.
