@@ -400,7 +400,9 @@ class UIRegistryTests(SimpleTestCase):
         self.assertIn("fetch(data.api.receivingRecords", stock_entry_source)
         self.assertIn("fetch(data.api.productUnits", stock_entry_source)
         self.assertIn("item_inputs: itemInputs", stock_entry_source)
-        self.assertIn("serial_numbers: buildReceivingSerialNumbers(line, lineIndex)", stock_entry_source)
+        # Generation moved to the backend: only typed serials are sent, plus how many are auto-made.
+        self.assertIn("serial_numbers: typedSerials", stock_entry_source)
+        self.assertIn("auto_serial_count: quantity - typedSerials.length", stock_entry_source)
         self.assertIn('label="Purchase Order #"', stock_entry_source)
         self.assertIn('label="Supplier Invoice #"', stock_entry_source)
         self.assertNotIn('label="Reference Number"', stock_entry_source)
@@ -7810,3 +7812,111 @@ class TakenUnitErrorTests(TestCase):
         real.refresh_from_db()
         self.assertEqual(real.status, ProductUnit.STATUS_AVAILABLE)
         self.assertFalse(ReservationRecord.objects.exists())
+
+
+class GenericUnitPickerSourceTests(SimpleTestCase):
+    """The six unit pickers share the generic-unit helpers (source-level wiring;
+    the behaviour itself is covered by the API tests above)."""
+
+    PICKER_PAGES = (
+        ("CreateReservationPage", "IssueRecordsPage"),
+        ("CreateIssuePage", "RepairRecordsPage"),
+        ("CreateRepairPage", "ClientUpgradeRecordsPage"),
+        ("CreateRemovalPage", "ClientReturnRecordsPage"),
+        ("CreateClientReturnPage", "clientReturnResolutionLabel"),
+        ("CreateDeliveryPage", "AddProductHeader"),
+    )
+
+    def _source(self):
+        return REACT_APP_SOURCE.read_text(encoding="utf-8")
+
+    def test_receiving_sends_only_typed_serials_and_an_auto_count(self):
+        source = self._source()
+        entry = source[source.index("function StockEntryPage"):source.index("function CreateDeliveryPage")]
+        self.assertIn("auto_serial_count: quantity - typedSerials.length", entry)
+        self.assertIn("serial_numbers: typedSerials", entry)
+        self.assertNotIn("buildGeneratedSerial", entry)
+        self.assertNotIn("serialBatch", entry)
+        # Add Unit omits the serial when none was typed; the backend makes it.
+        self.assertIn("...(serialNumber ? { serial_number: serialNumber } : {})", entry)
+
+    def test_every_picker_uses_the_shared_generic_helpers(self):
+        source = self._source()
+        for page, next_symbol in self.PICKER_PAGES:
+            with self.subTest(page=page):
+                body = source[source.index(f"function {page}("):]
+                body = body[:body.index(next_symbol)]
+                self.assertIn("buildUnitPickerRows(", body)
+                self.assertIn("<UnitPickerResults", body)
+                self.assertIn("onAddGeneric={addUnits}", body)
+                self.assertIn("findUnitBySerial(", body)  # scanning still picks one unit
+                self.assertNotIn("filteredUnits", body)
+                self.assertIn("unit_ids:", body)  # payload shape unchanged
+
+    def test_helpers_pick_oldest_first_and_merge_per_product_and_status(self):
+        source = self._source()
+        self.assertIn("function oldestGenericUnits(units, count)", source)
+        self.assertIn('const a = left.purchase_date || "9999-12-31";', source)
+        self.assertIn("left.id - right.id", source)
+        self.assertIn("function genericGroupKey(unit)", source)
+        self.assertIn("function groupSelectedUnits(units)", source)
+
+    def test_client_return_loads_generic_groups_from_the_server(self):
+        source = self._source()
+        page = source[source.index("function CreateClientReturnPage"):source.index("function clientReturnResolutionLabel")]
+        self.assertIn("returnable-generic-groups/", page)
+        self.assertIn("rank", page)  # server order = oldest delivery first
+        self.assertIn("group.client.id === returnClient.id", page)
+
+    def test_search_does_not_match_a_generic_units_made_up_serial(self):
+        source = self._source()
+        self.assertIn("const text = isGeneric ? fields : `${fields} ${unit.serial_number}`;", source)
+
+
+class GenericDisplaySourceTests(SimpleTestCase):
+    """Record pages merge generic units; Stock Units keeps every unit."""
+
+    def _source(self):
+        return REACT_APP_SOURCE.read_text(encoding="utf-8")
+
+    def test_all_item_tables_merge_generic_lines(self):
+        source = self._source()
+        for table, next_symbol in (
+            ("ReceivingItemsTable", "ReservationRecordsPage"),
+            ("DeliveryItemsTable", "deliveryStatusLabel"),
+            ("ReservationItemsTable", "CreateReservationPage"),
+            ("IssueItemsTable", "CreateIssuePage"),
+            ("RepairItemsTable", "CreateRepairPage"),
+            ("RemovalItemsTable", "CreateRemovalPage"),
+            ("ClientReturnItemsTable", "CreateClientReturnPage"),
+        ):
+            with self.subTest(table=table):
+                body = source[source.index(f"function {table}("):]
+                body = body[:body.index(next_symbol)]
+                self.assertIn("groupGenericItems(items)", body)
+                self.assertIn("<ItemSerialText", body)
+
+    def test_edit_panels_apply_a_merged_line_edit_to_every_item(self):
+        source = self._source()
+        receiving = source[source.index("function ReceivingCorrectionPanel"):source.index("function ReceivingItemsTable")]
+        delivery = source[source.index("function DeliveryCorrectionPanel"):source.index("function DeliveryItemsTable")]
+        self.assertIn("group.items.forEach((member) => onItemChange(member.id, field, value))", receiving)
+        self.assertIn("group.items.forEach((member) => onItemChange(member.id, value))", delivery)
+
+    def test_generic_item_lines_show_no_serial_and_a_count(self):
+        source = self._source()
+        self.assertIn("function groupGenericItems(items)", source)
+        self.assertIn("No serial", source[source.index("function ItemSerialText"):])
+
+    def test_stock_units_view_and_csv_show_generated_or_real(self):
+        source = self._source()
+        self.assertIn('const SERIAL_TYPE_LABELS = { generated: "Generated", real: "Real" };', source)
+        self.assertIn('<th className="px-4 py-3 font-medium">Serial Type</th>', source)
+        self.assertIn(
+            '["Serial Number", "Serial Type", "Product", "SKU", "Status", "Where", "Supplier", "Cost", "Purchase Date", "Notes", "Group"]',
+            source,
+        )
+        # Still every unit: the view has no generic merging.
+        units_view = source[source.index("function InventoryUnitsView"):source.index("function InventoryHeader")]
+        self.assertNotIn("groupGenericItems", units_view)
+        self.assertNotIn("groupSelectedUnits", units_view)

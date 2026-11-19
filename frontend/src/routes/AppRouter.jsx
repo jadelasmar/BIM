@@ -1581,16 +1581,18 @@ function ReceivingCorrectionPanel({
             <span>Cost</span>
             <span>Notes</span>
           </div>
-          {items.map((item) => {
+          {groupGenericItems(items).map((group) => {
+            const item = group.item;
             const formItem = form.items.find((entry) => entry.id === item.id) || {};
+            const editAll = (field, value) => group.items.forEach((member) => onItemChange(member.id, field, value));
             return (
-              <div key={item.id} className="grid gap-3 border-t border-nexus-line p-4 md:grid-cols-[minmax(0,1fr)_130px_minmax(0,1fr)]">
+              <div key={group.key} className="grid gap-3 border-t border-nexus-line p-4 md:grid-cols-[minmax(0,1fr)_130px_minmax(0,1fr)]">
                 <div>
                   <p className="font-semibold text-white">{item.product_name}</p>
-                  <p className="mt-1 font-mono text-xs text-zinc-500">{item.serial_number || item.product_unit_serial_number || "No serial"}</p>
+                  <p className="mt-1 font-mono text-xs text-zinc-500"><ItemSerialText entry={group} fallback="No serial" /></p>
                 </div>
-                <TextInput value={formItem.cost || "0.00"} onChange={(value) => onItemChange(item.id, "cost", value)} />
-                <TextInput value={formItem.notes || ""} onChange={(value) => onItemChange(item.id, "notes", value)} placeholder="Line notes" />
+                <TextInput value={formItem.cost || "0.00"} onChange={(value) => editAll("cost", value)} />
+                <TextInput value={formItem.notes || ""} onChange={(value) => editAll("notes", value)} placeholder="Line notes" />
               </div>
             );
           })}
@@ -1628,16 +1630,24 @@ function ReceivingItemsTable({ items }) {
           </thead>
           <tbody>
             {items.length ? (
-              items.map((item) => (
-                <tr key={item.id} className="border-t border-nexus-line">
+              groupGenericItems(items).map((entry) => {
+                const item = entry.item;
+                return (
+                <tr key={entry.key} className="border-t border-nexus-line">
                   <td className="px-4 py-4">
                     <p className="font-semibold text-white">{item.product_name}</p>
                     <p className="mt-1 font-mono text-xs text-zinc-500">{item.product_sku || "-"}</p>
                   </td>
-                  <td className="px-4 py-4 font-bold text-white">{formatCount(item.quantity || 0)}</td>
+                  <td className="px-4 py-4 font-bold text-white">
+                    {formatCount(entry.items.reduce((total, member) => total + (member.quantity || 0), 0))}
+                  </td>
                   <td className="px-4 py-4">
-                    <p className="font-mono text-xs text-zinc-300">{item.serial_number || item.product_unit_serial_number || "-"}</p>
-                    <p className="mt-1 text-xs text-zinc-500">{item.product_unit ? `Unit #${item.product_unit}` : "No unit link"}</p>
+                    <p className="font-mono text-xs text-zinc-300"><ItemSerialText entry={entry} /></p>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      {entry.generic
+                        ? `${formatCount(entry.count)} units linked`
+                        : item.product_unit ? `Unit #${item.product_unit}` : "No unit link"}
+                    </p>
                   </td>
                   <td className="px-4 py-4">
                     <p className="text-xs text-zinc-300">{formatCurrency(item.cost)}</p>
@@ -1645,7 +1655,8 @@ function ReceivingItemsTable({ items }) {
                   </td>
                   <td className="px-4 py-4 text-zinc-400">{item.notes || "-"}</td>
                 </tr>
-              ))
+                );
+              })
             ) : (
               <tr>
                 <td colSpan="5">
@@ -2281,18 +2292,21 @@ function ReservationItemsTable({ items }) {
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => (
-                <tr key={item.id} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
+              {groupGenericItems(items).map((entry) => {
+                const item = entry.item;
+                return (
+                <tr key={entry.key} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
                   <td className="px-4 py-3 font-semibold text-white">{item.product_name}</td>
                   <td className="px-4 py-3 font-mono text-xs text-[var(--bim-orange-text)]">{item.product_sku || "-"}</td>
-                  <td className="px-4 py-3 text-zinc-400">#{item.product_unit}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-zinc-300">{item.serial_number || "-"}</td>
+                  <td className="px-4 py-3 text-zinc-400">{entry.generic ? `${formatCount(entry.count)} units` : `#${item.product_unit}`}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-zinc-300"><ItemSerialText entry={entry} /></td>
                   <td className="px-4 py-3">
                     <Status status={item.product_unit_status_label || item.product_unit_status} statusClass={item.product_unit_status} />
                   </td>
                   <td className="px-4 py-3 text-zinc-400">{item.notes || "-"}</td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -2340,13 +2354,7 @@ function CreateReservationPage({ data }) {
   }, [data.api.productUnits]);
 
   const selectedIds = new Set(selectedUnits.map((unit) => unit.id));
-  const filteredUnits = units
-    .filter((unit) => !selectedIds.has(unit.id))
-    .filter((unit) => {
-      const text = `${unit.product_name} ${unit.product_sku} ${unit.product_barcode || ""} ${unit.group_name || ""} ${unit.serial_number}`.toLowerCase();
-      return query && text.includes(query.toLowerCase());
-    })
-    .slice(0, 8);
+  const pickerRows = buildUnitPickerRows(units, selectedIds, query);
 
   function updateField(name, value) {
     setForm((current) => ({ ...current, [name]: value }));
@@ -2354,6 +2362,11 @@ function CreateReservationPage({ data }) {
 
   function addUnit(unit) {
     setSelectedUnits((current) => [...current, unit]);
+    setQuery("");
+  }
+
+  function addUnits(newUnits) {
+    setSelectedUnits((current) => [...current, ...newUnits]);
     setQuery("");
   }
 
@@ -2467,9 +2480,11 @@ function CreateReservationPage({ data }) {
                 onScan={handleScan}
                 placeholder="Search product, SKU, barcode, or serial..."
               />
-              {filteredUnits.length ? (
-                <div className="mt-2 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
-                  {filteredUnits.map((unit) => (
+              <UnitPickerResults
+                rows={pickerRows}
+                className="mt-2 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel"
+                onAddGeneric={addUnits}
+                renderUnit={(unit) => (
                     <button
                       key={unit.id}
                       onClick={() => addUnit(unit)}
@@ -2482,9 +2497,8 @@ function CreateReservationPage({ data }) {
                       </span>
                       <Plus className="h-4 w-4 text-zinc-500" />
                     </button>
-                  ))}
-                </div>
-              ) : null}
+                )}
+              />
 
               <SelectedUnitsTable units={selectedUnits} onRemove={removeUnit} emptyText="No units selected for reservation yet." />
             </FormSection>
@@ -2519,10 +2533,226 @@ function findUnitBySerial(units, code) {
   return matches.length === 1 ? matches[0] : null;
 }
 
+// Generic (no-serial) units. A unit received without a typed serial carries an
+// auto-made one and `serial_is_generated: true`. The unit pickers offer such
+// units per product as one quantity row instead of one row per unit, and record
+// pages show them as one line with a count. Real serials stay one row each.
+// Submitted payloads are unchanged: a quantity is resolved to unit ids here.
+const SERIAL_TYPE_LABELS = { generated: "Generated", real: "Real" };
+
+function serialTypeLabel(unit) {
+  return unit?.serial_is_generated ? SERIAL_TYPE_LABELS.generated : SERIAL_TYPE_LABELS.real;
+}
+
+// Generic units merge per product + status (+ client, for Client Return).
+function genericGroupKey(unit) {
+  return `${unit.product}:${unit.status || ""}:${unit.client?.id ?? ""}`;
+}
+
+// Oldest first: receiving/entry date (undated last), then id. A unit carrying a
+// `rank` (Client Return: oldest delivery first, decided by the server) uses that.
+function oldestGenericUnits(units, count) {
+  return [...units]
+    .sort((left, right) => {
+      if (left.rank != null && right.rank != null) return left.rank - right.rank;
+      const a = left.purchase_date || "9999-12-31";
+      const b = right.purchase_date || "9999-12-31";
+      return a < b ? -1 : a > b ? 1 : left.id - right.id;
+    })
+    .slice(0, Math.max(0, count));
+}
+
+// Rows for a picker's search results: real units one row each (as before),
+// generic units of one product merged into one row. The row cap applies after
+// merging. A generic unit is found by product fields, never by its made-up serial.
+function buildUnitPickerRows(units, selectedIds, query, { limit = 8, requireQuery = true, groupGeneric = true } = {}) {
+  const needle = query.trim().toLowerCase();
+  const rows = [];
+  const generic = new Map();
+  for (const unit of units) {
+    if (selectedIds.has(unit.id)) continue;
+    const isGeneric = groupGeneric && Boolean(unit.serial_is_generated);
+    if (requireQuery) {
+      if (!needle) continue;
+      const fields = `${unit.product_name} ${unit.product_sku} ${unit.product_barcode || ""} ${unit.group_name || ""}`;
+      const text = isGeneric ? fields : `${fields} ${unit.serial_number}`;
+      if (!text.toLowerCase().includes(needle)) continue;
+    }
+    if (!isGeneric) {
+      rows.push({ kind: "unit", key: `unit-${unit.id}`, unit });
+      continue;
+    }
+    const key = genericGroupKey(unit);
+    let row = generic.get(key);
+    if (!row) {
+      row = {
+        kind: "generic",
+        key,
+        product_name: unit.product_name,
+        product_sku: unit.product_sku,
+        status: unit.status,
+        status_label: unit.status_label,
+        client: unit.client || null,
+        countLabel: unit.countLabel,
+        units: []
+      };
+      generic.set(key, row);
+      rows.push(row);
+    }
+    row.units.push(unit);
+  }
+  return rows.slice(0, limit);
+}
+
+function genericCountLabel(row) {
+  if (row.countLabel) return row.countLabel;
+  if (row.status === "available" || !row.status) return "available";
+  if (row.status === "repair") return "in repair";
+  return String(row.status_label || row.status).toLowerCase();
+}
+
+// One search-result row for a product's generic units: "N available" and a
+// quantity to add. Adds the oldest units first.
+function GenericUnitRow({ row, onAdd }) {
+  const [quantity, setQuantity] = useState("1");
+  const available = row.units.length;
+  const wanted = Math.min(Math.max(parseInt(quantity, 10) || 1, 1), available);
+
+  function add() {
+    onAdd(oldestGenericUnits(row.units, wanted));
+    setQuantity("1");
+  }
+
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-nexus-line px-4 py-3 last:border-b-0">
+      <span className="min-w-0">
+        <span className="block text-sm font-bold text-white">{row.product_name}</span>
+        <span className="font-mono text-xs text-[var(--bim-orange-text)]">{row.product_sku}</span>
+        <span className="mt-1 block text-xs text-zinc-500">
+          No serial &middot; {formatCount(available)} {genericCountLabel(row)}
+          {row.client ? ` · ${row.client.name}` : ""}
+        </span>
+      </span>
+      <span className="flex shrink-0 items-center gap-2">
+        <input
+          type="number"
+          min="1"
+          max={available}
+          value={quantity}
+          onChange={(event) => setQuantity(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              add();
+            }
+          }}
+          aria-label={`Quantity of ${row.product_name}`}
+          className="h-9 w-20 rounded-md border border-nexus-line bg-black px-2 text-sm text-zinc-200 outline-none"
+        />
+        <button
+          type="button"
+          onClick={add}
+          className="inline-flex h-9 items-center gap-1 rounded-md bg-nexus-orange px-3 text-sm font-semibold text-black"
+        >
+          <Plus className="h-4 w-4" />
+          Add
+        </button>
+      </span>
+    </div>
+  );
+}
+
+// The picker's result list. `renderUnit(unit)` draws a real-serial unit exactly
+// as that page always did; generic rows are drawn here.
+function UnitPickerResults({ rows, renderUnit, onAddGeneric, className }) {
+  if (!rows.length) return null;
+  return (
+    <div className={className}>
+      {rows.map((row) =>
+        row.kind === "generic" ? (
+          <GenericUnitRow key={row.key} row={row} onAdd={onAddGeneric} />
+        ) : (
+          renderUnit(row.unit)
+        )
+      )}
+    </div>
+  );
+}
+
+// Selected units for display: real units one entry each, generic units of one
+// product merged into one entry.
+function groupSelectedUnits(units) {
+  const entries = [];
+  const byKey = new Map();
+  for (const unit of units) {
+    if (!unit.serial_is_generated) {
+      entries.push({ key: `unit-${unit.id}`, units: [unit], generic: false });
+      continue;
+    }
+    const key = `generic-${genericGroupKey(unit)}`;
+    let entry = byKey.get(key);
+    if (!entry) {
+      entry = { key, units: [], generic: true };
+      byKey.set(key, entry);
+      entries.push(entry);
+    }
+    entry.units.push(unit);
+  }
+  return entries;
+}
+
+// Record-page item lines: generic items of one product that look identical
+// (same status, active flag, notes, price/cost, delivery) merge into one line
+// with a count; real serials stay one line each.
+function groupGenericItems(items) {
+  const entries = [];
+  const byKey = new Map();
+  for (const item of items) {
+    if (!item.serial_is_generated) {
+      entries.push({ key: `item-${item.id}`, item, items: [item], count: 1, generic: false });
+      continue;
+    }
+    const key = JSON.stringify([
+      item.product,
+      item.product_unit_status ?? "",
+      item.isactive,
+      item.notes ?? "",
+      item.resolution_notes ?? "",
+      item.sale_price ?? "",
+      item.cost ?? "",
+      item.delivery ?? ""
+    ]);
+    let entry = byKey.get(key);
+    if (!entry) {
+      entry = { key: `generic-${key}`, item, items: [], count: 0, generic: true };
+      byKey.set(key, entry);
+      entries.push(entry);
+    }
+    entry.items.push(item);
+    entry.count += 1;
+  }
+  return entries;
+}
+
+// Serial cell for a record-page line: the serial, or "No serial" and the count
+// for a merged generic line.
+function ItemSerialText({ entry, fallback = "-" }) {
+  if (entry.generic) {
+    return (
+      <>
+        <span className="text-zinc-300">No serial</span>
+        <span className="ml-2 text-zinc-500">{formatCount(entry.count)} {entry.count === 1 ? "unit" : "units"}</span>
+      </>
+    );
+  }
+  return <>{entry.item.serial_number || entry.item.product_unit_serial_number || fallback}</>;
+}
+
 function SelectedUnitsTable({ units, onRemove, emptyText }) {
+  const entries = groupSelectedUnits(units);
   return (
     <div className="mt-4 overflow-hidden rounded-lg border border-dashed border-nexus-line bg-black/30">
-      {units.length ? (
+      {entries.length ? (
         <table className="min-w-full text-left text-sm">
           <thead className="bg-zinc-800/80 text-zinc-400">
             <tr>
@@ -2534,21 +2764,40 @@ function SelectedUnitsTable({ units, onRemove, emptyText }) {
             </tr>
           </thead>
           <tbody>
-            {units.map((unit) => (
-              <tr key={unit.id} className="border-t border-nexus-line">
-                <td className="px-4 py-3 font-semibold text-white">{unit.product_name}</td>
-                <td className="px-4 py-3 font-mono text-xs text-[var(--bim-orange-text)]">{unit.product_sku || "-"}</td>
-                <td className="px-4 py-3 font-mono text-xs text-zinc-300">{unit.serial_number}</td>
-                <td className="px-4 py-3">
-                  <Status status={unit.status_label || unit.status} statusClass={unit.status} />
-                </td>
-                <td className="px-4 py-3">
-                  <button onClick={() => onRemove(unit.id)} type="button" className="text-zinc-500 hover:text-nexus-red" aria-label={`Remove ${unit.serial_number}`}>
-                    <X className="h-4 w-4" />
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {entries.map((entry) => {
+              const unit = entry.units[0];
+              return (
+                <tr key={entry.key} className="border-t border-nexus-line">
+                  <td className="px-4 py-3 font-semibold text-white">{unit.product_name}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-[var(--bim-orange-text)]">{unit.product_sku || "-"}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-zinc-300">
+                    {entry.generic ? (
+                      <>
+                        No serial
+                        <span className="ml-2 font-sans text-zinc-500">
+                          {formatCount(entry.units.length)} {entry.units.length === 1 ? "unit" : "units"}
+                        </span>
+                      </>
+                    ) : (
+                      unit.serial_number
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <Status status={unit.status_label || unit.status} statusClass={unit.status} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      onClick={() => entry.units.forEach((member) => onRemove(member.id))}
+                      type="button"
+                      className="text-zinc-500 hover:text-nexus-red"
+                      aria-label={entry.generic ? `Remove ${unit.product_name} (no serial)` : `Remove ${unit.serial_number}`}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       ) : (
@@ -3065,18 +3314,21 @@ function IssueItemsTable({ items }) {
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => (
-                <tr key={item.id} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
+              {groupGenericItems(items).map((entry) => {
+                const item = entry.item;
+                return (
+                <tr key={entry.key} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
                   <td className="px-4 py-3 font-semibold text-white">{item.product_name}</td>
                   <td className="px-4 py-3 font-mono text-xs text-[var(--bim-orange-text)]">{item.product_sku || "-"}</td>
-                  <td className="px-4 py-3 text-zinc-400">#{item.product_unit}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-zinc-300">{item.serial_number || "-"}</td>
+                  <td className="px-4 py-3 text-zinc-400">{entry.generic ? `${formatCount(entry.count)} units` : `#${item.product_unit}`}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-zinc-300"><ItemSerialText entry={entry} /></td>
                   <td className="px-4 py-3">
                     <Status status={item.product_unit_status_label || item.product_unit_status} statusClass={item.product_unit_status} />
                   </td>
                   <td className="px-4 py-3 text-zinc-400">{item.notes || "-"}</td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -3126,13 +3378,7 @@ function CreateIssuePage({ data }) {
   }, [data.api.productUnits]);
 
   const selectedIds = new Set(selectedUnits.map((unit) => unit.id));
-  const filteredUnits = units
-    .filter((unit) => !selectedIds.has(unit.id))
-    .filter((unit) => {
-      const text = `${unit.product_name} ${unit.product_sku} ${unit.product_barcode || ""} ${unit.group_name || ""} ${unit.serial_number}`.toLowerCase();
-      return query && text.includes(query.toLowerCase());
-    })
-    .slice(0, 8);
+  const pickerRows = buildUnitPickerRows(units, selectedIds, query);
 
   function updateField(name, value) {
     setForm((current) => ({ ...current, [name]: value }));
@@ -3140,6 +3386,11 @@ function CreateIssuePage({ data }) {
 
   function addUnit(unit) {
     setSelectedUnits((current) => [...current, unit]);
+    setQuery("");
+  }
+
+  function addUnits(newUnits) {
+    setSelectedUnits((current) => [...current, ...newUnits]);
     setQuery("");
   }
 
@@ -3265,9 +3516,11 @@ function CreateIssuePage({ data }) {
                 onScan={handleScan}
                 placeholder="Search product, SKU, barcode, or serial..."
               />
-              {filteredUnits.length ? (
-                <div className="mt-2 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
-                  {filteredUnits.map((unit) => (
+              <UnitPickerResults
+                rows={pickerRows}
+                className="mt-2 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel"
+                onAddGeneric={addUnits}
+                renderUnit={(unit) => (
                     <button
                       key={unit.id}
                       onClick={() => addUnit(unit)}
@@ -3280,9 +3533,8 @@ function CreateIssuePage({ data }) {
                       </span>
                       <Plus className="h-4 w-4 text-zinc-500" />
                     </button>
-                  ))}
-                </div>
-              ) : null}
+                )}
+              />
 
               <SelectedUnitsTable units={selectedUnits} onRemove={removeUnit} emptyText="No units selected for assignment yet." />
             </FormSection>
@@ -3895,8 +4147,10 @@ function RepairItemsTable({ items }) {
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => (
-                <tr key={item.id} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
+              {groupGenericItems(items).map((entry) => {
+                const item = entry.item;
+                return (
+                <tr key={entry.key} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
                   <td className="px-4 py-3 font-semibold text-white">
                     {item.product_name}
                     {item.is_client_owned ? (
@@ -3906,14 +4160,15 @@ function RepairItemsTable({ items }) {
                     ) : null}
                   </td>
                   <td className="px-4 py-3 font-mono text-xs text-[var(--bim-orange-text)]">{item.product_sku || "-"}</td>
-                  <td className="px-4 py-3 text-zinc-400">#{item.product_unit}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-zinc-300">{item.serial_number || "-"}</td>
+                  <td className="px-4 py-3 text-zinc-400">{entry.generic ? `${formatCount(entry.count)} units` : `#${item.product_unit}`}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-zinc-300"><ItemSerialText entry={entry} /></td>
                   <td className="px-4 py-3">
                     <Status status={item.product_unit_status_label || item.product_unit_status} statusClass={item.product_unit_status} />
                   </td>
                   <td className="px-4 py-3 text-zinc-400">{item.notes || item.resolution_notes || "-"}</td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -3990,13 +4245,7 @@ function CreateRepairPage({ data }) {
   }, [data.api.productUnits]);
 
   const selectedIds = new Set(selectedUnits.map((unit) => unit.id));
-  const filteredUnits = units
-    .filter((unit) => !selectedIds.has(unit.id))
-    .filter((unit) => {
-      const text = `${unit.product_name} ${unit.product_sku} ${unit.product_barcode || ""} ${unit.group_name || ""} ${unit.serial_number}`.toLowerCase();
-      return query && text.includes(query.toLowerCase());
-    })
-    .slice(0, 8);
+  const pickerRows = buildUnitPickerRows(units, selectedIds, query);
 
   function updateField(name, value) {
     setForm((current) => ({ ...current, [name]: value }));
@@ -4004,6 +4253,11 @@ function CreateRepairPage({ data }) {
 
   function addUnit(unit) {
     setSelectedUnits((current) => [...current, unit]);
+    setQuery("");
+  }
+
+  function addUnits(newUnits) {
+    setSelectedUnits((current) => [...current, ...newUnits]);
     setQuery("");
   }
 
@@ -4211,9 +4465,11 @@ function CreateRepairPage({ data }) {
                 onScan={handleScan}
                 placeholder="Search product, SKU, barcode, or serial..."
               />
-              {filteredUnits.length ? (
-                <div className="mt-2 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
-                  {filteredUnits.map((unit) => (
+              <UnitPickerResults
+                rows={pickerRows}
+                className="mt-2 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel"
+                onAddGeneric={addUnits}
+                renderUnit={(unit) => (
                     <button
                       key={unit.id}
                       onClick={() => addUnit(unit)}
@@ -4226,9 +4482,8 @@ function CreateRepairPage({ data }) {
                       </span>
                       <Plus className="h-4 w-4 text-zinc-500" />
                     </button>
-                  ))}
-                </div>
-              ) : null}
+                )}
+              />
 
               <SelectedUnitsTable units={selectedUnits} onRemove={removeUnit} emptyText="No units selected for repair yet." />
             </FormSection>
@@ -5395,18 +5650,21 @@ function RemovalItemsTable({ items }) {
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => (
-                <tr key={item.id} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
+              {groupGenericItems(items).map((entry) => {
+                const item = entry.item;
+                return (
+                <tr key={entry.key} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
                   <td className="px-4 py-3 font-semibold text-white">{item.product_name}</td>
                   <td className="px-4 py-3 font-mono text-xs text-[var(--bim-orange-text)]">{item.product_sku || "-"}</td>
-                  <td className="px-4 py-3 text-zinc-400">#{item.product_unit}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-zinc-300">{item.serial_number || "-"}</td>
+                  <td className="px-4 py-3 text-zinc-400">{entry.generic ? `${formatCount(entry.count)} units` : `#${item.product_unit}`}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-zinc-300"><ItemSerialText entry={entry} /></td>
                   <td className="px-4 py-3">
                     <Status status={item.product_unit_status_label || item.product_unit_status} statusClass={item.product_unit_status} />
                   </td>
                   <td className="px-4 py-3 text-zinc-400">{item.notes || "-"}</td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -5453,13 +5711,7 @@ function CreateRemovalPage({ data }) {
   }, [data.api.productUnits]);
 
   const selectedIds = new Set(selectedUnits.map((unit) => unit.id));
-  const filteredUnits = units
-    .filter((unit) => !selectedIds.has(unit.id))
-    .filter((unit) => {
-      const text = `${unit.product_name} ${unit.product_sku} ${unit.product_barcode || ""} ${unit.group_name || ""} ${unit.serial_number}`.toLowerCase();
-      return query && text.includes(query.toLowerCase());
-    })
-    .slice(0, 8);
+  const pickerRows = buildUnitPickerRows(units, selectedIds, query);
 
   function updateField(name, value) {
     setForm((current) => ({ ...current, [name]: value }));
@@ -5467,6 +5719,11 @@ function CreateRemovalPage({ data }) {
 
   function addUnit(unit) {
     setSelectedUnits((current) => [...current, unit]);
+    setQuery("");
+  }
+
+  function addUnits(newUnits) {
+    setSelectedUnits((current) => [...current, ...newUnits]);
     setQuery("");
   }
 
@@ -5576,9 +5833,11 @@ function CreateRemovalPage({ data }) {
                 onScan={handleScan}
                 placeholder="Search product, SKU, barcode, or serial..."
               />
-              {filteredUnits.length ? (
-                <div className="mt-2 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
-                  {filteredUnits.map((unit) => (
+              <UnitPickerResults
+                rows={pickerRows}
+                className="mt-2 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel"
+                onAddGeneric={addUnits}
+                renderUnit={(unit) => (
                     <button
                       key={unit.id}
                       onClick={() => addUnit(unit)}
@@ -5591,9 +5850,8 @@ function CreateRemovalPage({ data }) {
                       </span>
                       <Plus className="h-4 w-4 text-zinc-500" />
                     </button>
-                  ))}
-                </div>
-              ) : null}
+                )}
+              />
 
               <SelectedUnitsTable units={selectedUnits} onRemove={removeUnit} emptyText="No units selected for removal yet." />
             </FormSection>
@@ -6176,18 +6434,21 @@ function ClientReturnItemsTable({ items }) {
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => (
-                <tr key={item.id} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
+              {groupGenericItems(items).map((entry) => {
+                const item = entry.item;
+                return (
+                <tr key={entry.key} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
                   <td className="px-4 py-3 font-semibold text-white">{item.product_name}</td>
                   <td className="px-4 py-3 font-mono text-xs text-[var(--bim-orange-text)]">{item.product_sku || "-"}</td>
                   <td className="px-4 py-3 text-zinc-400">{item.delivery_number || "-"}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-zinc-300">{item.serial_number || "-"}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-zinc-300"><ItemSerialText entry={entry} /></td>
                   <td className="px-4 py-3">
                     <Status status={item.product_unit_status_label || item.product_unit_status} statusClass={item.product_unit_status} />
                   </td>
                   <td className="px-4 py-3 text-zinc-400">{item.notes || "-"}</td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -6212,6 +6473,9 @@ function CreateClientReturnPage({ data }) {
     notes: ""
   });
   const [units, setUnits] = useState([]);
+  // Generic (no-serial) sold units, one group per product and client; each
+  // group lists its unit ids oldest delivery first.
+  const [genericGroups, setGenericGroups] = useState([]);
   const [query, setQuery] = useState("");
   const partyLookups = usePartyLookups(data, { suppliers: true });
   const [selectedUnits, setSelectedUnits] = useState([]);
@@ -6226,10 +6490,12 @@ function CreateClientReturnPage({ data }) {
         const params = new URLSearchParams();
         if (query.trim()) params.set("q", query.trim());
         if (deliveryId) params.set("delivery", deliveryId);
-        const response = await fetch(`${data.api.clientReturns}returnable-units/?${params.toString()}`, {
-          signal: controller.signal
-        });
+        const [response, groupsResponse] = await Promise.all([
+          fetch(`${data.api.clientReturns}returnable-units/?${params.toString()}`, { signal: controller.signal }),
+          fetch(`${data.api.clientReturns}returnable-generic-groups/?${params.toString()}`, { signal: controller.signal })
+        ]);
         setUnits(response.ok ? await response.json() : []);
+        setGenericGroups(groupsResponse.ok ? await groupsResponse.json() : []);
         setLoadError("");
       } catch (loadFailure) {
         if (loadFailure.name !== "AbortError") {
@@ -6248,10 +6514,37 @@ function CreateClientReturnPage({ data }) {
   // delivery. Once the first unit is picked, only that client's units are offered.
   const returnClient = selectedUnits[0]?.client || null;
   const selectedIds = new Set(selectedUnits.map((unit) => unit.id));
-  const filteredUnits = units
-    .filter((unit) => !selectedIds.has(unit.id))
-    .filter((unit) => !returnClient || unit.blocked_reason || unit.client?.id === returnClient.id)
-    .slice(0, 8);
+  const realRows = buildUnitPickerRows(
+    units.filter((unit) => !returnClient || unit.blocked_reason || unit.client?.id === returnClient.id),
+    selectedIds,
+    "",
+    { requireQuery: false, groupGeneric: false }
+  );
+  // A group's units are already filtered to what a return accepts; the quantity
+  // picked takes the oldest deliveries first (rank = server order).
+  const genericRows = buildUnitPickerRows(
+    genericGroups
+      .filter((group) => !returnClient || group.client.id === returnClient.id)
+      .flatMap((group) =>
+        group.unit_ids.map((id, rank) => ({
+          id,
+          rank,
+          product: group.product,
+          product_name: group.product_name,
+          product_sku: group.product_sku,
+          serial_number: "",
+          serial_is_generated: true,
+          status: "sold",
+          status_label: "Sold",
+          client: group.client,
+          countLabel: "returnable"
+        }))
+      ),
+    selectedIds,
+    "",
+    { requireQuery: false }
+  );
+  const pickerRows = [...realRows, ...genericRows];
 
   function updateField(name, value) {
     setForm((current) => ({ ...current, [name]: value }));
@@ -6259,6 +6552,11 @@ function CreateClientReturnPage({ data }) {
 
   function addUnit(unit) {
     setSelectedUnits((current) => [...current, unit]);
+    setQuery("");
+  }
+
+  function addUnits(newUnits) {
+    setSelectedUnits((current) => [...current, ...newUnits]);
     setQuery("");
   }
 
@@ -6427,9 +6725,11 @@ function CreateClientReturnPage({ data }) {
               {returnClient ? (
                 <p className="mt-2 text-xs text-zinc-500">Only units delivered to {returnClient.name} are offered.</p>
               ) : null}
-              {filteredUnits.length ? (
-                <div className="mt-2 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel">
-                  {filteredUnits.map((unit) => (
+              <UnitPickerResults
+                rows={pickerRows}
+                className="mt-2 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel"
+                onAddGeneric={addUnits}
+                renderUnit={(unit) => (
                     <button
                       key={unit.id}
                       onClick={() => addUnit(unit)}
@@ -6446,9 +6746,8 @@ function CreateClientReturnPage({ data }) {
                       </span>
                       <Plus className="h-4 w-4 text-zinc-500" />
                     </button>
-                  ))}
-                </div>
-              ) : null}
+                )}
+              />
 
               <SelectedUnitsTable units={selectedUnits} onRemove={removeUnit} emptyText="No sold units selected for client return yet." />
             </FormSection>
@@ -7068,16 +7367,20 @@ function DeliveryCorrectionPanel({
         <PanelHeader title="Item Notes" badge={formatCount(items.length)} />
         <div className="divide-y divide-nexus-line">
           {items.length ? (
-            items.map((item) => {
+            groupGenericItems(items).map((group) => {
+              const item = group.item;
               const formItem = form.items.find((entry) => entry.id === item.id);
               return (
-                <div key={item.id} className="grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_minmax(220px,0.8fr)]">
+                <div key={group.key} className="grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_minmax(220px,0.8fr)]">
                   <div>
                     <p className="font-semibold text-white">{item.product_name}</p>
-                    <p className="mt-1 font-mono text-xs text-zinc-500">{item.serial_number || "-"}</p>
+                    <p className="mt-1 font-mono text-xs text-zinc-500"><ItemSerialText entry={group} /></p>
                   </div>
                   <Field label="Line Notes">
-                    <TextInput value={formItem?.notes || ""} onChange={(value) => onItemChange(item.id, value)} />
+                    <TextInput
+                      value={formItem?.notes || ""}
+                      onChange={(value) => group.items.forEach((member) => onItemChange(member.id, value))}
+                    />
                   </Field>
                 </div>
               );
@@ -7124,17 +7427,19 @@ function DeliveryItemsTable({ items }) {
           </thead>
           <tbody>
             {items.length ? (
-              items.map((item) => (
-                <tr key={item.id} className="border-t border-nexus-line">
+              groupGenericItems(items).map((entry) => {
+                const item = entry.item;
+                return (
+                <tr key={entry.key} className="border-t border-nexus-line">
                   <td className="px-4 py-4">
                     <p className="font-semibold text-white">{item.product_name}</p>
                     <p className="mt-1 font-mono text-xs text-zinc-500">{item.product_sku || "-"}</p>
                   </td>
                   <td className="px-4 py-4">
-                    <p className="font-mono text-xs text-zinc-300">{item.product_unit ? `Unit #${item.product_unit}` : "-"}</p>
+                    <p className="font-mono text-xs text-zinc-300">{entry.generic ? `${formatCount(entry.count)} units` : item.product_unit ? `Unit #${item.product_unit}` : "-"}</p>
                     <p className="mt-1 text-xs text-zinc-500">Product #{item.product || "-"}</p>
                   </td>
-                  <td className="px-4 py-4 font-mono text-xs text-zinc-300">{item.serial_number || "-"}</td>
+                  <td className="px-4 py-4 font-mono text-xs text-zinc-300"><ItemSerialText entry={entry} /></td>
                   <td className="px-4 py-4">
                     <Status status={item.product_unit_status_label || item.product_unit_status || "-"} statusClass={item.product_unit_status || "inactive"} />
                   </td>
@@ -7144,7 +7449,8 @@ function DeliveryItemsTable({ items }) {
                   </td>
                   <td className="px-4 py-4 text-zinc-400">{item.notes || "-"}</td>
                 </tr>
-              ))
+                );
+              })
             ) : (
               <tr>
                 <td colSpan="6">
@@ -7293,9 +7599,10 @@ function InventoryPage({ data }) {
     if (view === "units") {
       downloadCsv(
         `stock-units-${stamp}.csv`,
-        ["Serial Number", "Product", "SKU", "Status", "Where", "Supplier", "Cost", "Purchase Date", "Notes", "Group"],
+        ["Serial Number", "Serial Type", "Product", "SKU", "Status", "Where", "Supplier", "Cost", "Purchase Date", "Notes", "Group"],
         unitRows.map((unit) => [
           unit.serial_number,
+          serialTypeLabel(unit),
           unit.product_name,
           unit.product_sku,
           unit.status_label || unit.status,
@@ -7791,6 +8098,7 @@ function InventoryUnitsView({ data, onRowsChange }) {
         <Status status={unit.status_label || unit.status} statusClass={unit.status} />
       </div>
       <p className="mt-1 text-sm font-semibold text-white">{unit.product_name}</p>
+      <p className="mt-0.5 text-xs text-zinc-500">{serialTypeLabel(unit)} serial</p>
       <div className="mt-1 flex items-center justify-between gap-3 text-sm text-zinc-400">
         <UnitWhere location={unit.location} />
         {canEdit ? (
@@ -7814,6 +8122,7 @@ function InventoryUnitsView({ data, onRowsChange }) {
           {unit.serial_number}
         </a>
       </td>
+      <td className="px-4 py-3 text-zinc-400">{serialTypeLabel(unit)}</td>
       <td className="px-4 py-3">
         <p className="font-semibold text-white">{unit.product_name}</p>
         <p className="mt-0.5 font-mono text-xs text-zinc-500">{unit.product_sku}</p>
@@ -7841,7 +8150,7 @@ function InventoryUnitsView({ data, onRowsChange }) {
     </tr>
   );
 
-  const columnCount = canEdit ? 7 : 6;
+  const columnCount = canEdit ? 8 : 7;
 
   return (
     <>
@@ -7907,6 +8216,7 @@ function InventoryUnitsView({ data, onRowsChange }) {
               <thead className="bg-zinc-800/80 text-zinc-400">
                 <tr>
                   <th className="px-4 py-3 font-medium">Serial Number</th>
+                  <th className="px-4 py-3 font-medium">Serial Type</th>
                   <th className="px-4 py-3 font-medium">Product</th>
                   <th className="px-4 py-3 font-medium">Status</th>
                   <th className="px-4 py-3 font-medium">Where</th>
@@ -9157,6 +9467,11 @@ function ProductUnitRegister({ data, units, accessDenied, initialQuery = "", onU
                   <tr key={unit.id} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
                     <td className="px-4 py-3 font-mono text-xs text-[var(--bim-orange-text)]">
                       {unit.serial_number}
+                      {unit.serial_is_generated ? (
+                        <span className="ml-2 rounded border border-nexus-line px-1.5 py-0.5 font-sans text-[10px] font-semibold uppercase tracking-wide text-zinc-400" title="No serial was entered; the system made this one">
+                          {SERIAL_TYPE_LABELS.generated}
+                        </span>
+                      ) : null}
                       {unit.owner_client_name ? (
                         <span className="ml-2 rounded border border-nexus-line px-1.5 py-0.5 font-sans text-[10px] font-semibold uppercase tracking-wide text-zinc-400" title={`Belongs to ${unit.owner_client_name}`}>
                           Client item
@@ -9885,7 +10200,6 @@ function StockEntryPage({ data, mode = "add-unit" }) {
   // Reserving on receipt also creates a reservation and changes unit status, so it
   // needs the same permissions as Create Reservation.
   const canReserve = isReceiving && Boolean(data.permissions?.canCreateReservation);
-  const serialBatch = useMemo(() => String(Date.now()).slice(-6), []);
   // One token per page load, reused for every submit attempt from this form
   // instance -- lets the backend recognize and no-op a retried/double-click
   // submission instead of creating a duplicate receiving record.
@@ -10073,13 +10387,9 @@ function StockEntryPage({ data, mode = "add-unit" }) {
       .filter(Boolean);
   }
 
-  function buildGeneratedSerial(line, lineIndex, serialIndex) {
-    const lineToken = String(lineIndex + 1).padStart(2, "0");
-    const serialToken = String(serialIndex + 1).padStart(3, "0");
-    return `${line.product.sku}-${serialBatch}-${lineToken}-${serialToken}`;
-  }
-
-  function buildReceivingSerialNumbers(line, lineIndex) {
+  // Only the typed/scanned serials are sent. Units with no serial are made by the
+  // backend (auto_serial_count) and flagged as generic there.
+  function typedReceivingSerials(line) {
     const quantity = Number(line.quantity) || 0;
     const serialNumbers = parseSerials(line.serials);
 
@@ -10087,25 +10397,24 @@ function StockEntryPage({ data, mode = "add-unit" }) {
       throw new Error(`Serial number count cannot exceed quantity for ${line.product.display_name}.`);
     }
 
-    for (let index = serialNumbers.length; index < quantity; index += 1) {
-      serialNumbers.push(buildGeneratedSerial(line, lineIndex, index));
-    }
-
     return serialNumbers;
   }
 
   async function createReceivingRecord() {
-    const itemInputs = lines.map((line, lineIndex) => {
+    const itemInputs = lines.map((line) => {
       const quantity = Number(line.quantity) || 0;
 
       if (quantity < 1) {
         throw new Error(`Quantity must be at least 1 for ${line.product.display_name}.`);
       }
 
+      const typedSerials = typedReceivingSerials(line);
+
       return {
         product: line.product.id,
         quantity,
-        serial_numbers: buildReceivingSerialNumbers(line, lineIndex),
+        ...(typedSerials.length ? { serial_numbers: typedSerials } : {}),
+        auto_serial_count: quantity - typedSerials.length,
         cost: line.cost || "0.00",
         reserve: line.reserve !== false
       };
@@ -10159,8 +10468,8 @@ function StockEntryPage({ data, mode = "add-unit" }) {
       const serials = parseSerials(line.serials);
 
       for (let index = 0; index < quantity; index += 1) {
-        const serialNumber =
-          serials[index] || `${line.product.sku}-${serialBatch}-${String(index + 1).padStart(3, "0")}`;
+        // No typed serial: omit it and the backend makes one and flags the unit.
+        const serialNumber = serials[index] || "";
         const response = await fetch(data.api.productUnits, {
           method: "POST",
           headers: {
@@ -10169,7 +10478,7 @@ function StockEntryPage({ data, mode = "add-unit" }) {
           },
           body: JSON.stringify({
             product: line.product.id,
-            serial_number: serialNumber,
+            ...(serialNumber ? { serial_number: serialNumber } : {}),
             status: "available",
             supplier: null,
             cost: line.cost || "0.00",
@@ -10395,7 +10704,7 @@ function StockEntryPage({ data, mode = "add-unit" }) {
                             value={line.serials}
                             onChange={(event) => updateLine(line.key, "serials", event.target.value)}
                             className="min-h-10 min-w-0 flex-1 rounded-md border border-nexus-line bg-black px-3 py-2 text-sm text-zinc-200 outline-none placeholder:text-zinc-600"
-                            placeholder="One per line. Blank = auto-generated"
+                            placeholder="One per line. Blank = no serial (generic unit)"
                           />
                           <ScanButton
                             multiple
@@ -10759,9 +11068,12 @@ function CreateDeliveryPage({ data }) {
           .filter((item) => item.isactive)
           .map((item) => ({
             id: item.product_unit,
+            product: item.product,
             product_name: item.product_name,
             product_sku: item.product_sku,
             serial_number: item.serial_number,
+            serial_is_generated: item.serial_is_generated,
+            status: item.product_unit_status,
             salePrice: "0.00"
           }))
       );
@@ -10777,13 +11089,7 @@ function CreateDeliveryPage({ data }) {
   }, [data.api.reservationDetail, reservationId]);
 
   const selectedIds = new Set(selectedUnits.map((unit) => unit.id));
-  const filteredUnits = units
-    .filter((unit) => !selectedIds.has(unit.id))
-    .filter((unit) => {
-      const text = `${unit.product_name} ${unit.product_sku} ${unit.product_barcode || ""} ${unit.group_name || ""} ${unit.serial_number}`.toLowerCase();
-      return query && text.includes(query.toLowerCase());
-    })
-    .slice(0, 8);
+  const pickerRows = buildUnitPickerRows(units, selectedIds, query);
 
   function updateField(name, value) {
     setForm((current) => ({ ...current, [name]: value }));
@@ -10815,6 +11121,11 @@ function CreateDeliveryPage({ data }) {
 
   function addUnit(unit) {
     setSelectedUnits((current) => [...current, { ...unit, salePrice: "0.00" }]);
+    setQuery("");
+  }
+
+  function addUnits(newUnits) {
+    setSelectedUnits((current) => [...current, ...newUnits.map((unit) => ({ ...unit, salePrice: "0.00" }))]);
     setQuery("");
   }
 
@@ -10960,9 +11271,11 @@ function CreateDeliveryPage({ data }) {
                   onScan={handleScan}
                   placeholder="Search available unit by product, SKU, barcode, or serial..."
                 />
-                {filteredUnits.length ? (
-                  <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel shadow-2xl">
-                    {filteredUnits.map((unit) => (
+                <UnitPickerResults
+                  rows={pickerRows}
+                  className="absolute z-20 mt-2 w-full overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel shadow-2xl"
+                  onAddGeneric={addUnits}
+                  renderUnit={(unit) => (
                       <button
                         key={unit.id}
                         onClick={() => addUnit(unit)}
@@ -10975,30 +11288,52 @@ function CreateDeliveryPage({ data }) {
                         </span>
                         <Plus className="h-4 w-4 text-zinc-500" />
                       </button>
-                    ))}
-                  </div>
-                ) : null}
+                  )}
+                />
               </div>
 
               <div className="mt-4 rounded-lg border border-dashed border-nexus-line bg-black/30">
                 {selectedUnits.length ? (
-                  selectedUnits.map((unit) => (
-                    <div key={unit.id} className="grid gap-3 border-b border-nexus-line p-4 last:border-b-0 md:grid-cols-[minmax(0,1fr)_140px_140px_40px]">
-                      <div>
-                        <p className="font-bold text-white">{unit.product_name}</p>
-                        <p className="mt-1 font-mono text-xs text-[var(--bim-orange-text)]">{unit.product_sku}</p>
+                  groupSelectedUnits(selectedUnits).map((entry) => {
+                    const unit = entry.units[0];
+                    const many = entry.generic && entry.units.length > 1;
+                    return (
+                      <div key={entry.key} className="grid gap-3 border-b border-nexus-line p-4 last:border-b-0 md:grid-cols-[minmax(0,1fr)_140px_140px_40px]">
+                        <div>
+                          <p className="font-bold text-white">{unit.product_name}</p>
+                          <p className="mt-1 font-mono text-xs text-[var(--bim-orange-text)]">{unit.product_sku}</p>
+                        </div>
+                        <p className="font-mono text-sm text-zinc-300">
+                          {entry.generic ? (
+                            <>
+                              No serial
+                              <span className="ml-2 font-sans text-xs text-zinc-500">
+                                {formatCount(entry.units.length)} {entry.units.length === 1 ? "unit" : "units"}
+                              </span>
+                            </>
+                          ) : (
+                            unit.serial_number
+                          )}
+                        </p>
+                        <CompactField label={many ? "Reference Sale Price (each)" : "Reference Sale Price"}>
+                          <TextInput
+                            value={unit.salePrice}
+                            onChange={(value) => entry.units.forEach((member) => updateUnitSalePrice(member.id, value))}
+                          />
+                        </CompactField>
+                        {reservationId ? <span /> : (
+                          <button
+                            onClick={() => entry.units.forEach((member) => removeUnit(member.id))}
+                            type="button"
+                            className="text-zinc-500 hover:text-nexus-red"
+                            aria-label={entry.generic ? `Remove ${unit.product_name} (no serial)` : `Remove ${unit.serial_number}`}
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
-                      <p className="font-mono text-sm text-zinc-300">{unit.serial_number}</p>
-                      <CompactField label="Reference Sale Price">
-                        <TextInput value={unit.salePrice} onChange={(value) => updateUnitSalePrice(unit.id, value)} />
-                      </CompactField>
-                      {reservationId ? <span /> : (
-                        <button onClick={() => removeUnit(unit.id)} type="button" className="text-zinc-500 hover:text-nexus-red">
-                          <X className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                  ))
+                    );
+                  })
                 ) : (
                   <div className="grid min-h-36 place-items-center text-center text-sm text-zinc-600">
                     <span>
