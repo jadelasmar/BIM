@@ -303,6 +303,11 @@ class ProductUnit(models.Model):
     product = models.ForeignKey(Product, on_delete=models.PROTECT, related_name="units")
 
     serial_number = models.CharField(max_length=150, unique=True)
+    # True when nobody typed or scanned a serial and the system made one up
+    # (see apps/stock/serials.py). Such "generic" units are picked by quantity
+    # in the workflow pickers and grouped on record pages. Set only where the
+    # serial is generated; never client-writable.
+    serial_is_generated = models.BooleanField(default=False)
 
     status = models.CharField(
         max_length=20,

@@ -7181,3 +7181,92 @@ class MediaAccessTests(TestCase):
                     pass
         clear_url_caches()
         importlib.reload(bim.urls)
+
+
+# ---------------------------------------------------------------------------
+# Generic (no-serial) units: see docs/superpowers/specs/2026-11-19-generic-serial-units-design.md
+# ---------------------------------------------------------------------------
+
+
+class GeneratedSerialMigrationTests(TestCase):
+    """The 0044 data step marks a unit generated only on an exact match of its
+    own product's SKU plus one of the two generated formats."""
+
+    def setUp(self):
+        import importlib
+
+        self.migration = importlib.import_module(
+            "apps.stock.migrations.0044_productunit_serial_is_generated"
+        )
+        category = Category.objects.create(name="Laser")
+        brand = Brand.objects.create(brandname="Canon")
+        model = ProductModel.objects.create(brand=brand, modelname="L100")
+        self.product = Product.objects.create(
+            descript="Canon laser printer", category=category, model=model
+        )
+        self.other = Product.objects.create(
+            descript="Canon other", category=category,
+            model=ProductModel.objects.create(brand=brand, modelname="L200"),
+        )
+
+    def test_match_exact_receiving_format(self):
+        self.assertTrue(self.migration.is_generated_serial("ABC", "ABC-123456-01-003"))
+
+    def test_match_exact_add_unit_format(self):
+        self.assertTrue(self.migration.is_generated_serial("ABC", "ABC-123456-003"))
+
+    def test_sku_with_hyphens_matches(self):
+        self.assertTrue(
+            self.migration.is_generated_serial("LAS-CAN-L10", "LAS-CAN-L10-654321-02-011")
+        )
+
+    def test_other_product_sku_is_not_a_match(self):
+        self.assertFalse(self.migration.is_generated_serial("ABC", "XYZ-123456-001"))
+
+    def test_real_serial_not_matched(self):
+        for serial in ("SN12345", "ABC-1", "ABC-123456-1", "ABC-12345-001", "ABC-123456-001-x", ""):
+            with self.subTest(serial=serial):
+                self.assertFalse(self.migration.is_generated_serial("ABC", serial))
+
+    def test_forward_marks_only_exact_matches_and_lists_near_misses(self):
+        from django.apps import apps as real_apps
+
+        sku = self.product.sku
+        match_a = ProductUnit.objects.create(product=self.product, serial_number=f"{sku}-123456-01-001")
+        match_b = ProductUnit.objects.create(product=self.product, serial_number=f"{sku}-123456-002")
+        real = ProductUnit.objects.create(product=self.product, serial_number="REAL-SERIAL-9")
+        # Generated-looking suffix, but another product's SKU prefix.
+        wrong_sku = ProductUnit.objects.create(
+            product=self.product, serial_number=f"{self.other.sku}-123456-003"
+        )
+        # Starts with its own SKU but is not a generated format.
+        sku_prefixed = ProductUnit.objects.create(product=self.product, serial_number=f"{sku}-CUSTOM")
+
+        matched, near_misses = self.migration.find_generated_units(
+            ProductUnit.objects.select_related("product")
+        )
+        self.assertCountEqual(matched, [match_a.pk, match_b.pk])
+        self.assertCountEqual([row[0] for row in near_misses], [wrong_sku.pk, sku_prefixed.pk])
+
+        from io import StringIO
+        from contextlib import redirect_stdout
+
+        with redirect_stdout(StringIO()) as out:
+            self.migration.mark_generated_serials(real_apps, None)
+        for unit in (match_a, match_b):
+            unit.refresh_from_db()
+            self.assertTrue(unit.serial_is_generated)
+        for unit in (real, wrong_sku, sku_prefixed):
+            unit.refresh_from_db()
+            self.assertFalse(unit.serial_is_generated)
+        self.assertIn("marked 2 unit(s)", out.getvalue())
+        self.assertIn("2 near-miss", out.getvalue())
+
+    def test_reverse_is_a_noop(self):
+        from django.db import migrations
+
+        run_python = [
+            op for op in self.migration.Migration.operations
+            if isinstance(op, migrations.RunPython)
+        ][0]
+        self.assertIs(run_python.reverse_code, migrations.RunPython.noop)
