@@ -311,18 +311,17 @@ function GlobalSearch({ data }) {
                     {group.label} ({group.count})
                   </p>
                   {group.results.map((result) => (
-                    <button
+                    <a
                       key={`${group.key}-${result.id}`}
-                      type="button"
+                      href={result.href}
                       onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => window.location.assign(result.href)}
                       className="flex w-full flex-col items-start rounded px-3 py-2 text-left hover:bg-nexus-panel"
                     >
                       <span className="truncate text-sm font-semibold text-white">{result.title}</span>
                       {result.subtitle ? (
                         <span className="truncate text-xs text-zinc-500">{result.subtitle}</span>
                       ) : null}
-                    </button>
+                    </a>
                   ))}
                 </div>
               ))
@@ -641,7 +640,7 @@ function MasterDataTable({ config, records, loading, error }) {
               <TableMessage message={error} />
             ) : records.length ? (
               records.map((record) => (
-                <tr key={record.id} className="border-t border-nexus-line hover:bg-zinc-900/70">
+                <ClickableRow key={record.id} href={`${config.path}${record.id}/`} className="border-t border-nexus-line hover:bg-zinc-900/70">
                   <td className="px-4 py-4">
                     <a href={`${config.path}${record.id}/`} className="font-semibold text-white hover:text-[var(--bim-orange-hover)]">
                       {record.name}
@@ -654,7 +653,7 @@ function MasterDataTable({ config, records, loading, error }) {
                   <td className="px-4 py-4">
                     <Status status={record.isactive ? "Active" : "Inactive"} statusClass={record.isactive ? "available" : "inactive"} />
                   </td>
-                </tr>
+                </ClickableRow>
               ))
             ) : (
               <tr>
@@ -1137,13 +1136,15 @@ function ReceivingRecordsTable({ records, loading, error }) {
               <TableMessage message={error} />
             ) : records.length ? (
               records.map((record) => (
-                <tr key={record.id} className="border-t border-nexus-line hover:bg-zinc-900/70">
+                <ClickableRow key={record.id} href={`/operations/receiving/${record.id}/`} className="border-t border-nexus-line hover:bg-zinc-900/70">
                   <td className="px-4 py-4">
-                    <p className="font-mono text-xs font-bold text-[var(--bim-orange-text)]">{record.receiving_number}</p>
+                    <RecordNumberLink href={`/operations/receiving/${record.id}/`}>{record.receiving_number}</RecordNumberLink>
                     <p className="mt-1 text-xs text-zinc-500">Created by {record.created_by_name || "-"}</p>
                   </td>
                   <td className="px-4 py-4">
-                    <p className="font-semibold text-white">{record.supplier_name || "Manual source"}</p>
+                    <p className="font-semibold text-white">
+                      {record.supplier_name ? <EntityLink href={record.supplier ? `/suppliers/${record.supplier}/` : null}>{record.supplier_name}</EntityLink> : "Manual source"}
+                    </p>
                     <p className="mt-1 text-xs text-zinc-500">
                       {record.supplier_name ? "Supplier receiving" : "Direct stock entry"}
                     </p>
@@ -1161,7 +1162,7 @@ function ReceivingRecordsTable({ records, loading, error }) {
                   <td className="px-4 py-4">
                     <Status status={record.status === "cancelled" || !record.isactive ? "Cancelled" : "Recorded"} statusClass={record.status === "cancelled" || !record.isactive ? "inactive" : "received"} />
                   </td>
-                </tr>
+                </ClickableRow>
               ))
             ) : (
               <tr>
@@ -1474,7 +1475,7 @@ function ReceivingRecordDetailPage({ data }) {
               </div>
 
               <dl className="mt-5 grid gap-4 md:grid-cols-2">
-                <DetailRow label="Source" value={record.supplier_name || "Manual source"} strong />
+                <DetailRow label="Source" value={record.supplier_name ? <EntityLink href={record.supplier ? `/suppliers/${record.supplier}/` : null}>{record.supplier_name}</EntityLink> : "Manual source"} strong />
                 <DetailRow label="Received Date" value={formatDate(record.received_date)} />
                 <DetailRow label="Purchase Order #" value={record.po_number || "-"} />
                 <DetailRow label="Supplier Invoice #" value={record.supplier_invoice_number || "-"} />
@@ -1635,7 +1636,7 @@ function ReceivingItemsTable({ items }) {
                 return (
                 <tr key={entry.key} className="border-t border-nexus-line">
                   <td className="px-4 py-4">
-                    <p className="font-semibold text-white">{item.product_name}</p>
+                    <p className="font-semibold text-white"><EntityLink href={productHref(item.product)} className="text-white hover:text-[var(--bim-orange-hover)]">{item.product_name}</EntityLink></p>
                     <p className="mt-1 font-mono text-xs text-zinc-500">{item.product_sku || "-"}</p>
                   </td>
                   <td className="px-4 py-4 font-bold text-white">
@@ -1904,11 +1905,11 @@ function ReservationRecordsTable({ records, loading, error }) {
               <TableMessage message={error} />
             ) : records.length ? (
               records.map((record) => (
-                <tr key={record.id} className="border-t border-nexus-line hover:bg-zinc-900/70">
+                <ClickableRow key={record.id} href={`/operations/reservations/${record.id}/`} className="border-t border-nexus-line hover:bg-zinc-900/70">
                   <td className="px-4 py-4">
-                    <a href={`/operations/reservations/${record.id}/`} className="font-mono text-xs font-bold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
+                    <RecordNumberLink href={`/operations/reservations/${record.id}/`}>
                       {record.reservation_number}
-                    </a>
+                    </RecordNumberLink>
                     <p className="mt-1 text-xs text-zinc-500">Reserved by {record.reserved_by_name || "-"}</p>
                   </td>
                   <td className="px-4 py-4 font-semibold text-white">
@@ -1923,7 +1924,7 @@ function ReservationRecordsTable({ records, loading, error }) {
                   <td className="px-4 py-4">
                     <Status status={reservationStatusLabel(record)} statusClass={record.status} />
                   </td>
-                </tr>
+                </ClickableRow>
               ))
             ) : (
               <tr>
@@ -2296,7 +2297,7 @@ function ReservationItemsTable({ items }) {
                 const item = entry.item;
                 return (
                 <tr key={entry.key} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
-                  <td className="px-4 py-3 font-semibold text-white">{item.product_name}</td>
+                  <td className="px-4 py-3 font-semibold text-white"><EntityLink href={productHref(item.product)} className="text-white hover:text-[var(--bim-orange-hover)]">{item.product_name}</EntityLink></td>
                   <td className="px-4 py-3 font-mono text-xs text-[var(--bim-orange-text)]">{item.product_sku || "-"}</td>
                   <td className="px-4 py-3 text-zinc-400">{entry.generic ? `${formatCount(entry.count)} units` : `#${item.product_unit}`}</td>
                   <td className="px-4 py-3 font-mono text-xs text-zinc-300"><ItemSerialText entry={entry} /></td>
@@ -2745,7 +2746,15 @@ function ItemSerialText({ entry, fallback = "-" }) {
       </>
     );
   }
-  return <>{entry.item.serial_number || entry.item.product_unit_serial_number || fallback}</>;
+  const serial = entry.item.serial_number || entry.item.product_unit_serial_number;
+  if (!serial) return <>{fallback}</>;
+  return entry.item.product ? (
+    <a href={unitProductHref({ product: entry.item.product, serial_number: serial })} className="text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
+      {serial}
+    </a>
+  ) : (
+    <>{serial}</>
+  );
 }
 
 function SelectedUnitsTable({ units, onRemove, emptyText }) {
@@ -2938,11 +2947,11 @@ function IssueRecordsTable({ records, loading, error }) {
               <TableMessage message={error} />
             ) : records.length ? (
               records.map((record) => (
-                <tr key={record.id} className="border-t border-nexus-line hover:bg-zinc-900/70">
+                <ClickableRow key={record.id} href={`/operations/issues/${record.id}/`} className="border-t border-nexus-line hover:bg-zinc-900/70">
                   <td className="px-4 py-4">
-                    <a href={`/operations/issues/${record.id}/`} className="font-mono text-xs font-bold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
+                    <RecordNumberLink href={`/operations/issues/${record.id}/`}>
                       {record.issue_number}
-                    </a>
+                    </RecordNumberLink>
                     <p className="mt-1 text-xs text-zinc-500">Assigned by {record.issued_by_name || "-"}</p>
                   </td>
                   <td className="px-4 py-4 font-semibold text-white">
@@ -2960,7 +2969,7 @@ function IssueRecordsTable({ records, loading, error }) {
                       {record.is_overdue ? <Status status="Overdue" statusClass="overdue" /> : null}
                     </div>
                   </td>
-                </tr>
+                </ClickableRow>
               ))
             ) : (
               <tr>
@@ -3318,7 +3327,7 @@ function IssueItemsTable({ items }) {
                 const item = entry.item;
                 return (
                 <tr key={entry.key} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
-                  <td className="px-4 py-3 font-semibold text-white">{item.product_name}</td>
+                  <td className="px-4 py-3 font-semibold text-white"><EntityLink href={productHref(item.product)} className="text-white hover:text-[var(--bim-orange-hover)]">{item.product_name}</EntityLink></td>
                   <td className="px-4 py-3 font-mono text-xs text-[var(--bim-orange-text)]">{item.product_sku || "-"}</td>
                   <td className="px-4 py-3 text-zinc-400">{entry.generic ? `${formatCount(entry.count)} units` : `#${item.product_unit}`}</td>
                   <td className="px-4 py-3 font-mono text-xs text-zinc-300"><ItemSerialText entry={entry} /></td>
@@ -3697,11 +3706,11 @@ function RepairRecordsTable({ records, loading, error }) {
               <TableMessage message={error} />
             ) : records.length ? (
               records.map((record) => (
-                <tr key={record.id} className="border-t border-nexus-line hover:bg-zinc-900/70">
+                <ClickableRow key={record.id} href={`/operations/repairs/${record.id}/`} className="border-t border-nexus-line hover:bg-zinc-900/70">
                   <td className="px-4 py-4">
-                    <a href={`/operations/repairs/${record.id}/`} className="font-mono text-xs font-bold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
+                    <RecordNumberLink href={`/operations/repairs/${record.id}/`}>
                       {record.repair_number}
-                    </a>
+                    </RecordNumberLink>
                     <p className="mt-1 text-xs text-zinc-500">Sent by {record.sent_by_name || "-"}</p>
                   </td>
                   <td className="px-4 py-4 font-semibold text-white">
@@ -3718,7 +3727,7 @@ function RepairRecordsTable({ records, loading, error }) {
                   <td className="px-4 py-4 text-zinc-300">{formatDate(record.repair_date)}</td>
                   <td className="px-4 py-4 text-zinc-300">
                     <p>{record.source_label || "-"}</p>
-                    {record.source_party ? <p className="mt-1 text-xs text-zinc-500">{record.source_party.name}</p> : null}
+                    {record.source_party ? <p className="mt-1 text-xs text-zinc-500"><EntityLink href={partyHref(record.source_party)} className="font-normal">{record.source_party.name}</EntityLink></p> : null}
                   </td>
                   <td className="px-4 py-4 text-zinc-300">{record.repair_reason || "-"}</td>
                   <td className="px-4 py-4">
@@ -3728,7 +3737,7 @@ function RepairRecordsTable({ records, loading, error }) {
                   <td className="px-4 py-4">
                     <Status status={repairStatusLabel(record)} statusClass={record.status === "resolved" ? record.resolution || "available" : "repair"} />
                   </td>
-                </tr>
+                </ClickableRow>
               ))
             ) : (
               <tr>
@@ -4152,7 +4161,7 @@ function RepairItemsTable({ items }) {
                 return (
                 <tr key={entry.key} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
                   <td className="px-4 py-3 font-semibold text-white">
-                    {item.product_name}
+                    <EntityLink href={productHref(item.product)} className="text-white hover:text-[var(--bim-orange-hover)]">{item.product_name}</EntityLink>
                     {item.is_client_owned ? (
                       <span className="ml-2 rounded border border-nexus-line px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-400">
                         Client item
@@ -4797,7 +4806,7 @@ function ClientUpgradeRecordsTable({ records, loading, error, canEdit }) {
               <TableMessage message={error} />
             ) : records.length ? (
               records.map((record) => (
-                <tr key={record.id} className="border-t border-nexus-line hover:bg-zinc-900/70">
+                <ClickableRow key={record.id} href={`/operations/upgrades/${record.id}/`} className="border-t border-nexus-line hover:bg-zinc-900/70">
                   <td className="px-4 py-4 font-semibold text-white">
                     {record.client ? (
                       <a href={`/clients/${record.client}/`} className="text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
@@ -4822,9 +4831,9 @@ function ClientUpgradeRecordsTable({ records, loading, error, canEdit }) {
                   </td>
                   <td className="px-4 py-4 text-zinc-300">{record.notes || "-"}</td>
                   <td className="px-4 py-4">
-                    <a href={`/operations/upgrades/${record.id}/`} className="font-mono text-xs font-bold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
+                    <RecordNumberLink href={`/operations/upgrades/${record.id}/`}>
                       {record.upgrade_number}
-                    </a>
+                    </RecordNumberLink>
                     <p className="mt-1 text-xs text-zinc-500">by {record.created_by_name || "-"}</p>
                   </td>
                   <td className="px-4 py-4 text-right">
@@ -4835,7 +4844,7 @@ function ClientUpgradeRecordsTable({ records, loading, error, canEdit }) {
                       </Button>
                     ) : null}
                   </td>
-                </tr>
+                </ClickableRow>
               ))
             ) : (
               <tr>
@@ -5503,11 +5512,11 @@ function RemovalRecordsTable({ records, loading, error }) {
               <TableMessage message={error} />
             ) : records.length ? (
               records.map((record) => (
-                <tr key={record.id} className="border-t border-nexus-line hover:bg-zinc-900/70">
+                <ClickableRow key={record.id} href={`/operations/removals/${record.id}/`} className="border-t border-nexus-line hover:bg-zinc-900/70">
                   <td className="px-4 py-4">
-                    <a href={`/operations/removals/${record.id}/`} className="font-mono text-xs font-bold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
+                    <RecordNumberLink href={`/operations/removals/${record.id}/`}>
                       {record.removal_number}
-                    </a>
+                    </RecordNumberLink>
                     <p className="mt-1 text-xs text-zinc-500">Removed by {record.removed_by_name || "-"}</p>
                   </td>
                   <td className="px-4 py-4 font-semibold text-white">{record.reason_label || "-"}</td>
@@ -5516,7 +5525,7 @@ function RemovalRecordsTable({ records, loading, error }) {
                     <p className="font-bold text-white">{formatCount(record.total_units || 0)}</p>
                     <p className="mt-1 text-xs text-zinc-500">{formatCount(record.items?.length || 0)} lines</p>
                   </td>
-                </tr>
+                </ClickableRow>
               ))
             ) : (
               <tr>
@@ -5654,7 +5663,7 @@ function RemovalItemsTable({ items }) {
                 const item = entry.item;
                 return (
                 <tr key={entry.key} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
-                  <td className="px-4 py-3 font-semibold text-white">{item.product_name}</td>
+                  <td className="px-4 py-3 font-semibold text-white"><EntityLink href={productHref(item.product)} className="text-white hover:text-[var(--bim-orange-hover)]">{item.product_name}</EntityLink></td>
                   <td className="px-4 py-3 font-mono text-xs text-[var(--bim-orange-text)]">{item.product_sku || "-"}</td>
                   <td className="px-4 py-3 text-zinc-400">{entry.generic ? `${formatCount(entry.count)} units` : `#${item.product_unit}`}</td>
                   <td className="px-4 py-3 font-mono text-xs text-zinc-300"><ItemSerialText entry={entry} /></td>
@@ -6005,14 +6014,18 @@ function ClientReturnRecordsTable({ records, loading, error }) {
               <TableMessage message={error} />
             ) : records.length ? (
               records.map((record) => (
-                <tr key={record.id} className="border-t border-nexus-line hover:bg-zinc-900/70">
+                <ClickableRow key={record.id} href={`/operations/client-returns/${record.id}/`} className="border-t border-nexus-line hover:bg-zinc-900/70">
                   <td className="px-4 py-4">
-                    <a href={`/operations/client-returns/${record.id}/`} className="font-mono text-xs font-bold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
+                    <RecordNumberLink href={`/operations/client-returns/${record.id}/`}>
                       {record.return_number}
-                    </a>
-                    <p className="mt-1 text-xs text-zinc-500">{record.delivery_number || "delivery linked by item"}</p>
+                    </RecordNumberLink>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      {record.delivery_number ? <EntityLink href={record.delivery ? `/operations/deliveries/${record.delivery}/` : null} className="font-normal">{record.delivery_number}</EntityLink> : "delivery linked by item"}
+                    </p>
                   </td>
-                  <td className="px-4 py-4 font-semibold text-white">{record.client_name || record.customer_name || "-"}</td>
+                  <td className="px-4 py-4 font-semibold text-white">
+                    <EntityLink href={record.client_id ? `/clients/${record.client_id}/` : null}>{record.client_name || record.customer_name || "-"}</EntityLink>
+                  </td>
                   <td className="px-4 py-4 text-zinc-300">{record.received_from || "-"}</td>
                   <td className="px-4 py-4 text-zinc-300">{formatDate(record.return_date)}</td>
                   <td className="px-4 py-4">
@@ -6025,7 +6038,7 @@ function ClientReturnRecordsTable({ records, loading, error }) {
                   <td className="px-4 py-4">
                     <Status status={clientReturnStatusLabel(record)} statusClass={clientReturnStatusClass(record)} />
                   </td>
-                </tr>
+                </ClickableRow>
               ))
             ) : (
               <tr>
@@ -6302,7 +6315,7 @@ function ClientReturnRecordDetailPage({ data }) {
                 <SectionTitle title="Return Details" />
                 <dl className="mt-4 divide-y divide-nexus-line">
                   <DetailRow label="Return Date" value={formatDate(record.return_date)} />
-                  <DetailRow label="Original Delivery" value={record.delivery_number || "-"} />
+                  <DetailRow label="Original Delivery" value={record.delivery_number ? <EntityLink href={record.delivery ? `/operations/deliveries/${record.delivery}/` : null}>{record.delivery_number}</EntityLink> : "-"} />
                   <DetailRow
                     label="Client"
                     value={
@@ -6438,9 +6451,11 @@ function ClientReturnItemsTable({ items }) {
                 const item = entry.item;
                 return (
                 <tr key={entry.key} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
-                  <td className="px-4 py-3 font-semibold text-white">{item.product_name}</td>
+                  <td className="px-4 py-3 font-semibold text-white"><EntityLink href={productHref(item.product)} className="text-white hover:text-[var(--bim-orange-hover)]">{item.product_name}</EntityLink></td>
                   <td className="px-4 py-3 font-mono text-xs text-[var(--bim-orange-text)]">{item.product_sku || "-"}</td>
-                  <td className="px-4 py-3 text-zinc-400">{item.delivery_number || "-"}</td>
+                  <td className="px-4 py-3 text-zinc-400">
+                    {item.delivery_number ? <EntityLink href={item.delivery ? `/operations/deliveries/${item.delivery}/` : null} className="font-normal">{item.delivery_number}</EntityLink> : "-"}
+                  </td>
                   <td className="px-4 py-3 font-mono text-xs text-zinc-300"><ItemSerialText entry={entry} /></td>
                   <td className="px-4 py-3">
                     <Status status={item.product_unit_status_label || item.product_unit_status} statusClass={item.product_unit_status} />
@@ -6916,15 +6931,17 @@ function DeliveryRecordsTable({ records, loading, error }) {
               <TableMessage message={error} />
             ) : records.length ? (
               records.map((record) => (
-                <tr key={record.id} className="border-t border-nexus-line hover:bg-zinc-900/70">
+                <ClickableRow key={record.id} href={`/operations/deliveries/${record.id}/`} className="border-t border-nexus-line hover:bg-zinc-900/70">
                   <td className="px-4 py-4">
-                    <a href={`/operations/deliveries/${record.id}/`} className="font-mono text-xs font-bold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
+                    <RecordNumberLink href={`/operations/deliveries/${record.id}/`}>
                       {record.delivery_number}
-                    </a>
+                    </RecordNumberLink>
                     <p className="mt-1 text-xs text-zinc-500">Created by {record.created_by_name || "-"}</p>
                   </td>
                   <td className="px-4 py-4">
-                    <p className="font-semibold text-white">{record.client_name || record.customer_name || "-"}</p>
+                    <p className="font-semibold text-white">
+                      <EntityLink href={record.client ? `/clients/${record.client}/` : null}>{record.client_name || record.customer_name || "-"}</EntityLink>
+                    </p>
                     {record.is_warranty_return ? (
                       <div className="mt-1">
                         <Status status="Warranty return" statusClass="warranty" />
@@ -6942,7 +6959,7 @@ function DeliveryRecordsTable({ records, loading, error }) {
                   <td className="px-4 py-4">
                     <Status status={deliveryStatusLabel(record)} statusClass={deliveryStatusClass(record)} />
                   </td>
-                </tr>
+                </ClickableRow>
               ))
             ) : (
               <tr>
@@ -7252,7 +7269,7 @@ function DeliveryRecordDetailPage({ data }) {
               </div>
 
               <dl className="mt-5 grid gap-4 md:grid-cols-2">
-                <DetailRow label="Client" value={record.client_name || record.customer_name || "-"} strong />
+                <DetailRow label="Client" value={<EntityLink href={record.client ? `/clients/${record.client}/` : null}>{record.client_name || record.customer_name || "-"}</EntityLink>} strong />
                 <DetailRow label="Delivery Date" value={formatDate(record.delivery_date)} />
                 <DetailRow label="Invoice Number" value={record.invoice_number || "-"} />
                 {record.from_reservation_number ? (
@@ -7432,7 +7449,7 @@ function DeliveryItemsTable({ items }) {
                 return (
                 <tr key={entry.key} className="border-t border-nexus-line">
                   <td className="px-4 py-4">
-                    <p className="font-semibold text-white">{item.product_name}</p>
+                    <p className="font-semibold text-white"><EntityLink href={productHref(item.product)} className="text-white hover:text-[var(--bim-orange-hover)]">{item.product_name}</EntityLink></p>
                     <p className="mt-1 font-mono text-xs text-zinc-500">{item.product_sku || "-"}</p>
                   </td>
                   <td className="px-4 py-4">
@@ -8097,7 +8114,9 @@ function InventoryUnitsView({ data, onRowsChange }) {
         </a>
         <Status status={unit.status_label || unit.status} statusClass={unit.status} />
       </div>
-      <p className="mt-1 text-sm font-semibold text-white">{unit.product_name}</p>
+      <p className="mt-1 text-sm font-semibold text-white">
+        <EntityLink href={productHref(unit.product)} className="text-white hover:text-[var(--bim-orange-hover)]">{unit.product_name}</EntityLink>
+      </p>
       <p className="mt-0.5 text-xs text-zinc-500">{serialTypeLabel(unit)} serial</p>
       <div className="mt-1 flex items-center justify-between gap-3 text-sm text-zinc-400">
         <UnitWhere location={unit.location} />
@@ -8116,7 +8135,7 @@ function InventoryUnitsView({ data, onRowsChange }) {
   );
 
   const renderDesktopUnit = (unit, nested = false) => (
-    <tr key={unit.id} className={`border-t border-nexus-line hover:bg-nexus-panel2/60 ${nested ? "bg-black/20" : ""}`}>
+    <ClickableRow key={unit.id} href={unitProductHref(unit)} className={`border-t border-nexus-line hover:bg-nexus-panel2/60 ${nested ? "bg-black/20" : ""}`}>
       <td className={`py-3 ${nested ? "pl-12 pr-4" : "px-4"}`}>
         <a href={unitProductHref(unit)} className="font-mono text-xs font-semibold text-[var(--bim-orange-text)] hover:text-white">
           {unit.serial_number}
@@ -8124,7 +8143,9 @@ function InventoryUnitsView({ data, onRowsChange }) {
       </td>
       <td className="px-4 py-3 text-zinc-400">{serialTypeLabel(unit)}</td>
       <td className="px-4 py-3">
-        <p className="font-semibold text-white">{unit.product_name}</p>
+        <p className="font-semibold text-white">
+          <EntityLink href={productHref(unit.product)} className="text-white hover:text-[var(--bim-orange-hover)]">{unit.product_name}</EntityLink>
+        </p>
         <p className="mt-0.5 font-mono text-xs text-zinc-500">{unit.product_sku}</p>
       </td>
       <td className="px-4 py-3">
@@ -8133,7 +8154,9 @@ function InventoryUnitsView({ data, onRowsChange }) {
       <td className="px-4 py-3 text-zinc-300">
         <UnitWhere location={unit.location} />
       </td>
-      <td className="px-4 py-3 text-zinc-400">{unit.supplier_name || "-"}</td>
+      <td className="px-4 py-3 text-zinc-400">
+        {unit.supplier_name ? <EntityLink href={unit.supplier ? `/suppliers/${unit.supplier}/` : null} className="font-normal">{unit.supplier_name}</EntityLink> : "-"}
+      </td>
       <td className="px-4 py-3 text-zinc-400">{formatDate(unit.purchase_date)}</td>
       {canEdit ? (
         <td className="px-4 py-3 text-right">
@@ -8147,7 +8170,7 @@ function InventoryUnitsView({ data, onRowsChange }) {
           </button>
         </td>
       ) : null}
-    </tr>
+    </ClickableRow>
   );
 
   const columnCount = canEdit ? 8 : 7;
@@ -9332,6 +9355,32 @@ function UnitJourneyPanel({ data, units, accessDenied }) {
   );
 }
 
+const MOVEMENT_RECORD_LINKS = [
+  ["receiving_record", "receiving_number", "/operations/receiving/"],
+  ["delivery_record", "delivery_number", "/operations/deliveries/"],
+  ["reservation_record", "reservation_number", "/operations/reservations/"],
+  ["issue_record", "issue_number", "/operations/issues/"],
+  ["repair_record", "repair_number", "/operations/repairs/"],
+  ["client_return_record", "client_return_number", "/operations/client-returns/"],
+  ["removal_record", "removal_number", "/operations/removals/"]
+];
+
+// A movement's reference: one link per record it belongs to, else its own text.
+function MovementReference({ movement }) {
+  const records = MOVEMENT_RECORD_LINKS.filter(([idKey, numberKey]) => movement[idKey] && movement[numberKey]);
+  if (!records.length) return <>{movement.reference || "-"}</>;
+  return (
+    <>
+      {records.map(([idKey, numberKey, path], index) => (
+        <span key={idKey}>
+          {index ? ", " : ""}
+          <EntityLink href={`${path}${movement[idKey]}/`} className="font-mono text-xs">{movement[numberKey]}</EntityLink>
+        </span>
+      ))}
+    </>
+  );
+}
+
 function ProductMovementHistory({ movements, accessDenied, limit = 10 }) {
   const visibleMovements = movements.slice(0, limit);
 
@@ -9362,11 +9411,15 @@ function ProductMovementHistory({ movements, accessDenied, limit = 10 }) {
                   <tr key={movement.id} className="border-t border-nexus-line hover:bg-nexus-panel2/60">
                     <td className="px-4 py-3 text-zinc-400">{formatDate(movement.movement_date || movement.crdate)}</td>
                     <td className="px-4 py-3 font-semibold text-white">{movement.movement_type_label || movement.movement_type}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-[var(--bim-orange-text)]">{movement.serial_number || "-"}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-[var(--bim-orange-text)]">
+                      {movement.serial_number ? (
+                        <a href={unitProductHref({ product: movement.product, serial_number: movement.serial_number })} className="hover:text-[var(--bim-orange-hover)]">{movement.serial_number}</a>
+                      ) : "-"}
+                    </td>
                     <td className="px-4 py-3 text-zinc-400">
                       {movement.from_status || "-"} {movement.to_status ? "->" : ""} {movement.to_status || ""}
                     </td>
-                    <td className="px-4 py-3 text-zinc-400">{movement.reference || movement.receiving_number || movement.delivery_number || "-"}</td>
+                    <td className="px-4 py-3 text-zinc-400"><MovementReference movement={movement} /></td>
                     <td className="px-4 py-3 text-zinc-400">{movement.performed_by_name || "-"}</td>
                     <td className="px-4 py-3 text-zinc-400">{movement.notes || movement.reason || "-"}</td>
                   </tr>
@@ -9481,7 +9534,9 @@ function ProductUnitRegister({ data, units, accessDenied, initialQuery = "", onU
                     <td className="px-4 py-3">
                       <Status status={unit.status_label || unit.status} statusClass={unit.status} />
                     </td>
-                    <td className="px-4 py-3 text-zinc-400">{unit.supplier_name || "-"}</td>
+                    <td className="px-4 py-3 text-zinc-400">
+                      {unit.supplier_name ? <EntityLink href={unit.supplier ? `/suppliers/${unit.supplier}/` : null} className="font-normal">{unit.supplier_name}</EntityLink> : "-"}
+                    </td>
                     <td className="px-4 py-3 text-zinc-400">{formatCurrency(unit.cost)}</td>
                     <td className="px-4 py-3 text-zinc-400">{formatDate(unit.purchase_date)}</td>
                     <td className="px-4 py-3 text-zinc-400">{formatDate(unit.sold_date)}</td>
@@ -11797,6 +11852,79 @@ function reservedForSummary(type, value, lookups) {
   return type === "internal" ? internalPartyLabel(selected) : selected.name;
 }
 
+// Clickable references. EntityLink is the one link style for a product, unit,
+// supplier, client or record shown inside a table or detail row; with no id
+// (nothing to open) it falls back to plain text. ClickableRow is the one
+// pattern for a list row that opens a detail page: the record number inside is
+// a real link (middle-click / open in new tab work), the whole row also
+// navigates on click, Enter and middle-click, and clicks on a link, button or
+// field inside the row (or while selecting text) are left alone so nothing
+// navigates twice.
+const ROW_INTERACTIVE_SELECTOR = "a, button, input, select, textarea, label, summary, [role='button'], [role='link']";
+
+function productHref(productId) {
+  return productId ? `/inventory/products/${productId}/` : null;
+}
+
+function EntityLink({ href, children, className = "" }) {
+  if (!href) return <>{children}</>;
+  return (
+    <a href={href} className={`font-semibold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)] ${className}`}>
+      {children}
+    </a>
+  );
+}
+
+function RecordNumberLink({ href, children }) {
+  return (
+    <a href={href} className="font-mono text-xs font-bold text-[var(--bim-orange-text)] hover:text-[var(--bim-orange-hover)]">
+      {children}
+    </a>
+  );
+}
+
+function ClickableRow({ href, className = "", children, ...rest }) {
+  if (!href) {
+    return (
+      <tr className={className} {...rest}>
+        {children}
+      </tr>
+    );
+  }
+  const open = (event) => {
+    if (event.metaKey || event.ctrlKey || event.button === 1) window.open(href, "_blank", "noopener");
+    else window.location.assign(href);
+  };
+  const insideControl = (event) => {
+    const control = event.target.closest?.(ROW_INTERACTIVE_SELECTOR);
+    return Boolean(control && event.currentTarget.contains(control));
+  };
+  return (
+    <tr
+      {...rest}
+      tabIndex={0}
+      className={`cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[color:var(--bim-orange-focus)] ${className}`}
+      onClick={(event) => {
+        if (event.defaultPrevented || insideControl(event)) return;
+        if (window.getSelection?.().toString()) return;
+        open(event);
+      }}
+      onAuxClick={(event) => {
+        if (event.button !== 1 || event.defaultPrevented || insideControl(event)) return;
+        event.preventDefault();
+        open(event);
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" || event.target !== event.currentTarget) return;
+        event.preventDefault();
+        open(event);
+      }}
+    >
+      {children}
+    </tr>
+  );
+}
+
 function partyHref(party) {
   if (!party?.id) return null;
   if (party.type === "client") return `/clients/${party.id}/`;
@@ -12872,10 +13000,12 @@ function RecentActivity({ items, endpoint }) {
           <tbody>
             {visibleRows.length ? (
               visibleRows.map((item, index) => {
-                const rowClass = `border-t border-nexus-line ${item.href ? "cursor-pointer hover:bg-nexus-panel2" : "hover:bg-nexus-panel2/60"}`;
+                const rowClass = `border-t border-nexus-line ${item.href ? "hover:bg-nexus-panel2" : "hover:bg-nexus-panel2/60"}`;
                 const content = (
                   <>
-                    <td className="px-4 py-4 font-mono text-xs text-[var(--bim-orange-text)]">{item.reference || "-"}</td>
+                    <td className="px-4 py-4 font-mono text-xs text-[var(--bim-orange-text)]">
+                      {item.href && item.reference ? <RecordNumberLink href={item.href}>{item.reference}</RecordNumberLink> : item.reference || "-"}
+                    </td>
                     <td className="px-4 py-4 font-semibold text-white">{item.type || "-"}</td>
                     <td className="px-4 py-4 text-zinc-400">{item.related || "-"}</td>
                     <td className="px-4 py-4 text-zinc-400">{item.party || "-"}</td>
@@ -12891,22 +13021,9 @@ function RecentActivity({ items, endpoint }) {
                 );
 
                 return (
-                  <tr
-                    key={`${item.reference}-${item.type}-${index}`}
-                    className={rowClass}
-                    onClick={() => {
-                      if (item.href) window.location.assign(item.href);
-                    }}
-                    tabIndex={item.href ? 0 : undefined}
-                    onKeyDown={(event) => {
-                      if (item.href && (event.key === "Enter" || event.key === " ")) {
-                        event.preventDefault();
-                        window.location.assign(item.href);
-                      }
-                    }}
-                  >
+                  <ClickableRow key={`${item.reference}-${item.type}-${index}`} href={item.href} className={rowClass}>
                     {content}
-                  </tr>
+                  </ClickableRow>
                 );
               })
             ) : (
