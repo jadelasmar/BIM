@@ -33,6 +33,7 @@ from .models import (
     is_low_stock_level,
 )
 from .selectors import group_members, group_stock_totals
+from .serials import generate_receiving_serials, generate_unit_serial
 from .services import (
     cancel_client_upgrade_record,
     create_client_upgrade_record,
@@ -610,6 +611,7 @@ class ProductUnitSerializer(serializers.ModelSerializer):
             "brand_name",
             "model_name",
             "serial_number",
+            "serial_is_generated",
             "status",
             "status_label",
             "supplier",
@@ -624,7 +626,32 @@ class ProductUnitSerializer(serializers.ModelSerializer):
             "crdate",
             "isactive",
         )
-        read_only_fields = ("crdate", "sold_date", "owner_client", "owner_client_name")
+        read_only_fields = (
+            "crdate",
+            "sold_date",
+            "owner_client",
+            "owner_client_name",
+            "serial_is_generated",
+        )
+        # A new unit may omit the serial: the backend then generates one and
+        # flags the unit (see validate). Blank is still rejected on update.
+        extra_kwargs = {"serial_number": {"required": False, "allow_blank": True}}
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        if self.instance is None:
+            if not (attrs.get("serial_number") or "").strip():
+                attrs["serial_number"] = generate_unit_serial(attrs["product"])
+                attrs["serial_is_generated"] = True
+        elif "serial_number" in attrs:
+            if not attrs["serial_number"].strip():
+                raise serializers.ValidationError(
+                    {"serial_number": "This field may not be blank."}
+                )
+            # A person typing a serial makes it a real one.
+            if attrs["serial_number"] != self.instance.serial_number:
+                attrs["serial_is_generated"] = False
+        return attrs
 
     def get_product_name(self, obj):
         return str(obj.product)
@@ -661,12 +688,19 @@ class ProductUnitCorrectionSerializer(serializers.ModelSerializer):
         }
 
     def update(self, instance, validated_data):
+        old_serial = instance.serial_number
         try:
-            return update_product_unit_details(
-                instance,
-                **validated_data,
-                changed_by=getattr(self.context.get("request"), "user", None),
-            )
+            with transaction.atomic():
+                unit = update_product_unit_details(
+                    instance,
+                    **validated_data,
+                    changed_by=getattr(self.context.get("request"), "user", None),
+                )
+                # A person typing a serial makes it a real one.
+                if unit.serial_is_generated and unit.serial_number != old_serial:
+                    unit.serial_is_generated = False
+                    unit.save(update_fields=("serial_is_generated",))
+                return unit
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.messages) from exc
 
@@ -777,6 +811,11 @@ class DeliveryItemSerializer(serializers.ModelSerializer):
         source="product_unit.serial_number",
         read_only=True,
     )
+    serial_is_generated = serializers.BooleanField(
+        source="product_unit.serial_is_generated",
+        read_only=True,
+        default=False,
+    )
     product_unit_status = serializers.CharField(
         source="product_unit.status",
         read_only=True,
@@ -795,6 +834,7 @@ class DeliveryItemSerializer(serializers.ModelSerializer):
             "product_sku",
             "product_unit",
             "serial_number",
+            "serial_is_generated",
             "product_unit_status",
             "product_unit_status_label",
             "sale_price",
@@ -815,6 +855,11 @@ class ReservationItemSerializer(serializers.ModelSerializer):
         source="product_unit.serial_number",
         read_only=True,
     )
+    serial_is_generated = serializers.BooleanField(
+        source="product_unit.serial_is_generated",
+        read_only=True,
+        default=False,
+    )
     product_unit_status = serializers.CharField(
         source="product_unit.status",
         read_only=True,
@@ -833,6 +878,7 @@ class ReservationItemSerializer(serializers.ModelSerializer):
             "product_sku",
             "product_unit",
             "serial_number",
+            "serial_is_generated",
             "product_unit_status",
             "product_unit_status_label",
             "notes",
@@ -1078,6 +1124,11 @@ class IssueItemSerializer(serializers.ModelSerializer):
         source="product_unit.serial_number",
         read_only=True,
     )
+    serial_is_generated = serializers.BooleanField(
+        source="product_unit.serial_is_generated",
+        read_only=True,
+        default=False,
+    )
     product_unit_status = serializers.CharField(
         source="product_unit.status",
         read_only=True,
@@ -1096,6 +1147,7 @@ class IssueItemSerializer(serializers.ModelSerializer):
             "product_sku",
             "product_unit",
             "serial_number",
+            "serial_is_generated",
             "product_unit_status",
             "product_unit_status_label",
             "notes",
@@ -1278,6 +1330,11 @@ class RepairItemSerializer(serializers.ModelSerializer):
         source="product_unit.serial_number",
         read_only=True,
     )
+    serial_is_generated = serializers.BooleanField(
+        source="product_unit.serial_is_generated",
+        read_only=True,
+        default=False,
+    )
     product_unit_status = serializers.CharField(
         source="product_unit.status",
         read_only=True,
@@ -1296,6 +1353,7 @@ class RepairItemSerializer(serializers.ModelSerializer):
             "product_sku",
             "product_unit",
             "serial_number",
+            "serial_is_generated",
             "product_unit_status",
             "product_unit_status_label",
             "is_client_owned",
@@ -1560,6 +1618,11 @@ class RemovalItemSerializer(serializers.ModelSerializer):
         source="product_unit.serial_number",
         read_only=True,
     )
+    serial_is_generated = serializers.BooleanField(
+        source="product_unit.serial_is_generated",
+        read_only=True,
+        default=False,
+    )
     product_unit_status = serializers.CharField(
         source="product_unit.status",
         read_only=True,
@@ -1578,6 +1641,7 @@ class RemovalItemSerializer(serializers.ModelSerializer):
             "product_sku",
             "product_unit",
             "serial_number",
+            "serial_is_generated",
             "product_unit_status",
             "product_unit_status_label",
             "notes",
@@ -1661,6 +1725,11 @@ class ClientReturnItemSerializer(serializers.ModelSerializer):
         source="product_unit.serial_number",
         read_only=True,
     )
+    serial_is_generated = serializers.BooleanField(
+        source="product_unit.serial_is_generated",
+        read_only=True,
+        default=False,
+    )
     product_unit_status = serializers.CharField(
         source="product_unit.status",
         read_only=True,
@@ -1682,6 +1751,7 @@ class ClientReturnItemSerializer(serializers.ModelSerializer):
             "product_sku",
             "product_unit",
             "serial_number",
+            "serial_is_generated",
             "product_unit_status",
             "product_unit_status_label",
             "notes",
@@ -2102,6 +2172,11 @@ class ReceivingItemSerializer(serializers.ModelSerializer):
         source="product_unit.serial_number",
         read_only=True,
     )
+    serial_is_generated = serializers.BooleanField(
+        source="product_unit.serial_is_generated",
+        read_only=True,
+        default=False,
+    )
 
     class Meta:
         model = ReceivingItem
@@ -2114,6 +2189,7 @@ class ReceivingItemSerializer(serializers.ModelSerializer):
             "product_unit_serial_number",
             "quantity",
             "serial_number",
+            "serial_is_generated",
             "cost",
             "notes",
             "crdate",
@@ -2143,21 +2219,31 @@ class ReceivingItemInputSerializer(serializers.Serializer):
     # Only matters when the receipt names a client to reserve for; lets one
     # receipt mix client stock and stock that stays available.
     reserve = serializers.BooleanField(required=False, default=True)
+    # How many of the quantity have no typed serial. The backend makes a serial
+    # for each and flags those units serial_is_generated; serial_numbers then
+    # holds only the typed/scanned ones.
+    auto_serial_count = serializers.IntegerField(min_value=0, required=False, default=0)
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
         serial_numbers = attrs.get("serial_numbers") or []
         product_unit = attrs.get("product_unit")
         quantity = attrs.get("quantity", 1)
+        auto_serial_count = attrs.get("auto_serial_count", 0)
 
-        if product_unit and serial_numbers:
+        if product_unit and (serial_numbers or auto_serial_count):
             raise serializers.ValidationError(
                 "Use either product_unit or serial_numbers, not both."
             )
         if product_unit:
             attrs["product"] = product_unit.product
             attrs["quantity"] = 1
-        if serial_numbers and len(serial_numbers) != quantity:
+        if auto_serial_count:
+            if len(serial_numbers) + auto_serial_count != quantity:
+                raise serializers.ValidationError(
+                    "Serial number count plus auto-generated count must match quantity."
+                )
+        elif serial_numbers and len(serial_numbers) != quantity:
             raise serializers.ValidationError(
                 "Serial number count must match quantity."
             )
@@ -2266,12 +2352,31 @@ class ReceivingRecordSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         item_inputs = validated_data.pop("item_inputs")
         request = self.context.get("request")
+        # Lines with no typed serial get one made here, and exactly those units
+        # are flagged serial_is_generated in the same transaction that creates
+        # them, so the flag cannot drift from the serial.
+        generated = []
+        for line_number, item in enumerate(item_inputs, start=1):
+            auto_count = item.pop("auto_serial_count", 0)
+            if auto_count:
+                typed = list(item.get("serial_numbers") or [])
+                made = generate_receiving_serials(
+                    item["product"], line_number, len(typed) + 1, auto_count
+                )
+                item["serial_numbers"] = typed + made
+                generated.extend(made)
         try:
-            return create_receiving_record(
-                items=item_inputs,
-                created_by=request.user if request else None,
-                **validated_data,
-            )
+            with transaction.atomic():
+                record = create_receiving_record(
+                    items=item_inputs,
+                    created_by=request.user if request else None,
+                    **validated_data,
+                )
+                if generated:
+                    ProductUnit.objects.filter(serial_number__in=generated).update(
+                        serial_is_generated=True
+                    )
+                return record
         except DjangoValidationError as exc:
             raise serializers.ValidationError(exc.messages) from exc
 

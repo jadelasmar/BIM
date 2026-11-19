@@ -327,6 +327,10 @@ class ProductUnitAdmin(admin.ModelAdmin):
         )
 
     def save_model(self, request, obj, form, change):
+        # A serial typed in the admin is a real one, even if the old one was
+        # auto-generated.
+        if change and "serial_number" in form.changed_data:
+            obj.serial_is_generated = False
         super().save_model(request, obj, form, change)
 
 

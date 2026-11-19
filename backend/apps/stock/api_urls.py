@@ -175,6 +175,11 @@ urlpatterns = [
         name="client-return-returnable-units",
     ),
     path(
+        "client-returns/returnable-generic-groups/",
+        api_views.ReturnableGenericGroupsAPIView.as_view(),
+        name="client-return-returnable-generic-groups",
+    ),
+    path(
         "product-units/<int:pk>/journey/",
         api_views.ProductUnitJourneyAPIView.as_view(),
         name="product-unit-journey",

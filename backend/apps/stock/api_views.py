@@ -35,6 +35,7 @@ from .selectors import (
     unit_locations,
     global_search,
     recent_activity_page,
+    returnable_generic_groups,
     returnable_units,
     unit_journey,
 )
@@ -1274,6 +1275,22 @@ class ReturnableUnitsAPIView(APIView):
         _require_perm(request.user, stock_constants.VIEW_CLIENT_RETURN_RECORD)
         return Response(
             returnable_units(
+                request.query_params.get("q", ""),
+                request.query_params.get("delivery") or None,
+            )
+        )
+
+
+class ReturnableGenericGroupsAPIView(APIView):
+    """Generic (no-serial) sold units for the Client Return picker, grouped per
+    product and client with their ids oldest delivery first."""
+
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get(self, request):
+        _require_perm(request.user, stock_constants.VIEW_CLIENT_RETURN_RECORD)
+        return Response(
+            returnable_generic_groups(
                 request.query_params.get("q", ""),
                 request.query_params.get("delivery") or None,
             )

@@ -13,6 +13,7 @@ from .services import (
 )
 from .models import (
     Client,
+    ClientReturnItem,
     ClientReturnRecord,
     ClientUpgradeRecord,
     DeliveryItem,
@@ -375,6 +376,12 @@ def returnable_units(query="", delivery_id=None, limit=30):
             | Q(product__sku__icontains=query)
             | Q(product__group__name__icontains=query)
         )
+        # Generic (no-serial) units are offered by quantity through
+        # returnable_generic_groups, so they would only crowd out real units
+        # here; one is listed only when its serial is typed/scanned in full.
+        units = units.filter(Q(serial_is_generated=False) | Q(serial_number__iexact=query))
+    else:
+        units = units.filter(serial_is_generated=False)
 
     rows = []
     for unit in units[: limit * 4]:
@@ -396,6 +403,8 @@ def returnable_units(query="", delivery_id=None, limit=30):
             {
                 "id": unit.pk,
                 "serial_number": unit.serial_number,
+                "serial_is_generated": unit.serial_is_generated,
+                "product": unit.product_id,
                 "product_name": str(unit.product),
                 "product_sku": unit.product.sku,
                 "status": unit.status,
@@ -408,6 +417,82 @@ def returnable_units(query="", delivery_id=None, limit=30):
         if len(rows) >= limit:
             break
     return rows
+
+
+def returnable_generic_groups(query="", delivery_id=None, limit=50):
+    """Generic (no-serial) sold units a Client Return can pick by quantity: one
+    group per (product, client), each with the unit ids ordered oldest delivery
+    first. Only units the return service would accept are included; the checks
+    mirror create_client_return_record (active, sold, a completed delivery line,
+    not already returned under that line, the delivery has a client, and the
+    chosen delivery when one is given)."""
+    units = list(
+        ProductUnit.objects.filter(
+            status=ProductUnit.STATUS_SOLD, isactive=True, serial_is_generated=True
+        ).select_related("product", "product__category", "product__model__brand")
+    )
+    query = (query or "").strip().lower()
+    if query:
+        # The serial of a generic unit is not something a person searches for.
+        units = [
+            unit
+            for unit in units
+            if query in str(unit.product).lower()
+            or query in (unit.product.sku or "").lower()
+            or query in unit.product.descript.lower()
+        ]
+    if not units:
+        return []
+    unit_ids = [unit.pk for unit in units]
+
+    latest_item = {}
+    for item in (
+        DeliveryItem.objects.filter(
+            product_unit_id__in=unit_ids,
+            isactive=True,
+            delivery__isactive=True,
+            delivery__status=DeliveryRecord.STATUS_COMPLETED,
+        )
+        .select_related("delivery", "delivery__client")
+        .order_by("pk")
+    ):
+        latest_item[item.product_unit_id] = item  # the newest line wins
+    latest_return_item_id = {}
+    for return_item in ClientReturnItem.objects.filter(
+        product_unit_id__in=unit_ids, isactive=True
+    ).order_by("pk"):
+        latest_return_item_id[return_item.product_unit_id] = return_item.delivery_item_id
+
+    groups = {}
+    for unit in units:
+        item = latest_item.get(unit.pk)
+        if item is None or latest_return_item_id.get(unit.pk) == item.pk:
+            continue
+        if item.delivery.client_id is None:
+            continue
+        if delivery_id and item.delivery_id != int(delivery_id):
+            continue
+        key = (unit.product_id, item.delivery.client_id)
+        group = groups.setdefault(
+            key,
+            {
+                "product": unit.product_id,
+                "product_name": str(unit.product),
+                "product_sku": unit.product.sku,
+                "client": {"id": item.delivery.client_id, "name": item.delivery.client.name},
+                "units": [],
+            },
+        )
+        group["units"].append((item.delivery.delivery_date, item.pk, unit.pk))
+
+    rows = []
+    for group in groups.values():
+        ordered = sorted(group.pop("units"))
+        group["unit_ids"] = [unit_pk for _date, _item_pk, unit_pk in ordered]
+        group["count"] = len(group["unit_ids"])
+        rows.append(group)
+    rows.sort(key=lambda row: (row["product_name"], row["client"]["name"]))
+    return rows[:limit]
 
 
 def unit_journey(unit):

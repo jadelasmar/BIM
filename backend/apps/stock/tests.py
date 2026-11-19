@@ -7270,3 +7270,543 @@ class GeneratedSerialMigrationTests(TestCase):
             if isinstance(op, migrations.RunPython)
         ][0]
         self.assertIs(run_python.reverse_code, migrations.RunPython.noop)
+
+
+class GeneratedSerialFlagTests(TestCase):
+    """serial_is_generated is set on every path that auto-makes a serial and
+    on none that takes a person's serial."""
+
+    GENERATED = r"^{sku}-\d{{6}}-\d{{2}}-\d{{3}}$"
+    GENERATED_ADD_UNIT = r"^{sku}-\d{{6}}-\d{{3}}$"
+
+    def setUp(self):
+        category = Category.objects.create(name="Laser")
+        brand = Brand.objects.create(brandname="Canon")
+        model = ProductModel.objects.create(brand=brand, modelname="L100")
+        self.product = Product.objects.create(
+            descript="Canon laser printer", category=category, model=model
+        )
+        self.supplier = Supplier.objects.create(name="Gulf Networks LLC")
+        self.user = User.objects.create_superuser(
+            username="gen-admin", email="gen@example.com", password="test-pass"
+        )
+        self.client.force_login(self.user)
+
+    def _receive(self, items):
+        return self.client.post(
+            "/api/stock/receiving-records/",
+            {
+                "supplier": self.supplier.pk,
+                "received_date": str(timezone.localdate()),
+                "item_inputs": items,
+            },
+            content_type="application/json",
+        )
+
+    def test_receiving_flags_only_the_auto_made_serials(self):
+        response = self._receive(
+            [{"product": self.product.pk, "quantity": 3, "serial_numbers": ["REAL-1"], "auto_serial_count": 2}]
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        real = ProductUnit.objects.get(serial_number="REAL-1")
+        self.assertFalse(real.serial_is_generated)
+        generated = ProductUnit.objects.filter(serial_is_generated=True)
+        self.assertEqual(generated.count(), 2)
+        import re
+
+        pattern = re.compile(self.GENERATED.format(sku=re.escape(self.product.sku)))
+        for unit in generated:
+            self.assertRegex(unit.serial_number, pattern)
+        self.assertEqual(ProductUnit.objects.count(), 3)
+        item_flags = {
+            item["serial_number"]: item["serial_is_generated"]
+            for item in response.json()["items"]
+        }
+        self.assertFalse(item_flags["REAL-1"])
+        self.assertEqual(sorted(item_flags.values()), [False, True, True])
+
+    def test_receiving_with_all_auto_serials(self):
+        response = self._receive([{"product": self.product.pk, "quantity": 4, "auto_serial_count": 4}])
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(ProductUnit.objects.filter(serial_is_generated=True).count(), 4)
+        self.assertEqual(len({u.serial_number for u in ProductUnit.objects.all()}), 4)
+
+    def test_receiving_with_all_typed_serials_is_never_generated(self):
+        response = self._receive(
+            [{"product": self.product.pk, "quantity": 2, "serial_numbers": ["T-1", "T-2"]}]
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertFalse(ProductUnit.objects.filter(serial_is_generated=True).exists())
+
+    def test_typed_serial_that_looks_generated_stays_real(self):
+        look_alike = f"{self.product.sku}-123456-01-001"
+        response = self._receive(
+            [{"product": self.product.pk, "quantity": 1, "serial_numbers": [look_alike]}]
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertFalse(ProductUnit.objects.get(serial_number=look_alike).serial_is_generated)
+
+    def test_receiving_count_mismatch_is_rejected(self):
+        for payload in (
+            {"quantity": 3, "serial_numbers": ["A"], "auto_serial_count": 1},
+            {"quantity": 2, "auto_serial_count": 3},
+        ):
+            with self.subTest(payload=payload):
+                response = self._receive([{"product": self.product.pk, **payload}])
+                self.assertEqual(response.status_code, 400, response.content)
+        self.assertFalse(ProductUnit.objects.exists())
+
+    def test_two_lines_of_same_product_get_distinct_serials(self):
+        response = self._receive(
+            [
+                {"product": self.product.pk, "quantity": 2, "auto_serial_count": 2},
+                {"product": self.product.pk, "quantity": 2, "auto_serial_count": 2},
+            ]
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertEqual(ProductUnit.objects.filter(serial_is_generated=True).count(), 4)
+
+    def test_add_unit_without_serial_is_generated(self):
+        response = self.client.post(
+            "/api/stock/product-units/",
+            {"product": self.product.pk, "status": "available", "purchase_date": str(timezone.localdate())},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        body = response.json()
+        self.assertTrue(body["serial_is_generated"])
+        import re
+
+        self.assertRegex(
+            body["serial_number"], self.GENERATED_ADD_UNIT.format(sku=re.escape(self.product.sku))
+        )
+        self.assertTrue(ProductUnit.objects.get(pk=body["id"]).serial_is_generated)
+
+    def test_add_unit_with_blank_serial_is_generated_and_typed_is_real(self):
+        blank = self.client.post(
+            "/api/stock/product-units/",
+            {"product": self.product.pk, "serial_number": "  ", "status": "available"},
+            content_type="application/json",
+        )
+        typed = self.client.post(
+            "/api/stock/product-units/",
+            {"product": self.product.pk, "serial_number": "TYPED-1", "status": "available"},
+            content_type="application/json",
+        )
+        self.assertTrue(blank.json()["serial_is_generated"])
+        self.assertFalse(typed.json()["serial_is_generated"])
+
+    def test_add_unit_movement_is_the_same_manual_add(self):
+        self.client.post(
+            "/api/stock/product-units/",
+            {"product": self.product.pk, "status": "available"},
+            content_type="application/json",
+        )
+        self.client.post(
+            "/api/stock/product-units/",
+            {"product": self.product.pk, "serial_number": "TYPED-2", "status": "available"},
+            content_type="application/json",
+        )
+        shapes = {
+            (m.movement_type, m.from_status, m.to_status, m.reference)
+            for m in StockMovement.objects.all()
+        }
+        self.assertEqual(shapes, {("manual_add", "", "available", "Manual Add Unit")})
+        self.assertEqual(StockMovement.objects.count(), 2)
+
+    def test_blank_serial_on_update_is_rejected(self):
+        unit = ProductUnit.objects.create(product=self.product, serial_number="U-1")
+        response = self.client.patch(
+            f"/api/stock/product-units/{unit.pk}/", {"serial_number": ""}, content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 400, response.content)
+        unit.refresh_from_db()
+        self.assertEqual(unit.serial_number, "U-1")
+
+    def test_client_cannot_set_the_flag(self):
+        response = self.client.post(
+            "/api/stock/product-units/",
+            {"product": self.product.pk, "serial_number": "SNEAKY", "serial_is_generated": True, "status": "available"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertFalse(ProductUnit.objects.get(serial_number="SNEAKY").serial_is_generated)
+
+    def test_client_owned_repair_unit_is_real(self):
+        client = Client.objects.create(name="Owner Co")
+        response = self.client.post(
+            "/api/stock/repairs/",
+            {
+                "source": "client_item",
+                "source_client": client.pk,
+                "vendor": self.supplier.pk,
+                "repair_reason": "Dead",
+                "client_items": [{"product": self.product.pk, "serial_number": "CLIENT-OWN-1"}],
+                "unit_ids": [],
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertFalse(ProductUnit.objects.get(serial_number="CLIENT-OWN-1").serial_is_generated)
+
+    def test_model_default_and_admin_style_creation_is_real(self):
+        unit = ProductUnit.objects.create(product=self.product, serial_number="ADMIN-1")
+        self.assertFalse(unit.serial_is_generated)
+
+    def test_admin_serial_change_makes_unit_real(self):
+        from .admin import ProductUnitAdmin
+
+        unit = ProductUnit.objects.create(
+            product=self.product, serial_number="GEN-OLD", serial_is_generated=True
+        )
+
+        class FakeForm:
+            def __init__(self, changed):
+                self.changed_data = changed
+
+        model_admin = ProductUnitAdmin(ProductUnit, admin.site)
+        unit.notes = "only notes"
+        model_admin.save_model(None, unit, FakeForm(["notes"]), True)
+        unit.refresh_from_db()
+        self.assertTrue(unit.serial_is_generated)
+
+        unit.serial_number = "TYPED-NEW"
+        model_admin.save_model(None, unit, FakeForm(["serial_number"]), True)
+        unit.refresh_from_db()
+        self.assertFalse(unit.serial_is_generated)
+
+    def test_correcting_the_serial_of_a_generated_unit_makes_it_real(self):
+        unit = ProductUnit.objects.create(
+            product=self.product, serial_number="GEN-OLD", serial_is_generated=True
+        )
+        url = f"/api/stock/product-units/{unit.pk}/details/"
+        notes_only = self.client.patch(url, {"notes": "hello"}, content_type="application/json")
+        self.assertEqual(notes_only.status_code, 200, notes_only.content)
+        unit.refresh_from_db()
+        self.assertTrue(unit.serial_is_generated)
+
+        renamed = self.client.patch(url, {"serial_number": "SN-REAL-1"}, content_type="application/json")
+        self.assertEqual(renamed.status_code, 200, renamed.content)
+        unit.refresh_from_db()
+        self.assertFalse(unit.serial_is_generated)
+        self.assertFalse(renamed.json()["serial_is_generated"])
+
+    def test_unit_endpoint_serial_change_makes_it_real(self):
+        unit = ProductUnit.objects.create(
+            product=self.product, serial_number="GEN-OLD-2", serial_is_generated=True
+        )
+        response = self.client.patch(
+            f"/api/stock/product-units/{unit.pk}/", {"serial_number": "SN-REAL-2"}, content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        unit.refresh_from_db()
+        self.assertFalse(unit.serial_is_generated)
+
+    def test_receiving_movements_match_between_generated_and_typed(self):
+        self._receive(
+            [{"product": self.product.pk, "quantity": 2, "serial_numbers": ["MV-T"], "auto_serial_count": 1}]
+        )
+        movements = StockMovement.objects.all()
+        self.assertEqual(movements.count(), 2)
+        self.assertEqual(
+            {(m.movement_type, m.from_status, m.to_status, m.reason) for m in movements},
+            {("received", "", "available", "Received stock")},
+        )
+
+    def test_item_serializers_expose_the_flag(self):
+        from .services import create_reservation_record
+
+        generated = ProductUnit.objects.create(
+            product=self.product, serial_number="GEN-X", serial_is_generated=True
+        )
+        real = ProductUnit.objects.create(product=self.product, serial_number="REAL-X")
+        record = create_reservation_record(
+            unit_ids=[generated.pk, real.pk],
+            reserved_for_type="client",
+            client_name_input="Acme",
+            reserved_by=self.user,
+        )
+        response = self.client.get(f"/api/stock/reservations/{record.pk}/")
+        self.assertEqual(response.status_code, 200, response.content)
+        flags = {i["serial_number"]: i["serial_is_generated"] for i in response.json()["items"]}
+        self.assertEqual(flags, {"GEN-X": True, "REAL-X": False})
+
+
+class ReturnableGenericGroupTests(TestCase):
+    """Client Return offers generic sold units per (product, client), oldest
+    delivery first, restricted to what the return service accepts."""
+
+    URL = "/api/stock/client-returns/returnable-generic-groups/"
+
+    def setUp(self):
+        category = Category.objects.create(name="Laser")
+        brand = Brand.objects.create(brandname="Canon")
+        model = ProductModel.objects.create(brand=brand, modelname="L100")
+        self.product = Product.objects.create(
+            descript="Canon laser printer", category=category, model=model
+        )
+        self.other_product = Product.objects.create(
+            descript="Canon scanner",
+            category=category,
+            model=ProductModel.objects.create(brand=brand, modelname="S200"),
+        )
+        self.acme = Client.objects.create(name="Acme")
+        self.beta = Client.objects.create(name="Beta")
+        self.user = User.objects.create_superuser(
+            username="grp-admin", email="grp@example.com", password="test-pass"
+        )
+        self.client.force_login(self.user)
+        self.counter = 0
+
+    def _sold(self, product=None, client=None, days_ago=0, generic=True, serial=None, status="completed"):
+        self.counter += 1
+        product = product or self.product
+        unit = ProductUnit.objects.create(
+            product=product,
+            serial_number=serial or f"GEN-{self.counter}",
+            serial_is_generated=generic,
+            status=ProductUnit.STATUS_SOLD,
+        )
+        delivery = DeliveryRecord.objects.create(
+            client=client,
+            customer_name=client.name if client else "Walk-in",
+            receiver_name="Receiver",
+            delivery_date=timezone.localdate() - timedelta(days=days_ago),
+            status=status,
+        )
+        item = DeliveryItem.objects.create(delivery=delivery, product=product, product_unit=unit)
+        return unit, delivery, item
+
+    def _groups(self, **params):
+        response = self.client.get(self.URL, params)
+        self.assertEqual(response.status_code, 200, response.content)
+        return response.json()
+
+    def test_groups_by_product_and_client_with_oldest_delivery_first(self):
+        newest, *_ = self._sold(client=self.acme, days_ago=1)
+        oldest, *_ = self._sold(client=self.acme, days_ago=30)
+        middle, *_ = self._sold(client=self.acme, days_ago=10)
+        beta_unit, *_ = self._sold(client=self.beta, days_ago=5)
+        scanner, *_ = self._sold(product=self.other_product, client=self.acme)
+
+        groups = self._groups()
+        by_key = {(g["product"], g["client"]["name"]): g for g in groups}
+        self.assertEqual(len(groups), 3)
+        acme_group = by_key[(self.product.pk, "Acme")]
+        self.assertEqual(acme_group["count"], 3)
+        self.assertEqual(acme_group["unit_ids"], [oldest.pk, middle.pk, newest.pk])
+        self.assertEqual(by_key[(self.product.pk, "Beta")]["unit_ids"], [beta_unit.pk])
+        self.assertEqual(by_key[(self.other_product.pk, "Acme")]["unit_ids"], [scanner.pk])
+        self.assertEqual(acme_group["product_sku"], self.product.sku)
+
+    def test_same_delivery_date_orders_by_delivery_line(self):
+        first, *_ = self._sold(client=self.acme, days_ago=3)
+        second, *_ = self._sold(client=self.acme, days_ago=3)
+        group = self._groups()[0]
+        self.assertEqual(group["unit_ids"], [first.pk, second.pk])
+
+    def test_real_serial_units_are_never_grouped(self):
+        self._sold(client=self.acme, generic=False, serial="REAL-SOLD")
+        self.assertEqual(self._groups(), [])
+
+    def test_non_sold_units_are_never_grouped(self):
+        unit, *_ = self._sold(client=self.acme)
+        unit.status = ProductUnit.STATUS_AVAILABLE
+        unit.save(update_fields=("status",))
+        self.assertEqual(self._groups(), [])
+
+    def test_unit_already_returned_under_its_latest_delivery_is_excluded(self):
+        unit, delivery, item = self._sold(client=self.acme)
+        ok, *_ = self._sold(client=self.acme)
+        record = ClientReturnRecord.objects.create(
+            delivery=delivery, client=self.acme, customer_name="Acme",
+            return_date=timezone.localdate(), resolution="available",
+        )
+        ClientReturnItem.objects.create(
+            client_return=record, delivery_item=item, product_unit=unit, product=self.product
+        )
+        group = self._groups()[0]
+        self.assertEqual(group["unit_ids"], [ok.pk])
+
+    def test_delivery_without_client_and_cancelled_delivery_are_excluded(self):
+        self._sold(client=None)
+        self._sold(client=self.acme, status="cancelled")
+        self.assertEqual(self._groups(), [])
+
+    def test_delivery_param_restricts_to_that_delivery(self):
+        mine, delivery, _item = self._sold(client=self.acme)
+        self._sold(client=self.acme)
+        group = self._groups(delivery=delivery.pk)[0]
+        self.assertEqual(group["unit_ids"], [mine.pk])
+
+    def test_search_matches_product_fields_not_the_serial(self):
+        unit, *_ = self._sold(client=self.acme, serial="ZZZ-GEN-SERIAL")
+        self.assertEqual(self._groups(q="ZZZ"), [])
+        self.assertEqual(len(self._groups(q="laser")), 1)
+        self.assertEqual(self._groups(q="scanner"), [])
+
+    def test_picker_ids_are_accepted_by_the_return_service(self):
+        from .services import create_client_return_record
+
+        for days_ago in (9, 8, 7, 6):
+            self._sold(client=self.acme, days_ago=days_ago)
+        group = self._groups()[0]
+        picked = group["unit_ids"][:3]
+        record = create_client_return_record(
+            unit_ids=picked, resolution="available", received_by=self.user
+        )
+        self.assertEqual(record.client, self.acme)
+        self.assertEqual(
+            list(ProductUnit.objects.filter(pk__in=picked).values_list("status", flat=True)),
+            ["available"] * 3,
+        )
+        left = self._groups()[0]
+        self.assertEqual(left["count"], 1)
+        self.assertEqual(left["unit_ids"], group["unit_ids"][3:])
+
+    def test_returnable_units_hides_generic_units_unless_serial_is_exact(self):
+        generic, *_ = self._sold(client=self.acme, serial="GEN-EXACT-1")
+        real, *_ = self._sold(client=self.acme, generic=False, serial="REAL-1")
+        listed = self.client.get("/api/stock/client-returns/returnable-units/").json()
+        self.assertEqual([row["id"] for row in listed], [real.pk])
+        self.assertFalse(listed[0]["serial_is_generated"])
+        self.assertEqual(listed[0]["product"], self.product.pk)
+        partial = self.client.get("/api/stock/client-returns/returnable-units/", {"q": "GEN-EXACT"}).json()
+        self.assertEqual(partial, [])
+        exact = self.client.get(
+            "/api/stock/client-returns/returnable-units/", {"q": "gen-exact-1"}
+        ).json()
+        self.assertEqual([row["id"] for row in exact], [generic.pk])
+        self.assertTrue(exact[0]["serial_is_generated"])
+
+    def test_endpoint_needs_client_return_view_permission(self):
+        limited = User.objects.create_user(username="nope", password="test-pass")
+        limited.groups.clear()  # new users start in the read-only Viewer group
+        self.client.force_login(limited)
+        self.assertEqual(self.client.get(self.URL).status_code, 403)
+
+
+class TakenUnitErrorTests(TestCase):
+    """A picked unit changed by someone else before submit is a normal 400 with
+    a readable message on every picker endpoint, never a 500 (the picker sends
+    plain unit_ids, so the existing service validation is what answers)."""
+
+    def setUp(self):
+        category = Category.objects.create(name="Laser")
+        brand = Brand.objects.create(brandname="Canon")
+        model = ProductModel.objects.create(brand=brand, modelname="L100")
+        self.product = Product.objects.create(
+            descript="Canon laser printer", category=category, model=model
+        )
+        self.supplier = Supplier.objects.create(name="Gulf Networks LLC")
+        self.acme = Client.objects.create(name="Acme")
+        self.user = User.objects.create_superuser(
+            username="taken-admin", email="taken@example.com", password="test-pass"
+        )
+        self.client.force_login(self.user)
+        self.n = 0
+
+    def _generic(self, status=ProductUnit.STATUS_AVAILABLE):
+        self.n += 1
+        return ProductUnit.objects.create(
+            product=self.product,
+            serial_number=f"GEN-TAKEN-{self.n}",
+            serial_is_generated=True,
+            status=status,
+        )
+
+    def _delivered(self):
+        unit = self._generic(status=ProductUnit.STATUS_SOLD)
+        delivery = DeliveryRecord.objects.create(
+            client=self.acme, customer_name="Acme", receiver_name="R",
+            delivery_date=timezone.localdate(),
+        )
+        DeliveryItem.objects.create(delivery=delivery, product=self.product, product_unit=unit)
+        return unit
+
+    def _post(self, url, payload):
+        return self.client.post(url, payload, content_type="application/json")
+
+    def _assert_taken_message(self, response, unit):
+        self.assertEqual(response.status_code, 400, response.content)
+        # The page shows the first message of the usual DRF error body.
+        details = response.json()
+        messages = []
+        for value in details.values() if isinstance(details, dict) else details:
+            messages.extend(value if isinstance(value, list) else [value])
+        self.assertTrue(messages and all(isinstance(m, str) and m for m in messages), details)
+
+    def _stale_available_case(self, url, payload):
+        fresh = self._generic()
+        ok = self._post(url, {**payload, "unit_ids": [fresh.pk]})
+        self.assertEqual(ok.status_code, 201, ok.content)
+        stale = self._generic()
+        # Someone else issues it between the picker loading and the submit.
+        stale.status = ProductUnit.STATUS_ISSUED
+        stale.save(update_fields=("status",))
+        movements_before = StockMovement.objects.count()
+        response = self._post(url, {**payload, "unit_ids": [stale.pk]})
+        self._assert_taken_message(response, stale)
+        stale.refresh_from_db()
+        self.assertEqual(stale.status, ProductUnit.STATUS_ISSUED)
+        self.assertEqual(StockMovement.objects.count(), movements_before)
+
+    def test_delivery(self):
+        self._stale_available_case(
+            "/api/stock/deliveries/",
+            {"customer_name": "Acme", "client": self.acme.pk, "delivery_date": str(timezone.localdate())},
+        )
+
+    def test_reservation(self):
+        self._stale_available_case(
+            "/api/stock/reservations/",
+            {"reserved_for_type": "client", "reserved_for_client": self.acme.pk},
+        )
+
+    def test_issue(self):
+        self._stale_available_case(
+            "/api/stock/issues/",
+            {"assigned_to_name_input": "Front desk", "assigned_to_kind_input": "department", "reason": "Event"},
+        )
+
+    def test_repair(self):
+        self._stale_available_case(
+            "/api/stock/repairs/",
+            {"repair_reason": "Dead", "vendor": self.supplier.pk},
+        )
+
+    def test_removal(self):
+        fresh = self._generic()
+        ok = self._post("/api/stock/removals/", {"reason": "lost", "unit_ids": [fresh.pk]})
+        self.assertEqual(ok.status_code, 201, ok.content)
+        stale = self._generic(status=ProductUnit.STATUS_SOLD)  # sold meanwhile
+        response = self._post("/api/stock/removals/", {"reason": "lost", "unit_ids": [stale.pk]})
+        self._assert_taken_message(response, stale)
+
+    def test_client_return(self):
+        fresh = self._delivered()
+        ok = self._post(
+            "/api/stock/client-returns/",
+            {"resolution": "available", "unit_ids": [fresh.pk]},
+        )
+        self.assertEqual(ok.status_code, 201, ok.content)
+        stale = self._delivered()
+        stale.status = ProductUnit.STATUS_AVAILABLE  # returned by someone else
+        stale.save(update_fields=("status",))
+        response = self._post(
+            "/api/stock/client-returns/",
+            {"resolution": "available", "unit_ids": [stale.pk]},
+        )
+        self._assert_taken_message(response, stale)
+
+    def test_mixed_selection_with_one_taken_unit_changes_nothing(self):
+        real = ProductUnit.objects.create(product=self.product, serial_number="REAL-KEEP")
+        taken = self._generic(status=ProductUnit.STATUS_ISSUED)
+        response = self._post(
+            "/api/stock/reservations/",
+            {"reserved_for_type": "client", "reserved_for_client": self.acme.pk, "unit_ids": [real.pk, taken.pk]},
+        )
+        self.assertEqual(response.status_code, 400, response.content)
+        real.refresh_from_db()
+        self.assertEqual(real.status, ProductUnit.STATUS_AVAILABLE)
+        self.assertFalse(ReservationRecord.objects.exists())
