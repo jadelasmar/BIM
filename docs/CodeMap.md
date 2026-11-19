@@ -207,6 +207,7 @@ Current main operational UI implementation:
 - Client list/detail/create/edit
 - placeholder pages
 - shared UI pieces not yet split out
+- clickable-row and reference helpers (`ClickableRow`, `RecordNumberLink`, `EntityLink`, `MovementReference`)
 
 This file is the main remaining frontend split target.
 

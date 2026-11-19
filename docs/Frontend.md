@@ -247,6 +247,12 @@ Current Delivery Records integration:
   - Wrong delivered unit, product, or serial mistakes are handled by cancelling and recreating the record when linked units are still untouched sold units.
 - If cancellation is blocked because a linked stock unit is no longer an untouched sold unit, the detail screen shows the backend operational message.
 
+## Clickable rows and references
+
+Shared helpers in `AppRouter.jsx` (next to `PartyLink`): `ClickableRow` (row opens `href` on click, Enter, middle-click; clicks on links/buttons/fields inside, or ending a text selection, are ignored), `RecordNumberLink` (the real link inside a row), `EntityLink` (product, serial, supplier, client or record link; plain text when there is no id) and `productHref`. Rows using `ClickableRow`: all record lists, Supplier and Client lists, Stock Units, Recent Activity.
+
+References that link: product name and serial in every record item table (serial opens the product page filtered to that unit, generic serials excluded), supplier/client names in lists and details, Original Delivery on Client Return, movement history serial and record references (`MovementReference`), Stock Units and unit register product/supplier, global search results (real anchors), Unit Journey steps and Stock Units "Where" (backend href). Not linked, no page exists: users, employees, Edit History values.
+
 ## Generic (no-serial) units in the UI
 
 - Receive Stock sends only typed/scanned serials plus `auto_serial_count`; Add Unit omits `serial_number` when none was typed. The backend makes and flags the serials. A blank serial box means "generic unit".

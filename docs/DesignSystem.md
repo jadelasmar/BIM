@@ -210,6 +210,13 @@ Light theme is implemented with CSS variable overrides in `frontend/src/styles.c
 - Decorative icons use `aria-hidden="true"`.
 - Images need useful `alt` text.
 - Keyboard navigation must work for clickable table rows.
+
+## Clickable Rows And References
+
+- A list row that opens a detail page uses `ClickableRow` (in `AppRouter.jsx`), never a hand-written `<tr onClick>`. The record number inside is a real link (`RecordNumberLink`) so middle-click and open-in-new-tab work; the row also opens on click, Enter (when the row itself is focused) and middle-click, shows `cursor-pointer` and a focus outline, and ignores clicks on a link, button or field inside the row and clicks that end a text selection.
+- Applies to every record list (receiving, deliveries, reservations, assignments, repairs, removals, client upgrades, client returns), the Supplier and Client lists, Stock Units and Recent Activity. A new list must use it.
+- Anything that names a product, serial, supplier, client or record links to its page when one exists (`EntityLink` / `RecordNumberLink` / `PartyLink`), with the existing orange link and hover tokens. With no id it stays plain text.
+- No page exists for users, employees (internal parties) or Edit History values, so those are plain text.
 - Use text and icons, not color alone, for status.
 
 ## Future Page Rules
