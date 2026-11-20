@@ -7026,6 +7026,15 @@ class WriteEndpointPermissionMatrixTests(TestCase):
                 response = self.client.post(url, {}, content_type="application/json")
                 self.assertEqual(response.status_code, 403, f"{method.upper()} {url} as {user.username}")
 
+    def test_signatures_need_signature_permission_plus_record_view_not_unit_change(self):
+        url = "/api/stock/signatures/"
+        unit_only = self._user("sig-unit-only", "change_productunit")
+        self.client.force_login(unit_only)
+        self.assertEqual(self.client.post(url, {}, content_type="application/json").status_code, 403)
+        signer = self._user("sig-signer", "add_recordsignature", "view_deliveryrecord")
+        self.client.force_login(signer)
+        self.assertEqual(self.client.post(url, {}, content_type="application/json").status_code, 400)
+
 
 class HeaderEditAtomicityTests(TestCase):
     """Header edits and their RecordChange rows are one transaction: if logging the
@@ -8061,3 +8070,188 @@ class SignatureModelTests(TestCase):
             with self.assertRaises(RuntimeError):
                 self._add()
         self.assertEqual(RecordSignature.objects.count(), 0)
+
+
+class SignatureAPITests(TestCase):
+    def setUp(self):
+        from apps.stock.roles import prepare_bimpos_groups
+
+        prepare_bimpos_groups()
+        self.viewer = User.objects.create_user(username="sig-viewer", password="test-pass")
+        self.viewer.groups.set(Group.objects.filter(name="Viewer"))
+        self.support = User.objects.create_user(username="sig-support", password="test-pass")
+        self.support.groups.set(Group.objects.filter(name="IT Support"))
+        category = Category.objects.create(name="Laser")
+        brand = Brand.objects.create(brandname="Canon")
+        model = ProductModel.objects.create(brand=brand, modelname="L100")
+        product = Product.objects.create(descript="Printer", category=category, model=model)
+        self.unit = ProductUnit.objects.create(
+            product=product, serial_number="SIGAPI-1", status=ProductUnit.STATUS_AVAILABLE
+        )
+        self.delivery = DeliveryRecord.objects.create(customer_name="Acme")
+
+    def _data_url(self, draw=True):
+        import base64
+
+        image = Image.new("RGBA", (200, 80), (255, 255, 255, 0))
+        if draw:
+            for x in range(10, 60):
+                image.putpixel((x, 20), (0, 0, 0, 255))
+        buffer = BytesIO()
+        image.save(buffer, format="PNG")
+        return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode()
+
+    def _body(self, **extra):
+        body = {"type": "delivery", "id": self.delivery.pk, "image": self._data_url()}
+        body.update(extra)
+        return body
+
+    def _post(self, body=None):
+        return self.client.post(
+            "/api/stock/signatures/", self._body() if body is None else body, content_type="application/json"
+        )
+
+    def _list(self, type_="delivery", id_=None):
+        return self.client.get("/api/stock/signatures/", {"type": type_, "id": id_ or self.delivery.pk})
+
+    def _as_user(self, name, *codenames):
+        user = User.objects.create_user(username=name, password="test-pass")
+        user.groups.clear()
+        user.user_permissions.set(Permission.objects.filter(codename__in=codenames))
+        self.client.force_login(user)
+        return user
+
+    def test_viewer_can_list_and_fetch_image_but_not_post(self):
+        self.client.force_login(self.support)
+        created = self._post(self._body(signer_name="Sam", role_label="Receiver"))
+        self.assertEqual(created.status_code, 201)
+        self.client.force_login(self.viewer)
+        listing = self._list()
+        self.assertEqual(listing.status_code, 200)
+        self.assertEqual(len(listing.json()), 1)
+        image = self.client.get(f"/api/stock/signatures/{created.json()['id']}/image/")
+        self.assertEqual(image.status_code, 200)
+        self.assertEqual(self._post({}).status_code, 403)
+        self.assertEqual(self._post().status_code, 403)
+
+    def test_it_support_post_returns_shape_without_image_bytes(self):
+        self.client.force_login(self.support)
+        response = self._post(self._body(signer_name=" Sam ", role_label="Receiver"))
+        self.assertEqual(response.status_code, 201)
+        data = response.json()
+        self.assertEqual(
+            set(data),
+            {"id", "record_type", "record_id", "record_number", "signer_name", "role_label",
+             "signed_at", "captured_by", "image_url"},
+        )
+        self.assertEqual(data["signer_name"], "Sam")
+        self.assertEqual(data["record_number"], self.delivery.delivery_number)
+        self.assertEqual(data["captured_by"], "sig-support")
+        self.assertEqual(data["image_url"], f"/api/stock/signatures/{data['id']}/image/")
+        self.assertNotIn("base64", response.content.decode())
+
+    def test_anonymous_is_refused(self):
+        self.assertIn(self._list().status_code, (401, 403))
+        self.assertIn(self._post().status_code, (401, 403))
+        self.assertIn(self.client.get("/api/stock/signatures/1/image/").status_code, (401, 403))
+
+    def test_missing_type_view_permission_is_refused_everywhere(self):
+        self.client.force_login(self.support)
+        pk = self._post().json()["id"]
+        self._as_user("no-delivery-view", "view_recordsignature", "add_recordsignature")
+        self.assertEqual(self._list().status_code, 403)
+        self.assertEqual(self.client.get(f"/api/stock/signatures/{pk}/image/").status_code, 403)
+        self.assertEqual(self._post().status_code, 403)
+
+    def test_missing_signature_permission_is_refused(self):
+        self._as_user("only-delivery-view", "view_deliveryrecord")
+        self.assertEqual(self._list().status_code, 403)
+        self.assertEqual(self._post({}).status_code, 403)
+
+    def test_update_and_delete_are_not_allowed(self):
+        self.client.force_login(self.support)
+        pk = self._post().json()["id"]
+        for url in ("/api/stock/signatures/", f"/api/stock/signatures/{pk}/image/"):
+            for method in ("put", "patch", "delete"):
+                response = getattr(self.client, method)(url, {}, content_type="application/json")
+                self.assertEqual(response.status_code, 405, f"{method} {url}")
+
+    def test_validation_errors_are_400(self):
+        self.client.force_login(self.support)
+        self.assertEqual(self._post({}).status_code, 400)
+        self.assertEqual(self._post(self._body(type="repair")).status_code, 400)
+        self.assertEqual(self._post(self._body(type="")).status_code, 400)
+        self.assertEqual(self._post(self._body(id="abc")).status_code, 400)
+        self.assertEqual(self._post(self._body(image="")).status_code, 400)
+        self.assertEqual(self._post(self._body(image="!!!")).status_code, 400)
+        self.assertEqual(self._post(self._body(image=self._data_url(draw=False))).status_code, 400)
+        self.assertEqual(self._post(self._body(signer_name="x" * 151)).status_code, 400)
+        self.assertEqual(self._post(self._body(role_label="x" * 51)).status_code, 400)
+        self.assertEqual(self._list(type_="repair").status_code, 400)
+        self.assertEqual(self.client.get("/api/stock/signatures/").status_code, 400)
+
+    def test_missing_record_is_404_before_bad_image(self):
+        self.client.force_login(self.support)
+        self.assertEqual(self._post(self._body(id=999999)).status_code, 404)
+        self.assertEqual(self._post(self._body(id=999999, image="")).status_code, 404)
+        self.assertEqual(self.client.get("/api/stock/signatures/999999/image/").status_code, 404)
+
+    def test_listed_oldest_first(self):
+        self.client.force_login(self.support)
+        first = self._post(self._body(signer_name="First")).json()["id"]
+        second = self._post(self._body(signer_name="Second")).json()["id"]
+        self.assertEqual([row["id"] for row in self._list().json()], [first, second])
+
+    def test_image_response_headers(self):
+        self.client.force_login(self.support)
+        pk = self._post().json()["id"]
+        response = self.client.get(f"/api/stock/signatures/{pk}/image/")
+        self.assertEqual(response["Content-Type"], "image/png")
+        self.assertIn("no-store", response["Cache-Control"])
+        self.assertTrue(response.content.startswith(b"\x89PNG"))
+
+    def test_role_permissions(self):
+        viewer_perms = {p.split(".")[-1] for p in self.viewer.get_all_permissions()}
+        support_perms = {p.split(".")[-1] for p in self.support.get_all_permissions()}
+        self.assertIn("view_recordsignature", viewer_perms)
+        self.assertNotIn("add_recordsignature", viewer_perms)
+        self.assertIn("add_recordsignature", support_perms)
+        self.assertNotIn("delete_recordsignature", support_perms)
+
+    def test_cancelled_delivery_can_still_be_signed_and_listed(self):
+        from apps.stock import services
+
+        delivery = services.create_delivery_record(unit_ids=[self.unit.pk], client_name_input="Acme")
+        services.cancel_delivery_record(delivery, cancel_reason="Test")
+        self.client.force_login(self.support)
+        response = self._post(self._body(id=delivery.pk))
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(len(self._list(id_=delivery.pk).json()), 1)
+
+    def test_no_stock_side_effects_through_api(self):
+        self.client.force_login(self.support)
+        movements = StockMovement.objects.count()
+        self._post()
+        self.unit.refresh_from_db()
+        self.assertEqual(self.unit.status, ProductUnit.STATUS_AVAILABLE)
+        self.assertEqual(StockMovement.objects.count(), movements)
+
+    def test_history_row_visible_through_record_history(self):
+        self.client.force_login(self.support)
+        self._post(self._body(signer_name="Sam", role_label="Receiver"))
+        self.client.force_login(self.viewer)
+        rows = self.client.get(
+            "/api/stock/record-history/", {"type": "delivery", "id": self.delivery.pk}
+        ).json()
+        self.assertEqual(rows[0]["field_label"], "Signature added")
+        self.assertEqual(rows[0]["new_value"], "Sam (Receiver)")
+
+    def test_initial_data_permissions_and_api_url(self):
+        self.client.force_login(self.viewer)
+        data = self.client.get("/").context["initial_data"]
+        self.assertTrue(data["permissions"]["canViewSignature"])
+        self.assertFalse(data["permissions"]["canAddSignature"])
+        self.assertEqual(data["api"]["signatures"], "/api/stock/signatures/")
+        self.client.force_login(self.support)
+        data = self.client.get("/").context["initial_data"]
+        self.assertTrue(data["permissions"]["canAddSignature"])

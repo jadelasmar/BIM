@@ -115,6 +115,16 @@ urlpatterns = [
         name="record-history",
     ),
     path(
+        "signatures/",
+        api_views.RecordSignatureListCreateAPIView.as_view(),
+        name="signatures",
+    ),
+    path(
+        "signatures/<int:pk>/image/",
+        api_views.RecordSignatureImageAPIView.as_view(),
+        name="signature-image",
+    ),
+    path(
         "client-upgrades/",
         api_views.ClientUpgradeRecordListCreateAPIView.as_view(),
         name="client-upgrades",

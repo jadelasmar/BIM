@@ -11,6 +11,7 @@ from .models import (
     ClientReturnRecord,
     ClientUpgradeRecord,
     RecordChange,
+    RecordSignature,
     DeliveryItem,
     DeliveryRecord,
     InternalParty,
@@ -2620,3 +2621,31 @@ class RecordChangeSerializer(serializers.ModelSerializer):
 
     def get_changed_by_name(self, obj):
         return obj.changed_by.get_username() if obj.changed_by_id else ""
+
+
+class RecordSignatureSerializer(serializers.ModelSerializer):
+    """Signature metadata only. The image is served by its own endpoint."""
+
+    captured_by = serializers.SerializerMethodField()
+    image_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RecordSignature
+        fields = (
+            "id",
+            "record_type",
+            "record_id",
+            "record_number",
+            "signer_name",
+            "role_label",
+            "signed_at",
+            "captured_by",
+            "image_url",
+        )
+        read_only_fields = fields
+
+    def get_captured_by(self, obj):
+        return obj.captured_by.get_username() if obj.captured_by_id else ""
+
+    def get_image_url(self, obj):
+        return f"/api/stock/signatures/{obj.pk}/image/"

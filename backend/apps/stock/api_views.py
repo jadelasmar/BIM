@@ -2,6 +2,8 @@ from django.db import transaction
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.http import HttpResponse
 from rest_framework import generics, permissions
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
@@ -26,6 +28,7 @@ from .models import (
     RemovalRecord,
     RepairRecord,
     ReservationRecord,
+    RecordSignature,
     StockMovement,
     Supplier,
 )
@@ -69,6 +72,7 @@ from .serializers import (
     ReservationReleaseSerializer,
     ClientUpgradeRecordCancelSerializer,
     RecordChangeSerializer,
+    RecordSignatureSerializer,
     ClientUpgradeRecordCorrectionSerializer,
     ClientUpgradeRecordSerializer,
     StockMovementSerializer,
@@ -76,6 +80,7 @@ from .serializers import (
     ProductUnitCorrectionSerializer,
 )
 from .services import create_stock_movement
+from .signatures import SIGNABLE_RECORDS, add_record_signature
 
 
 def _require_perm(user, permission):
@@ -1448,3 +1453,89 @@ class RecordHistoryAPIView(APIView):
             record_type=record_type, record_id=record_id
         ).select_related("changed_by")
         return Response(RecordChangeSerializer(changes, many=True).data)
+
+
+def _signature_error_response(error):
+    return Response({"detail": " ".join(error.messages)}, status=400)
+
+
+def _require_signature_view(user, record_type):
+    """Both the signature view permission and the record type's own view permission."""
+    _require_perm(user, stock_constants.VIEW_RECORD_SIGNATURE)
+    return _require_record_view(user, record_type)
+
+
+def _require_record_view(user, record_type):
+    entry = SIGNABLE_RECORDS.get(record_type)
+    if entry is not None:
+        _require_perm(user, entry.view_perm)
+    return entry
+
+
+class RecordSignatureListCreateAPIView(APIView):
+    """GET ?type=delivery&id=4 -> signatures oldest first (metadata only).
+    POST {type, id, image, signer_name, role_label} -> 201. Unlike the unit-mutating
+    writes, it does not need CHANGE_PRODUCT_UNIT: it never touches a unit."""
+
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get(self, request):
+        record_type = request.query_params.get("type", "")
+        entry = _require_signature_view(request.user, record_type)
+        if entry is None:
+            return Response({"detail": "Unknown record type."}, status=400)
+        try:
+            record_id = int(request.query_params.get("id", ""))
+        except (TypeError, ValueError):
+            return Response({"detail": "A record id is required."}, status=400)
+        signatures = RecordSignature.objects.filter(
+            record_type=record_type, record_id=record_id
+        ).select_related("captured_by")
+        return Response(RecordSignatureSerializer(signatures, many=True).data)
+
+    def post(self, request):
+        data = request.data if hasattr(request.data, "get") else {}
+        record_type = data.get("type", "")
+        if not isinstance(record_type, str):
+            record_type = ""
+        # Permissions first, so a caller without them learns nothing about the body.
+        _require_perm(request.user, stock_constants.ADD_RECORD_SIGNATURE)
+        entry = _require_record_view(request.user, record_type)
+        if entry is None:
+            return Response({"detail": "This record type cannot be signed."}, status=400)
+        try:
+            record_id = int(data.get("id", ""))
+        except (TypeError, ValueError):
+            return Response({"detail": "A record id is required."}, status=400)
+        names = {}
+        for field in ("signer_name", "role_label"):
+            value = data.get(field, "")
+            if value is not None and not isinstance(value, str):
+                return Response({"detail": f"{field} must be text."}, status=400)
+            names[field] = value or ""
+        try:
+            signature = add_record_signature(
+                record_type=record_type,
+                record_id=record_id,
+                image=data.get("image", ""),
+                captured_by=request.user,
+                **names,
+            )
+        except DjangoValidationError as error:
+            return _signature_error_response(error)
+        except LookupError as error:
+            return Response({"detail": str(error)}, status=404)
+        return Response(RecordSignatureSerializer(signature).data, status=201)
+
+
+class RecordSignatureImageAPIView(APIView):
+    """The signature PNG. Never cached: it is evidence tied to the viewer's permissions."""
+
+    permission_classes = (permissions.IsAuthenticated,)
+
+    def get(self, request, pk):
+        signature = get_object_or_404(RecordSignature, pk=pk)
+        _require_signature_view(request.user, signature.record_type)
+        response = HttpResponse(bytes(signature.image), content_type="image/png")
+        response["Cache-Control"] = "private, no-store"
+        return response
