@@ -10,6 +10,7 @@ from .models import (
     ClientReturnRecord,
     ClientUpgradeRecord,
     RecordChange,
+    RecordSignature,
     DeliveryItem,
     DeliveryRecord,
     InternalParty,
@@ -999,6 +1000,26 @@ class RecordChangeAdmin(admin.ModelAdmin):
     list_filter = ("record_type", "changed_at")
     search_fields = ("record_number", "field_label", "old_value", "new_value")
     ordering = ("-changed_at", "-id")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(RecordSignature)
+class RecordSignatureAdmin(admin.ModelAdmin):
+    """Read-only: signatures are append-only evidence and never edited by hand."""
+
+    list_display = ("signed_at", "record_number", "record_type", "signer_name", "role_label", "captured_by")
+    list_filter = ("record_type", "signed_at")
+    search_fields = ("record_number", "signer_name")
+    exclude = ("image",)
+    ordering = ("-signed_at", "-id")
 
     def has_add_permission(self, request):
         return False

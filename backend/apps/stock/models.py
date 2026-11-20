@@ -1531,3 +1531,31 @@ class RecordChange(models.Model):
 
     def __str__(self):
         return f"{self.record_number or self.record_type} {self.field_label}"
+
+
+class RecordSignature(models.Model):
+    """Append-only signature image collected on a Receiving, Delivery, Issue or
+    Client Return record. Keyed by type + id like RecordChange. Created only
+    through signatures.add_record_signature(); never edited or deleted."""
+
+    record_type = models.CharField(max_length=30)
+    record_id = models.PositiveIntegerField()
+    record_number = models.CharField(max_length=32, blank=True)
+    signer_name = models.CharField(max_length=150, blank=True)
+    role_label = models.CharField(max_length=50, blank=True)
+    image = models.BinaryField()
+    signed_at = models.DateTimeField(default=timezone.now)
+    captured_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="stock_record_signatures",
+    )
+
+    class Meta:
+        ordering = ("signed_at", "id")
+        indexes = [models.Index(fields=["record_type", "record_id"])]
+
+    def __str__(self):
+        return f"{self.record_number or self.record_type} signature"

@@ -7920,3 +7920,144 @@ class GenericDisplaySourceTests(SimpleTestCase):
         units_view = source[source.index("function InventoryUnitsView"):source.index("function InventoryHeader")]
         self.assertNotIn("groupGenericItems", units_view)
         self.assertNotIn("groupSelectedUnits", units_view)
+
+
+class SignatureModelTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="signer", password="test-pass")
+        category = Category.objects.create(name="Laser")
+        brand = Brand.objects.create(brandname="Canon")
+        model = ProductModel.objects.create(brand=brand, modelname="L100")
+        self.product = Product.objects.create(descript="Printer", category=category, model=model)
+        self.unit = ProductUnit.objects.create(
+            product=self.product, serial_number="SIG-1", status=ProductUnit.STATUS_AVAILABLE
+        )
+        self.delivery = DeliveryRecord.objects.create(customer_name="Acme")
+
+    @staticmethod
+    def _png_bytes(size=(200, 80), draw=True, fmt="PNG", mode="RGBA"):
+        background = (255, 255, 255, 0) if mode == "RGBA" else (255, 255, 255)
+        image = Image.new(mode, size, background)
+        if draw:
+            for x in range(10, 60):
+                image.putpixel((x, 20), (0, 0, 0, 255) if mode == "RGBA" else (0, 0, 0))
+        buffer = BytesIO()
+        image.save(buffer, format=fmt)
+        return buffer.getvalue()
+
+    def _data_url(self, **kwargs):
+        import base64
+
+        return "data:image/png;base64," + base64.b64encode(self._png_bytes(**kwargs)).decode()
+
+    def _add(self, image=None, **kwargs):
+        from .signatures import add_record_signature
+
+        params = dict(record_type="delivery", record_id=self.delivery.pk, image=self._data_url() if image is None else image)
+        params.update(kwargs)
+        return add_record_signature(**params)
+
+    def test_valid_png_saved_with_history_row(self):
+        from .models import RecordSignature
+
+        signature = self._add(signer_name=" Sam ", role_label="Receiver", captured_by=self.user)
+        self.assertEqual(RecordSignature.objects.count(), 1)
+        self.assertEqual(signature.record_number, self.delivery.delivery_number)
+        self.assertEqual(signature.signer_name, "Sam")
+        self.assertTrue(bytes(signature.image).startswith(b"\x89PNG"))
+        change = RecordChange.objects.get(record_type="delivery", record_id=self.delivery.pk)
+        self.assertEqual(change.field_label, "Signature added")
+        self.assertEqual(change.old_value, "")
+        self.assertEqual(change.new_value, "Sam (Receiver)")
+        self.assertEqual(change.changed_by, self.user)
+
+    def test_unnamed_history_text(self):
+        self._add()
+        self.assertEqual(RecordChange.objects.get().new_value, "unnamed (no role)")
+
+    def test_oversize_rejected(self):
+        import base64
+        from django.core.exceptions import ValidationError
+
+        big = self._png_bytes() + b"\0" * 205000
+        with self.assertRaises(ValidationError):
+            self._add(image=base64.b64encode(big).decode())
+
+    def test_non_png_rejected(self):
+        import base64
+        from django.core.exceptions import ValidationError
+
+        jpeg = self._png_bytes(fmt="JPEG", mode="RGB")
+        with self.assertRaises(ValidationError):
+            self._add(image=base64.b64encode(jpeg).decode())
+
+    def test_corrupt_png_rejected(self):
+        import base64
+        from django.core.exceptions import ValidationError
+
+        with self.assertRaises(ValidationError):
+            self._add(image=base64.b64encode(b"\x89PNG\r\n\x1a\nnot really").decode())
+        with self.assertRaises(ValidationError):
+            self._add(image="!!!not base64!!!")
+        with self.assertRaises(ValidationError):
+            self._add(image="")
+
+    def test_blank_png_rejected(self):
+        from django.core.exceptions import ValidationError
+
+        with self.assertRaises(ValidationError):
+            self._add(image=self._data_url(draw=False))
+
+    def test_dimensions_rejected(self):
+        from django.core.exceptions import ValidationError
+
+        with self.assertRaises(ValidationError):
+            self._add(image=self._data_url(size=(1700, 100)))
+        with self.assertRaises(ValidationError):
+            self._add(image=self._data_url(size=(100, 900)))
+
+    def test_bare_base64_and_data_url_with_whitespace_accepted(self):
+        import base64
+
+        bare = base64.b64encode(self._png_bytes()).decode()
+        self._add(image=bare)
+        spaced = "data:image/png;base64," + "\n".join(
+            bare[i:i + 60] for i in range(0, len(bare), 60)
+        )
+        self._add(image="  " + spaced + "  ")
+
+    def test_unknown_type_rejected(self):
+        from django.core.exceptions import ValidationError
+
+        with self.assertRaises(ValidationError):
+            self._add(record_type="repair")
+
+    def test_missing_record_raises_lookup_error(self):
+        with self.assertRaises(LookupError):
+            self._add(record_id=999999)
+
+    def test_cancelled_record_can_be_signed(self):
+        self.delivery.status = DeliveryRecord.STATUS_CANCELLED
+        self.delivery.save()
+        signature = self._add()
+        self.assertIsNotNone(signature.pk)
+
+    def test_no_stock_side_effects(self):
+        number = self.delivery.delivery_number
+        status = self.delivery.status
+        movements = StockMovement.objects.count()
+        self._add()
+        self.unit.refresh_from_db()
+        self.delivery.refresh_from_db()
+        self.assertEqual(self.unit.status, ProductUnit.STATUS_AVAILABLE)
+        self.assertEqual(StockMovement.objects.count(), movements)
+        self.assertEqual(self.delivery.status, status)
+        self.assertEqual(self.delivery.delivery_number, number)
+
+    def test_history_failure_rolls_back(self):
+        from .models import RecordSignature
+
+        with patch("apps.stock.signatures.log_record_changes", side_effect=RuntimeError("boom")):
+            with self.assertRaises(RuntimeError):
+                self._add()
+        self.assertEqual(RecordSignature.objects.count(), 0)

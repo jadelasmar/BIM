@@ -58,3 +58,6 @@ VIEW_INTERNAL_PARTY = f"{APP_LABEL}.view_internalparty"
 VIEW_CLIENT = f"{APP_LABEL}.view_client"
 ADD_CLIENT = f"{APP_LABEL}.add_client"
 CHANGE_CLIENT = f"{APP_LABEL}.change_client"
+
+VIEW_RECORD_SIGNATURE = f"{APP_LABEL}.view_recordsignature"
+ADD_RECORD_SIGNATURE = f"{APP_LABEL}.add_recordsignature"
