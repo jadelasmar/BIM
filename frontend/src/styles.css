@@ -374,3 +374,231 @@ summary::-webkit-details-marker {
     white-space: nowrap;
   }
 }
+
+/* Printable record note (components/print). The sheet is always white with black text,
+   independent of the app theme. */
+.print-portal {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  overflow: auto;
+  background: #e5e7eb;
+  color: #000;
+}
+.print-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #fff;
+  border-bottom: 1px solid #d1d5db;
+}
+.print-toolbar button {
+  padding: 8px 18px;
+  border: 1px solid #9ca3af;
+  border-radius: 8px;
+  background: #fff;
+  color: #111827;
+  font-weight: 600;
+  cursor: pointer;
+}
+.print-toolbar button.print-toolbar-primary {
+  border-color: #ff9b23;
+  background: #ff9b23;
+}
+.print-stage {
+  padding: 16px;
+  width: max-content;
+  min-width: 100%;
+}
+.print-sheet {
+  box-sizing: border-box;
+  width: 210mm;
+  min-height: 297mm;
+  margin: 0 auto;
+  padding: 12mm;
+  background: #fff;
+  color: #000;
+  font-family: var(--bim-font-family);
+  font-size: 11pt;
+  line-height: 1.4;
+  box-shadow: 0 2px 12px rgb(0 0 0 / 25%);
+  display: flex;
+  flex-direction: column;
+}
+.print-sheet h1,
+.print-sheet h2,
+.print-sheet p,
+.print-sheet dl,
+.print-sheet dd,
+.print-sheet figure {
+  margin: 0;
+}
+.print-note-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #000;
+}
+.print-note-logo {
+  height: 12mm;
+  width: auto;
+}
+.print-note-heading {
+  text-align: right;
+}
+.print-note-heading h1 {
+  font-size: 18pt;
+  font-weight: 700;
+}
+.print-note-number {
+  font-family: ui-monospace, Consolas, monospace;
+  font-weight: 700;
+}
+.print-note-party {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 24px;
+  margin-top: 14px;
+}
+.print-note-party dt {
+  font-size: 9pt;
+  text-transform: uppercase;
+  color: #444;
+}
+.print-note-party dd {
+  font-weight: 600;
+}
+.print-note-table {
+  width: 100%;
+  margin-top: 16px;
+  border-collapse: collapse;
+  font-size: 10pt;
+}
+.print-note-table caption {
+  text-align: left;
+  font-weight: 700;
+  padding-bottom: 4px;
+}
+.print-note-table th,
+.print-note-table td {
+  padding: 5px 6px;
+  border: 1px solid #000;
+  text-align: left;
+  vertical-align: top;
+  white-space: normal;
+  color: #000;
+}
+.print-note-table th {
+  background: #e5e7eb;
+}
+.print-note-table .print-note-qty {
+  width: 14mm;
+  text-align: right;
+}
+.print-note-sku {
+  display: block;
+  font-size: 8.5pt;
+  color: #444;
+}
+.print-note-notes {
+  margin-top: 14px;
+}
+.print-note-notes h2,
+.print-note-signatures h2 {
+  font-size: 10pt;
+  text-transform: uppercase;
+  color: #444;
+}
+.print-note-notes p {
+  white-space: pre-wrap;
+}
+.print-note-signatures {
+  margin-top: 22px;
+  break-inside: avoid;
+}
+.print-note-signature-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 28px;
+  margin-top: 6px;
+}
+.print-note-signature-list figure {
+  min-width: 60mm;
+}
+.print-note-signature-list img {
+  display: block;
+  max-height: 22mm;
+  max-width: 70mm;
+  border-bottom: 1px solid #000;
+}
+.print-note-signature-list figcaption {
+  display: flex;
+  flex-direction: column;
+  font-size: 9.5pt;
+}
+.print-note-signature-empty {
+  margin-top: 26mm;
+  max-width: 90mm;
+}
+.print-note-line {
+  border-top: 1px solid #000;
+}
+.print-note-signature-empty p {
+  font-size: 9pt;
+  color: #444;
+}
+.print-note-footer {
+  margin-top: auto;
+  padding-top: 16px;
+  text-align: center;
+  font-size: 9pt;
+  color: #444;
+}
+
+@page {
+  size: A4;
+  margin: 12mm;
+}
+@media print {
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
+  body > *:not(.print-portal) {
+    display: none !important;
+  }
+  .print-portal {
+    position: static;
+    overflow: visible;
+    background: #fff;
+  }
+  .print-toolbar {
+    display: none !important;
+  }
+  .print-stage {
+    padding: 0;
+    width: auto;
+    min-width: 0;
+  }
+  .print-sheet {
+    width: auto;
+    min-height: 0;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+  }
+  .print-note-table thead {
+    display: table-header-group;
+  }
+  .print-note-table tr {
+    break-inside: avoid;
+  }
+}

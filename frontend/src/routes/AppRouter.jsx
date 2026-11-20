@@ -45,6 +45,7 @@ import { DEFAULT_THEME_STORAGE_KEY, applyTheme, currentTheme } from "../hooks/us
 import { LoginPage, PasswordSetupPage } from "../pages/auth/AuthPages";
 import { formatCount, formatCurrency, formatDate, todayLocal } from "../utils/formatters";
 import SignaturePad from "../components/signature/SignaturePad";
+import PrintPreview from "../components/print/PrintPreview";
 import logoPrimary from "../assets/brand/logo-primary.svg";
 import logoWhite from "../assets/brand/logo-white.svg";
 
@@ -1365,6 +1366,7 @@ function ReceivingRecordDetailPage({ data }) {
         {record ? (
           <div className="flex flex-wrap items-center gap-3">
             <Status status={isCancelled ? "Cancelled" : "Recorded"} statusClass={isCancelled ? "inactive" : "received"} />
+            <PrintNoteButton data={data} type="receiving" id={receivingId} record={record} />
             {!isCancelled && (canEditReceiving || canCancelReceiving) ? (
               <>
                 {canEditReceiving ? (
@@ -3161,14 +3163,15 @@ function IssueRecordDetailPage({ data }) {
           </div>
           <p className="bim-page-description">Assigned units must be returned before delivery.</p>
         </div>
-        {isActive && canEditIssue ? (
-          <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <PrintNoteButton data={data} type="issue" id={issueId} record={record} />
+          {isActive && canEditIssue ? (
             <Button type="button" variant="outline" onClick={() => setEditing((current) => !current)}>
               <Edit3 className="h-4 w-4" />
               Edit Details
             </Button>
-          </div>
-        ) : null}
+          ) : null}
+        </div>
       </header>
 
       {message ? (
@@ -6227,15 +6230,16 @@ function ClientReturnRecordDetailPage({ data }) {
             Client return is not a delivery cancellation and not a financial refund or credit.
           </p>
         </div>
-        {record && !isCancelled && (canEditClientReturn || canCancelClientReturn) ? (
+        {record ? (
           <div className="flex flex-wrap items-center gap-3">
-            {canEditClientReturn ? (
+            <PrintNoteButton data={data} type="client_return" id={returnId} record={record} />
+            {!isCancelled && canEditClientReturn ? (
               <Button type="button" variant="outline" onClick={() => setEditing((current) => !current)}>
                 <Edit3 className="h-4 w-4" />
                 Edit Details
               </Button>
             ) : null}
-            {canCancelClientReturn ? (
+            {!isCancelled && canCancelClientReturn ? (
               <Button type="button" variant="secondary" onClick={() => setCancelOpen((current) => !current)}>
                 <RotateCcw className="h-4 w-4" />
                 Cancel Record
@@ -7157,6 +7161,7 @@ function DeliveryRecordDetailPage({ data }) {
           <div className="flex flex-wrap items-center gap-3">
             <Status status={deliveryStatusLabel(record)} statusClass={deliveryStatusClass(record)} />
             {record.is_warranty_return ? <Status status="Warranty return" statusClass="warranty" /> : null}
+            <PrintNoteButton data={data} type="delivery" id={deliveryId} record={record} />
             {!isCancelled && (canCreateClientReturn || canEditDelivery || canCancelDelivery) ? (
               <>
                 {canCreateClientReturn ? (
@@ -13233,6 +13238,43 @@ function SignatureSection({ data, type, id, onSaved }) {
         <p className="border-t border-nexus-line px-4 py-5 text-sm text-zinc-500">No signatures collected yet.</p>
       )}
     </section>
+  );
+}
+
+// Print button for a record's A4 operational note. Loads the record's signatures each time
+// the preview opens so a just-collected signature is on the note; items go through
+// groupGenericItems like the record pages.
+function PrintNoteButton({ data, type, id, record }) {
+  const [open, setOpen] = useState(false);
+  const [signatures, setSignatures] = useState([]);
+  const canSeeSignatures = Boolean(data.permissions?.canViewSignature || data.permissions?.canAddSignature);
+
+  useEffect(() => {
+    if (!open || !id || !canSeeSignatures) return undefined;
+    const controller = new AbortController();
+    fetch(`${data.api.signatures}?type=${type}&id=${id}`, { signal: controller.signal })
+      .then((response) => (response.ok ? response.json() : []))
+      .then((rows) => setSignatures(Array.isArray(rows) ? rows : []))
+      .catch(() => {});
+    return () => controller.abort();
+  }, [open, data.api.signatures, type, id, canSeeSignatures]);
+
+  const closePreview = useCallback(() => setOpen(false), []);
+
+  return (
+    <>
+      <Button type="button" variant="outline" onClick={() => setOpen(true)}>
+        Print
+      </Button>
+      <PrintPreview
+        open={open}
+        onClose={closePreview}
+        type={type}
+        record={record}
+        groupedItems={open ? groupGenericItems(record?.items || []) : []}
+        signatures={signatures}
+      />
+    </>
   );
 }
 
