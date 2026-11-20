@@ -209,3 +209,6 @@ cython_debug/
 
 # Vite build output (rebuilt by deploy.ps1 via npm run build)
 backend/static/frontend/
+
+# Playwright MCP scratch
+.playwright-mcp/
