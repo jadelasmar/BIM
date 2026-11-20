@@ -95,6 +95,8 @@ def add_record_signature(
         raise ValidationError("This record type cannot be signed.")
     signer_name = (signer_name or "").strip()
     role_label = (role_label or "").strip()
+    if not signer_name:
+        raise ValidationError("Enter the signer's name.")
     if len(signer_name) > MAX_SIGNER_NAME:
         raise ValidationError("The printed name is too long (150 characters maximum).")
     if len(role_label) > MAX_ROLE_LABEL:

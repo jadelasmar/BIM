@@ -4636,6 +4636,49 @@ class InventoryApiTests(TestCase):
             ).exists()
         )
 
+    def test_delivery_receiver_name_is_set_on_create_and_edits_are_logged(self):
+        user = self._user_with_permissions(
+            "add_deliveryrecord", "change_deliveryrecord", "view_deliveryrecord", "change_productunit",
+        )
+        unit = ProductUnit.objects.get(serial_number="API-AVAILABLE")
+        self.client.force_login(user)
+
+        created = self.client.post(
+            "/api/stock/deliveries/",
+            {
+                "client_name_input": "Receiver Client",
+                "customer_name": "Receiver Client",
+                "receiver_name": "  Hassan  ",
+                "delivery_date": str(timezone.localdate()),
+                "unit_ids": [unit.pk],
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(created.status_code, 201, created.content)
+        self.assertEqual(created.json()["receiver_name"], "Hassan")
+        delivery = DeliveryRecord.objects.get(pk=created.json()["id"])
+
+        edited = self.client.patch(
+            f"/api/stock/deliveries/{delivery.pk}/",
+            {"receiver_name": "Layla"},
+            content_type="application/json",
+        )
+        self.assertEqual(edited.status_code, 200, edited.content)
+        self.assertEqual(edited.json()["receiver_name"], "Layla")
+        change = RecordChange.objects.get(record_type="delivery", record_id=delivery.pk)
+        self.assertEqual(
+            (change.field_label, change.old_value, change.new_value), ("Receiver", "Hassan", "Layla")
+        )
+        self.assertEqual(change.changed_by, user)
+
+        # Optional: clearing it is allowed.
+        cleared = self.client.patch(
+            f"/api/stock/deliveries/{delivery.pk}/", {"receiver_name": ""}, content_type="application/json"
+        )
+        self.assertEqual(cleared.status_code, 200)
+        delivery.refresh_from_db()
+        self.assertEqual(delivery.receiver_name, "")
+
     def test_delivery_api_creates_record_with_invoice_number_and_sale_price(self):
         user = self._user_with_permissions(
             "add_deliveryrecord",
@@ -7963,7 +8006,10 @@ class SignatureModelTests(TestCase):
     def _add(self, image=None, **kwargs):
         from .signatures import add_record_signature
 
-        params = dict(record_type="delivery", record_id=self.delivery.pk, image=self._data_url() if image is None else image)
+        params = dict(
+            record_type="delivery", record_id=self.delivery.pk, signer_name="Sam",
+            image=self._data_url() if image is None else image,
+        )
         params.update(kwargs)
         return add_record_signature(**params)
 
@@ -7981,9 +8027,13 @@ class SignatureModelTests(TestCase):
         self.assertEqual(change.new_value, "Sam (Receiver)")
         self.assertEqual(change.changed_by, self.user)
 
-    def test_unnamed_history_text(self):
-        self._add()
-        self.assertEqual(RecordChange.objects.get().new_value, "unnamed (no role)")
+    def test_blank_or_whitespace_signer_name_rejected(self):
+        from .models import RecordSignature
+
+        for name in ("", "   "):
+            with self.assertRaises(ValidationError):
+                self._add(signer_name=name)
+        self.assertEqual(RecordSignature.objects.count(), 0)
 
     def test_oversize_rejected(self):
         big = self._png_bytes() + b"\0" * 205000
@@ -8084,7 +8134,7 @@ class SignatureAPITests(TestCase):
         return "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode()
 
     def _body(self, **extra):
-        body = {"type": "delivery", "id": self.delivery.pk, "image": self._data_url()}
+        body = {"type": "delivery", "id": self.delivery.pk, "image": self._data_url(), "signer_name": "Sam"}
         body.update(extra)
         return body
 
@@ -8176,6 +8226,11 @@ class SignatureAPITests(TestCase):
         self.assertEqual(self._post(self._body(image="!!!")).status_code, 400)
         self.assertEqual(self._post(self._body(image=self._data_url(draw=False))).status_code, 400)
         self.assertEqual(self._post(self._body(signer_name="x" * 151)).status_code, 400)
+        for blank in ("", "   ", None):
+            self.assertEqual(self._post(self._body(signer_name=blank)).status_code, 400)
+        body = self._body()
+        del body["signer_name"]
+        self.assertEqual(self._post(body).status_code, 400)
         self.assertEqual(self._post(self._body(role_label="x" * 51)).status_code, 400)
         self.assertEqual(self._list(type_="repair").status_code, 400)
         self.assertEqual(self.client.get("/api/stock/signatures/").status_code, 400)

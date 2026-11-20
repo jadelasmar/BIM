@@ -113,7 +113,7 @@ Stock API views:
 - inventory summary
 - lookup endpoints for categories, brands, models, suppliers, clients
 
-Delivery record list search currently supports delivery number, linked client name, compatibility client text, receiver name, product-unit serial number, product description, and product SKU. The API field `customer_name` remains for compatibility, while new office records can also link to `client`. The delivery payload includes the read-only `receiver_name` (editable only in Django admin for now). Delivery list/detail access uses the delivery record view permission. Creating a delivery requires both the delivery record add permission and product-unit change permission because selected stock units are marked sold.
+Delivery record list search currently supports delivery number, linked client name, compatibility client text, receiver name, product-unit serial number, product description, and product SKU. The API field `customer_name` remains for compatibility, while new office records can also link to `client`. The delivery payload includes `receiver_name` (optional free text; set on create and editable through the delivery PATCH; edits are logged in record history as "Receiver"). Delivery list/detail access uses the delivery record view permission. Creating a delivery requires both the delivery record add permission and product-unit change permission because selected stock units are marked sold.
 
 Create Delivery only accepts active available product units. Reserved units must be released before they can be delivered.
 
@@ -158,7 +158,7 @@ Units received without a typed serial are "generic": `ProductUnit.serial_is_gene
 - `POST /api/stock/signatures/` `{type, id, image, signer_name, role_label}` adds one. Needs `ADD_RECORD_SIGNATURE` and the record type's view permission, checked before the body is read. It deliberately does not need `CHANGE_PRODUCT_UNIT` (convention 2's pairing is for writes that mutate units; this touches none). Viewer cannot add; IT Support can.
 - `GET /api/stock/signatures/<id>/image/` serves the PNG (`Cache-Control: private, no-store`), same permissions. Signatures are stored in the database (not `media/`), so one backup or rollback carries records and signatures together.
 - Append-only: no PUT/PATCH/DELETE routes, read-only admin, no group is given a delete path. A cancelled record keeps its signatures and can still be signed.
-- Validation: PNG only, at most 204800 bytes, at most 1600x800, not blank; name max 150, role max 50, both optional. Each signature writes a "Signature added" `RecordChange` row in the same atomic block.
+- Validation: PNG only, at most 204800 bytes, at most 1600x800, not blank; a non-blank signer name is required (a blank or whitespace-only name is a 400), role max 50 and optional, name max 150. Each signature writes a "Signature added" `RecordChange` row in the same atomic block.
 - A drawn image is evidence a person signed, not a cryptographic signature.
 
 ## Selectors

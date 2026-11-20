@@ -20,7 +20,7 @@ No PDF library, no new npm/pip dependency, no prices/costs on the note (it is an
 | `record_type` | CharField(30); one of `receiving`, `delivery`, `issue`, `client_return` (same slugs as `RecordChange` and record history) |
 | `record_id` | PositiveIntegerField; indexed together with `record_type` |
 | `record_number` | CharField(32), copied at signing time like `RecordChange` |
-| `signer_name` | CharField(150), printed name; the form requires it, the API accepts blank (see Validation) |
+| `signer_name` | CharField(150), printed name; required by both the form and the API (see Validation) |
 | `role_label` | CharField(50), optional, e.g. Deliverer / Receiver / Assigned to / Returned by |
 | `image` | BinaryField, validated PNG bytes, at most 200 KB (204800 bytes) |
 | `signed_at` | DateTimeField(default=timezone.now) |
@@ -38,7 +38,7 @@ Keyed by type + id (no FK), like `RecordChange`, so a new type is one entry in a
 - Must open with Pillow (`Image.open` + `verify`), format `PNG`, width <= 1600, height <= 800, else 400.
 - Must not be blank: flattened onto white it needs at least one non-white pixel, else 400.
 - `signer_name` max 150, `role_label` max 50, both stripped.
-- Decision (2026-11-20): the typed signer name stays REQUIRED in the signature form (`SignatureSection` refuses to save without it), because a drawn signature alone does not say who signed. The API itself still accepts a blank name; making it a 400 there is a one-line change if a non-UI client ever matters. `role_label` stays optional.
+- Decision (2026-11-20): the typed signer name stays REQUIRED in the signature form (`SignatureSection` refuses to save without it), because a drawn signature alone does not say who signed. Updated 2026-11-20: the API now refuses a blank or whitespace-only name with a 400 too, matching the form (`add_record_signature`). `role_label` stays optional. On a delivery the form prefills the name with `receiver_name` when set.
 - Record must exist and be of a signable type; unknown type 400, missing record 404. A cancelled/inactive record can still be signed and its signatures stay visible.
 
 ## API

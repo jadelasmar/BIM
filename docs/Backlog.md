@@ -22,11 +22,10 @@ Small fixes go straight to Claude Code. Features and schema changes go through a
 
 - UI | Records and references not clickable everywhere (Receiving list had no link at all) | bug | done
 - Operations | Generic (auto-serial) units picked by quantity, oldest first; real serials still picked one by one | feature | done
-- Operations | Digital signature and printable Receiving / Delivery / Issue / Client Return notes | feature | in progress (steps 1-3 verified; Viewer check pending)
+- Operations | Digital signature and printable Receiving / Delivery / Issue / Client Return notes | feature | done (Viewer UI check waived: tests prove the API refuses Viewers)
 - Operations | Signature and printed note for Reservation and Repair | feature | open
 - UI | Light theme: hardcoded dark colours made text unreadable (global search dropdown and others) | bug | done
 - UI | Muted text (`text-zinc-500`, `bim-helper-text`) is 3.7:1 on the dark panel, below AA; raise app-wide | small fix | open
-- Operations | Delivery receiver_name is only editable in Django admin; add it to the delivery form and detail page | small fix | open
 - UI | Glass restyle on the shell and KPI cards only, both themes | UI | open
 - Operations | Delivery search matches delivery/invoice number but not client name | small fix | open
 - Deployment | deploy.ps1 should run the launcher's config checks before pulling or restarting, so a bad .env.production stops the deploy instead of taking the site down | small fix | open

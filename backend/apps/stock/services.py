@@ -157,6 +157,7 @@ RECEIVING_HISTORY_FIELDS = (
 )
 DELIVERY_HISTORY_FIELDS = (
     ("customer_name", "Client"),
+    ("receiver_name", "Receiver"),
     ("invoice_number", "Invoice number"),
     ("delivery_date", "Delivery date"),
     ("notes", "Notes"),
@@ -473,6 +474,7 @@ def create_delivery_record(
     customer_name="",
     client=None,
     client_name_input="",
+    receiver_name="",
     invoice_number="",
     delivery_date=None,
     notes="",
@@ -556,6 +558,7 @@ def create_delivery_record(
     delivery = DeliveryRecord.objects.create(
         client=client,
         customer_name=(customer_name or client_name or "").strip(),
+        receiver_name=(receiver_name or "").strip(),
         invoice_number=(invoice_number or "").strip(),
         delivery_date=delivery_date or timezone.localdate(),
         notes=notes,
@@ -2012,6 +2015,7 @@ def update_delivery_record_header(
     delivery,
     *,
     customer_name=None,
+    receiver_name=None,
     invoice_number=None,
     delivery_date=None,
     notes=None,
@@ -2038,6 +2042,8 @@ def update_delivery_record_header(
 
     if customer_name is not None:
         delivery.customer_name = customer_name.strip()
+    if receiver_name is not None:
+        delivery.receiver_name = receiver_name.strip()
     if invoice_number is not None:
         delivery.invoice_number = invoice_number.strip()
     if delivery_date is not None:
@@ -2047,6 +2053,7 @@ def update_delivery_record_header(
     delivery.save(
         update_fields=(
             "customer_name",
+            "receiver_name",
             "invoice_number",
             "delivery_date",
             "notes",

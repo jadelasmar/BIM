@@ -166,7 +166,7 @@ Current Supplier and Client integration:
 - `/suppliers/` and `/clients/` render simple master-data list screens.
 - `/suppliers/new/`, `/clients/new/`, `/suppliers/<id>/`, and `/clients/<id>/` render create/edit screens for name, contact person, phone, email, notes, and active status.
 - Receive Stock can select or create a Supplier inline.
-- Create Delivery can select or create a Client inline. The API still sends `customer_name` for compatibility while linking the `client` master record.
+- Create Delivery has an optional Receiver text field right after Client (and in its Summary panel), and can select or create a Client inline. The API still sends `customer_name` for compatibility while linking the `client` master record.
 - Create Client Return can select or create a Client inline.
 - Supplier/Client create and edit buttons use backend-provided permission flags. Viewer can read these pages but does not see save/create controls.
 
@@ -242,7 +242,7 @@ Current Delivery Records integration:
 - `/operations/deliveries/<id>/` fetches one record through `initial_data.api.deliveryDetail`.
 - The detail screen shows client, receiver, delivery date, status, creator, notes, total units, and delivered item lines with product, SKU, unit id, serial number, unit status, and notes.
 - The detail screen supports safe correction actions only:
-  - Edit Details updates client, receiver, delivery date, notes, and item notes.
+  - Edit Details updates client, receiver (right after Client), invoice number, delivery date, notes, and item notes.
   - Cancel Record requires a cancellation reason and uses the delivery cancel API.
   - Wrong delivered unit, product, or serial mistakes are handled by cancelling and recreating the record when linked units are still untouched sold units.
 - If cancellation is blocked because a linked stock unit is no longer an untouched sold unit, the detail screen shows the backend operational message.
@@ -266,10 +266,10 @@ References that link: product name and serial in every record item table (serial
 ## Signatures and printable notes
 
 - `components/signature/SignaturePad.jsx`: drawing pad (canvas + pointer events, `touch-action: none`, Clear, Undo per stroke, no library). Always a white canvas with dark ink, in both themes; fills the container width, so it works at phone width.
-- `SignatureSection` (`AppRouter.jsx`, above `RecordHistory` on the Receiving, Delivery, Assignment and Client Return detail pages): lists signatures read-only and, with `permissions.canAddSignature`, offers "Collect signature" (name, role preset per type, pad, Save). Cancelled records still show and accept signatures. Opening a detail page with `#signature` in the URL opens the pad; the create pages' redirects are unchanged.
+- `SignatureSection` (`AppRouter.jsx`, above `RecordHistory` on the Receiving, Delivery, Assignment and Client Return detail pages): lists signatures read-only and, with `permissions.canAddSignature`, offers "Collect signature" (name, role preset per type, pad, Save). The name is required (the API refuses a blank one too); on a delivery it is prefilled with the receiver when one is set, and stays editable. Cancelled records still show and accept signatures. Opening a detail page with `#signature` in the URL opens the pad; the create pages' redirects are unchanged.
 - Print: the Print button on those four detail pages (`PrintNoteButton`) opens `PrintPreview` (full-screen white overlay with Print / Close; Print calls `window.print()`). `@media print` in `styles.css` shows only the sheet: A4, 12mm margin, white background and black text even in dark theme, repeating table header.
 - The layout is ONE component, `components/print/RecordNote.jsx` (header with `logo-primary.svg`, party block, items, notes, signature block, "Built for BIMPOS" footer). Per-type titles and party fields are the small config in `components/print/noteTypes.js`. To restyle, edit `RecordNote.jsx`; to add a type, add one `NOTE_TYPES` entry and a Print button.
-- The party block also shows Status (and the cancel reason), the delivery Receiver (read-only `receiver_name`, set in Django admin) with its source reservation/repair, the assignment party kind and return details, and the client return Resolution. In print, `:root` is forced to `color-scheme: light` so the page margin is white even from the dark theme.
+- The party block also shows Status (and the cancel reason), the delivery Receiver (`receiver_name`, editable on Create Delivery and the delivery Edit Details panel) with its source reservation/repair, the assignment party kind and return details, and the client return Resolution. In print, `:root` is forced to `color-scheme: light` so the page margin is white even from the dark theme.
 - These are operational notes, not invoices: no cost, price, sale price, invoice or PO number is ever read by the note.
 - The note components are separate leaf files because `tests.py` slices `AppRouter.jsx` by function name; only thin wiring was added there.
 

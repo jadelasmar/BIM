@@ -7000,6 +7000,7 @@ function DeliveryRecordDetailPage({ data }) {
   const [correctionMessage, setCorrectionMessage] = useState("");
   const [correctionForm, setCorrectionForm] = useState({
     customerName: "",
+    receiverName: "",
     invoiceNumber: "",
     deliveryDate: "",
     notes: "",
@@ -7053,6 +7054,7 @@ function DeliveryRecordDetailPage({ data }) {
     if (!record) return;
     setCorrectionForm({
       customerName: record.customer_name || "",
+      receiverName: record.receiver_name || "",
       invoiceNumber: record.invoice_number || "",
       deliveryDate: record.delivery_date || "",
       notes: record.notes || "",
@@ -7091,6 +7093,7 @@ function DeliveryRecordDetailPage({ data }) {
         },
         body: JSON.stringify({
           customer_name: correctionForm.customerName,
+          receiver_name: correctionForm.receiverName,
           invoice_number: correctionForm.invoiceNumber,
           delivery_date: correctionForm.deliveryDate,
           notes: correctionForm.notes,
@@ -7279,6 +7282,7 @@ function DeliveryRecordDetailPage({ data }) {
 
               <dl className="mt-5 grid gap-4 md:grid-cols-2">
                 <DetailRow label="Client" value={<EntityLink href={record.client ? `/clients/${record.client}/` : null}>{record.client_name || record.customer_name || "-"}</EntityLink>} strong />
+                <DetailRow label="Receiver" value={record.receiver_name || "-"} />
                 <DetailRow label="Delivery Date" value={formatDate(record.delivery_date)} />
                 <DetailRow label="Invoice Number" value={record.invoice_number || "-"} />
                 {record.from_reservation_number ? (
@@ -7344,7 +7348,7 @@ function DeliveryRecordDetailPage({ data }) {
         </div>
         </>
       ) : null}
-      <SignatureSection data={data} type="delivery" id={deliveryId} onSaved={() => setReloadKey((current) => current + 1)} />
+      <SignatureSection data={data} type="delivery" id={deliveryId} defaultSignerName={record?.receiver_name || ""} onSaved={() => setReloadKey((current) => current + 1)} />
       <RecordHistory data={data} type="delivery" id={deliveryId} refreshKey={reloadKey} />
     </Shell>
   );
@@ -7366,7 +7370,7 @@ function DeliveryCorrectionPanel({
         <div>
           <h2 className="text-sm font-bold text-white">Edit delivery details</h2>
           <p className="bim-page-description">
-            Safe edits are limited to client, invoice number, delivery date, notes, and item notes.
+            Safe edits are limited to client, receiver, invoice number, delivery date, notes, and item notes.
           </p>
         </div>
         <Button type="button" variant="ghost" onClick={onCancel}>
@@ -7378,6 +7382,9 @@ function DeliveryCorrectionPanel({
       <div className="mt-5 grid gap-4 md:grid-cols-2">
         <Field label="Client" required>
           <TextInput value={form.customerName} onChange={(value) => onFieldChange("customerName", value)} />
+        </Field>
+        <Field label="Receiver">
+          <TextInput value={form.receiverName} onChange={(value) => onFieldChange("receiverName", value)} />
         </Field>
         <Field label="Invoice Number">
           <TextInput value={form.invoiceNumber} onChange={(value) => onFieldChange("invoiceNumber", value)} />
@@ -11074,6 +11081,7 @@ function CreateDeliveryPage({ data }) {
   const [form, setForm] = useState({
     client: "",
     customerName: "",
+    receiverName: "",
     invoiceNumber: "",
     deliveryDate: today,
     notes: ""
@@ -11240,6 +11248,7 @@ function CreateDeliveryPage({ data }) {
             ? { client_name_input: selectedClient.name }
             : { client: selectedClient.id }),
           customer_name: selectedClient.name,
+          receiver_name: form.receiverName,
           invoice_number: form.invoiceNumber,
           delivery_date: form.deliveryDate,
           notes: form.notes,
@@ -11316,6 +11325,9 @@ function CreateDeliveryPage({ data }) {
                   onCreate={createClientOption}
                   placeholder="Search or create client..."
                 />
+                <Field label="Receiver">
+                  <TextInput value={form.receiverName} onChange={(value) => updateField("receiverName", value)} placeholder="Person receiving the delivery (optional)" />
+                </Field>
                 <Field label="Invoice Number">
                   <TextInput value={form.invoiceNumber} onChange={(value) => updateField("invoiceNumber", value)} placeholder="Enter invoice number" />
                 </Field>
@@ -11422,6 +11434,7 @@ function CreateDeliveryPage({ data }) {
             <dl className="divide-y divide-nexus-line p-4">
               <DetailRow label="Date" value={formatDate(form.deliveryDate)} />
               <DetailRow label="Client" value={clients.find((client) => String(client.id) === String(form.client))?.name || "-"} />
+              <DetailRow label="Receiver" value={form.receiverName || "-"} />
               <DetailRow label="Invoice Number" value={form.invoiceNumber || "-"} />
               <DetailRow label="Units" value={selectedUnits.length} strong />
               <DetailRow label="Reference Sale Price" value={totalSalePrice ? `$${totalSalePrice.toFixed(2)}` : "-"} />
@@ -13096,7 +13109,7 @@ const SIGNATURE_ROLE_BY_TYPE = {
 // Digital signatures collected on a record (append-only: they can be added, never edited
 // or removed). Sits directly above the record's edit history; onSaved lets the page bump
 // its history reload key after a signature is saved.
-function SignatureSection({ data, type, id, onSaved }) {
+function SignatureSection({ data, type, id, onSaved, defaultSignerName = "" }) {
   const canView = Boolean(data.permissions?.canViewSignature);
   const canAdd = Boolean(data.permissions?.canAddSignature);
   const { showSuccess, showError } = useToast();
@@ -13104,7 +13117,7 @@ function SignatureSection({ data, type, id, onSaved }) {
   const [signatures, setSignatures] = useState(null);
   const [collecting, setCollecting] = useState(false);
   const [image, setImage] = useState(null);
-  const [signerName, setSignerName] = useState("");
+  const [signerName, setSignerName] = useState(defaultSignerName);
   const [roleLabel, setRoleLabel] = useState(SIGNATURE_ROLE_BY_TYPE[type] || "");
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
@@ -13128,12 +13141,17 @@ function SignatureSection({ data, type, id, onSaved }) {
     document.getElementById("signature")?.scrollIntoView({ block: "start" });
   }, [canAdd, loaded]);
 
+  // The record may load after this section mounts, so prefill when the form opens.
+  useEffect(() => {
+    if (collecting && defaultSignerName) setSignerName((current) => current || defaultSignerName);
+  }, [collecting, defaultSignerName]);
+
   if (!canView && !canAdd) return null;
 
   function closeForm() {
     setCollecting(false);
     setImage(null);
-    setSignerName("");
+    setSignerName(defaultSignerName);
     setRoleLabel(SIGNATURE_ROLE_BY_TYPE[type] || "");
     setFormError("");
   }

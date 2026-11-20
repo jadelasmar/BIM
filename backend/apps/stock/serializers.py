@@ -2047,7 +2047,6 @@ class DeliveryRecordSerializer(serializers.ModelSerializer):
             "from_repair_number",
             "from_reservation_number",
             "client_name",
-            "receiver_name",
             "cancel_reason",
             "cancelled_at",
             "cancelled_by",
@@ -2059,6 +2058,7 @@ class DeliveryRecordSerializer(serializers.ModelSerializer):
         )
         extra_kwargs = {
             "customer_name": {"required": False, "allow_blank": True},
+            "receiver_name": {"required": False, "allow_blank": True},
         }
 
     def get_total_units(self, obj):
@@ -2113,6 +2113,7 @@ class DeliveryRecordCorrectionSerializer(serializers.ModelSerializer):
         model = DeliveryRecord
         fields = (
             "customer_name",
+            "receiver_name",
             "invoice_number",
             "delivery_date",
             "notes",
@@ -2120,6 +2121,7 @@ class DeliveryRecordCorrectionSerializer(serializers.ModelSerializer):
         )
         extra_kwargs = {
             "customer_name": {"required": False, "allow_blank": False},
+            "receiver_name": {"required": False, "allow_blank": True},
             "invoice_number": {"required": False, "allow_blank": True},
             "delivery_date": {"required": False},
             "notes": {"required": False, "allow_blank": True},
@@ -2133,6 +2135,9 @@ class DeliveryRecordCorrectionSerializer(serializers.ModelSerializer):
                 customer_name=validated_data.get("customer_name")
                 if "customer_name" in validated_data
                 else instance.customer_name,
+                receiver_name=validated_data.get("receiver_name")
+                if "receiver_name" in validated_data
+                else instance.receiver_name,
                 invoice_number=validated_data.get("invoice_number")
                 if "invoice_number" in validated_data
                 else instance.invoice_number,
