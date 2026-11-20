@@ -44,6 +44,7 @@ import { toneClasses, workflowMeta } from "../constants/uiRegistry";
 import { DEFAULT_THEME_STORAGE_KEY, applyTheme, currentTheme } from "../hooks/useTheme";
 import { LoginPage, PasswordSetupPage } from "../pages/auth/AuthPages";
 import { formatCount, formatCurrency, formatDate, todayLocal } from "../utils/formatters";
+import SignaturePad from "../components/signature/SignaturePad";
 import logoPrimary from "../assets/brand/logo-primary.svg";
 import logoWhite from "../assets/brand/logo-white.svg";
 
@@ -1521,6 +1522,7 @@ function ReceivingRecordDetailPage({ data }) {
         </div>
         </>
       ) : null}
+      <SignatureSection data={data} type="receiving" id={receivingId} onSaved={() => setReloadKey((current) => current + 1)} />
       <RecordHistory data={data} type="receiving" id={receivingId} refreshKey={reloadKey} />
     </Shell>
   );
@@ -3243,6 +3245,7 @@ function IssueRecordDetailPage({ data }) {
           ) : null}
         </aside>
       </div>
+      <SignatureSection data={data} type="issue" id={issueId} onSaved={() => setReloadKey((current) => current + 1)} />
       <RecordHistory data={data} type="issue" id={issueId} refreshKey={reloadKey} />
     </Shell>
   );
@@ -3453,7 +3456,7 @@ function CreateIssuePage({ data }) {
 
       const created = await response.json();
       showSuccess("Temporary assignment created.");
-      navigateAfterDelay(created.id ? `/operations/issues/${created.id}/` : data.routes.issueRecords);
+      navigateAfterDelay(created.id ? `/operations/issues/${created.id}/#signature` : data.routes.issueRecords);
     } catch (saveError) {
       showError(saveError.message);
       setSaving(false);
@@ -6379,6 +6382,7 @@ function ClientReturnRecordDetailPage({ data }) {
           </div>
         </>
       ) : null}
+      <SignatureSection data={data} type="client_return" id={returnId} onSaved={() => setReloadKey((current) => current + 1)} />
       <RecordHistory data={data} type="client_return" id={returnId} refreshKey={reloadKey} />
     </Shell>
   );
@@ -6645,7 +6649,7 @@ function CreateClientReturnPage({ data }) {
 
       const created = await response.json();
       showSuccess("Client return created.");
-      navigateAfterDelay(created.id ? `/operations/client-returns/${created.id}/` : data.routes.clientReturnRecords);
+      navigateAfterDelay(created.id ? `/operations/client-returns/${created.id}/#signature` : data.routes.clientReturnRecords);
     } catch (saveError) {
       showError(saveError.message);
       setSaving(false);
@@ -7335,6 +7339,7 @@ function DeliveryRecordDetailPage({ data }) {
         </div>
         </>
       ) : null}
+      <SignatureSection data={data} type="delivery" id={deliveryId} onSaved={() => setReloadKey((current) => current + 1)} />
       <RecordHistory data={data} type="delivery" id={deliveryId} refreshKey={reloadKey} />
     </Shell>
   );
@@ -10514,7 +10519,7 @@ function StockEntryPage({ data, mode = "add-unit" }) {
         ? `Receiving record created. Reserved for ${created.reservation.reserved_for} (${created.reservation.reservation_number}).`
         : "Receiving record created."
     );
-    navigateAfterDelay(created.id ? `/operations/receiving/${created.id}/` : data.routes.receivingRecords);
+    navigateAfterDelay(created.id ? `/operations/receiving/${created.id}/#signature` : data.routes.receivingRecords);
   }
 
   async function createProductUnits() {
@@ -11248,7 +11253,7 @@ function CreateDeliveryPage({ data }) {
 
       const created = await response.json();
       showSuccess("Delivery completed.");
-      navigateAfterDelay(created.id ? `/operations/deliveries/${created.id}/` : data.routes.deliveryRecords);
+      navigateAfterDelay(created.id ? `/operations/deliveries/${created.id}/#signature` : data.routes.deliveryRecords);
     } catch (saveError) {
       showError(saveError.message);
       setSaving(false);
@@ -13073,6 +13078,161 @@ function PanelHeader({ title, action, actionHref, badge }) {
         <button className="text-xs font-semibold text-[var(--bim-orange-text)]">{action}</button>
       ) : null}
     </div>
+  );
+}
+
+const SIGNATURE_ROLE_BY_TYPE = {
+  receiving: "Deliverer",
+  delivery: "Receiver",
+  issue: "Assigned to",
+  client_return: "Returned by"
+};
+
+// Digital signatures collected on a record (append-only: they can be added, never edited
+// or removed). Sits directly above the record's edit history; onSaved lets the page bump
+// its history reload key after a signature is saved.
+function SignatureSection({ data, type, id, onSaved }) {
+  const canView = Boolean(data.permissions?.canViewSignature);
+  const canAdd = Boolean(data.permissions?.canAddSignature);
+  const { showSuccess, showError } = useToast();
+  const padRef = useRef(null);
+  const [signatures, setSignatures] = useState(null);
+  const [collecting, setCollecting] = useState(false);
+  const [image, setImage] = useState(null);
+  const [signerName, setSignerName] = useState("");
+  const [roleLabel, setRoleLabel] = useState(SIGNATURE_ROLE_BY_TYPE[type] || "");
+  const [saving, setSaving] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [reload, setReload] = useState(0);
+  const loaded = signatures !== null;
+
+  useEffect(() => {
+    if (!id || !(canView || canAdd)) return undefined;
+    const controller = new AbortController();
+    fetch(`${data.api.signatures}?type=${type}&id=${id}`, { signal: controller.signal })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((rows) => setSignatures(Array.isArray(rows) ? rows : null))
+      .catch(() => {});
+    return () => controller.abort();
+  }, [data.api.signatures, type, id, canView, canAdd, reload]);
+
+  // Landing from a create page with #signature: open the pad and scroll to it (first load only).
+  useEffect(() => {
+    if (!canAdd || !loaded || window.location.hash !== "#signature") return;
+    setCollecting(true);
+    document.getElementById("signature")?.scrollIntoView({ block: "start" });
+  }, [canAdd, loaded]);
+
+  if (!canView && !canAdd) return null;
+
+  function closeForm() {
+    setCollecting(false);
+    setImage(null);
+    setSignerName("");
+    setRoleLabel(SIGNATURE_ROLE_BY_TYPE[type] || "");
+    setFormError("");
+  }
+
+  async function saveSignature() {
+    if (!image) {
+      setFormError("Draw a signature first.");
+      return;
+    }
+    if (!signerName.trim()) {
+      setFormError("Enter the signer's name.");
+      return;
+    }
+    setSaving(true);
+    setFormError("");
+    try {
+      const response = await fetch(data.api.signatures, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": data.csrfToken },
+        body: JSON.stringify({ type, id, image, signer_name: signerName.trim(), role_label: roleLabel.trim() })
+      });
+      if (!response.ok) {
+        const details = await response.json().catch(() => ({}));
+        throw new Error(firstApiError(details) || "Could not save the signature.");
+      }
+      closeForm();
+      setReload((current) => current + 1);
+      onSaved?.();
+      showSuccess("Signature saved.");
+    } catch (saveError) {
+      setFormError(saveError.message);
+      showError(saveError.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section id="signature" className="mt-5 overflow-hidden rounded-lg border border-nexus-line bg-nexus-panel" aria-label="Signatures">
+      <div className="flex items-center justify-between gap-3 px-4 py-3">
+        <div className="flex items-center gap-3">
+          <h2 className="bim-section-title">Signatures</h2>
+          {signatures?.length ? <Badge className="rounded-full bg-nexus-orange px-2 py-1 font-bold text-white">{formatCount(signatures.length)}</Badge> : null}
+        </div>
+        {canAdd && !collecting ? (
+          <Button type="button" variant="secondary" onClick={() => setCollecting(true)}>
+            Collect signature
+          </Button>
+        ) : null}
+      </div>
+
+      {collecting && canAdd ? (
+        <div className="border-t border-nexus-line p-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Input label="Signer name" value={signerName} onChange={(event) => setSignerName(event.target.value)} disabled={saving} />
+            <Input label="Role" value={roleLabel} onChange={(event) => setRoleLabel(event.target.value)} disabled={saving} />
+          </div>
+          <div className="mt-4 max-w-[600px]">
+            <p className="mb-2 text-sm font-semibold text-white">Signature</p>
+            <SignaturePad ref={padRef} onChange={setImage} disabled={saving} />
+            <div className="mt-2 flex gap-2">
+              <Button type="button" variant="ghost" disabled={saving || !image} onClick={() => padRef.current?.undo()}>
+                Undo
+              </Button>
+              <Button type="button" variant="ghost" disabled={saving || !image} onClick={() => padRef.current?.clear()}>
+                Clear
+              </Button>
+            </div>
+          </div>
+          {formError ? <p className="mt-3 text-sm font-semibold text-[var(--tone-red-text)]">{formError}</p> : null}
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Button type="button" loading={saving} disabled={!image || saving} onClick={saveSignature}>
+              <Save className="h-4 w-4" />
+              Save signature
+            </Button>
+            <Button type="button" variant="secondary" disabled={saving} onClick={closeForm}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {signatures === null ? null : signatures.length ? (
+        <ul className="divide-y divide-nexus-line border-t border-nexus-line">
+          {signatures.map((signature) => (
+            <li key={signature.id} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center">
+              <div className="w-full max-w-[240px] shrink-0 rounded-lg border border-nexus-line bg-white p-1">
+                <img src={signature.image_url} alt={`Signature of ${signature.signer_name}`} className="block h-auto w-full" />
+              </div>
+              <div className="min-w-0 text-sm">
+                <p className="font-semibold text-white">{signature.signer_name}</p>
+                {signature.role_label ? <p className="text-zinc-300">{signature.role_label}</p> : null}
+                <p className="bim-helper-text mt-1">
+                  Captured by {signature.captured_by || "-"} on{" "}
+                  {new Date(signature.signed_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="border-t border-nexus-line px-4 py-5 text-sm text-zinc-500">No signatures collected yet.</p>
+      )}
+    </section>
   );
 }
 
