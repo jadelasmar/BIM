@@ -565,6 +565,13 @@ summary::-webkit-details-marker {
   margin: 12mm;
 }
 @media print {
+  /* color-scheme: dark gives the page canvas (including the @page margin) a dark default
+     that background:#fff on html/body does not cover, so force the light scheme. */
+  :root,
+  :root[data-theme="light"] {
+    color-scheme: light !important;
+    background: #fff !important;
+  }
   html,
   body {
     background: #fff !important;

@@ -204,6 +204,10 @@ Storage key:
 
 Light theme is implemented with CSS variable overrides in `frontend/src/styles.css`.
 
+## Theme Colours On Surfaces
+
+Never hardcode theme colours on a surface or on text that sits on it: no `bg-black`, `bg-zinc-800/900/950`, `bg-white`, `text-white`, `text-green-200` or `text-red-300` on dropdowns, popovers, menus, modals, toasts, tooltips, picker lists, banners or avatars. Use the nexus tokens (`bg-nexus-panel`, `bg-nexus-panel2`, `border-nexus-line`, `text-nexus-*`, `text-[var(--tone-*-text)]`, `text-[var(--bim-error-text)]`) so both themes work. The light theme only remaps a fixed list of utilities in `styles.css`; a dark utility that is not on that list (for example `bg-zinc-950`) stays dark in light theme while its `text-white` titles turn dark, which made the global search results invisible. Allowed fixed colours: the white signature canvas, the white printed note, the orange primary button with black text, and full-screen scrims (`bg-black/70-80`) behind modals. Muted text on a dark surface should be `text-zinc-400`, not `zinc-500` (zinc-500 is about 3.7:1 on the dark panel).
+
 ## Accessibility
 
 - Icon-only buttons need `aria-label`.

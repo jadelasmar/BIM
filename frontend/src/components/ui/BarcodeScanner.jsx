@@ -309,7 +309,7 @@ export function BarcodeScannerModal({ title = "Scan Barcode", multiple = false, 
           </div>
 
           {insecureHint ? (
-            <div className="rounded-lg border border-nexus-line bg-black/40 px-4 py-3 text-xs leading-5 text-zinc-400">
+            <div className="rounded-lg border border-nexus-line bg-nexus-panel2 px-4 py-3 text-xs leading-5 text-zinc-400">
               <p className="font-semibold text-zinc-200">Turn on live scanning (one time, Chrome on Android)</p>
               <ol className="mt-1 list-decimal pl-4">
                 <li>

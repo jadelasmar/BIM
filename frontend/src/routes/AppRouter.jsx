@@ -298,18 +298,18 @@ function GlobalSearch({ data }) {
       </label>
 
       {open && hasQuery ? (
-        <div className="absolute z-30 mt-2 max-h-96 w-full overflow-auto rounded-md border border-nexus-line bg-zinc-950 p-1 text-left shadow-2xl shadow-black/50">
-          {loading ? <div className="px-3 py-3 text-sm text-zinc-500">Searching...</div> : null}
+        <div className="absolute z-30 mt-2 max-h-96 w-full overflow-auto rounded-md border border-nexus-line bg-nexus-panel p-1 text-left shadow-panel">
+          {loading ? <div className="px-3 py-3 text-sm text-zinc-400">Searching...</div> : null}
           {!loading && error ? (
             <div className="px-3 py-3 text-sm font-semibold text-[var(--tone-red-text)]">{error}</div>
           ) : null}
           {!loading && !error && !hasResults ? (
-            <div className="px-3 py-3 text-sm text-zinc-500">No results for &quot;{trimmedQuery}&quot;.</div>
+            <div className="px-3 py-3 text-sm text-zinc-400">No results for &quot;{trimmedQuery}&quot;.</div>
           ) : null}
           {!loading && !error
             ? groups.map((group) => (
                 <div key={group.key} className="py-1">
-                  <p className="px-3 py-1 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  <p className="px-3 py-1 text-xs font-semibold uppercase tracking-wide text-zinc-400">
                     {group.label} ({group.count})
                   </p>
                   {group.results.map((result) => (
@@ -317,11 +317,11 @@ function GlobalSearch({ data }) {
                       key={`${group.key}-${result.id}`}
                       href={result.href}
                       onMouseDown={(event) => event.preventDefault()}
-                      className="flex w-full flex-col items-start rounded px-3 py-2 text-left hover:bg-nexus-panel"
+                      className="flex w-full flex-col items-start rounded px-3 py-2 text-left hover:bg-nexus-panel2"
                     >
                       <span className="truncate text-sm font-semibold text-white">{result.title}</span>
                       {result.subtitle ? (
-                        <span className="truncate text-xs text-zinc-500">{result.subtitle}</span>
+                        <span className="truncate text-xs text-zinc-400">{result.subtitle}</span>
                       ) : null}
                     </a>
                   ))}
@@ -1388,7 +1388,7 @@ function ReceivingRecordDetailPage({ data }) {
       </header>
 
       {correctionMessage ? (
-        <section className="mb-4 rounded-lg border border-[rgb(var(--bim-green-rgb)/50%)] bg-green-500/10 px-4 py-3 text-sm font-semibold text-green-200">
+        <section className="mb-4 rounded-lg border border-[rgb(var(--bim-green-rgb)/50%)] bg-green-500/10 px-4 py-3 text-sm font-semibold text-[var(--tone-green-text)]">
           {correctionMessage}
         </section>
       ) : null}
@@ -2141,7 +2141,7 @@ function ReservationRecordDetailPage({ data }) {
       </header>
 
       {message ? (
-        <div className="mb-4 rounded-lg border border-[rgb(var(--bim-green-rgb)/60%)] bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-200">
+        <div className="mb-4 rounded-lg border border-[rgb(var(--bim-green-rgb)/60%)] bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-[var(--tone-green-text)]">
           {message}
         </div>
       ) : null}
@@ -3175,7 +3175,7 @@ function IssueRecordDetailPage({ data }) {
       </header>
 
       {message ? (
-        <div className="mb-4 rounded-lg border border-[rgb(var(--bim-green-rgb)/60%)] bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-200">
+        <div className="mb-4 rounded-lg border border-[rgb(var(--bim-green-rgb)/60%)] bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-[var(--tone-green-text)]">
           {message}
         </div>
       ) : null}
@@ -3952,7 +3952,7 @@ function RepairRecordDetailPage({ data }) {
       </header>
 
       {message ? (
-        <div className="mb-4 rounded-lg border border-[rgb(var(--bim-green-rgb)/60%)] bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-200">
+        <div className="mb-4 rounded-lg border border-[rgb(var(--bim-green-rgb)/60%)] bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-[var(--tone-green-text)]">
           {message}
         </div>
       ) : null}
@@ -5272,7 +5272,7 @@ function ClientUpgradeRecordDetailPage({ data }) {
       </header>
 
       {message ? (
-        <div className="mb-4 rounded-lg border border-[rgb(var(--bim-green-rgb)/60%)] bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-200">
+        <div className="mb-4 rounded-lg border border-[rgb(var(--bim-green-rgb)/60%)] bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-[var(--tone-green-text)]">
           {message}
         </div>
       ) : null}
@@ -6250,7 +6250,7 @@ function ClientReturnRecordDetailPage({ data }) {
       </header>
 
       {correctionMessage ? (
-        <section className="mb-4 rounded-lg border border-[rgb(var(--bim-green-rgb)/50%)] bg-green-500/10 px-4 py-3 text-sm font-semibold text-green-200">
+        <section className="mb-4 rounded-lg border border-[rgb(var(--bim-green-rgb)/50%)] bg-green-500/10 px-4 py-3 text-sm font-semibold text-[var(--tone-green-text)]">
           {correctionMessage}
         </section>
       ) : null}
@@ -6697,7 +6697,7 @@ function CreateClientReturnPage({ data }) {
                   <DateInput value={form.returnDate} onChange={(value) => updateField("returnDate", value)} />
                 </Field>
                 <Field label="Client">
-                  <div className="flex h-10 items-center rounded-md border border-nexus-line bg-zinc-800/60 px-3 text-sm text-zinc-300">
+                  <div className="flex h-10 items-center rounded-md border border-nexus-line bg-nexus-panel2 px-3 text-sm text-zinc-300">
                     {returnClient ? returnClient.name : "Taken from the selected units' latest delivery"}
                   </div>
                 </Field>
@@ -7189,7 +7189,7 @@ function DeliveryRecordDetailPage({ data }) {
       </header>
 
       {correctionMessage ? (
-        <section className="mb-4 rounded-lg border border-[rgb(var(--bim-green-rgb)/50%)] bg-green-500/10 px-4 py-3 text-sm font-semibold text-green-200">
+        <section className="mb-4 rounded-lg border border-[rgb(var(--bim-green-rgb)/50%)] bg-green-500/10 px-4 py-3 text-sm font-semibold text-[var(--tone-green-text)]">
           {correctionMessage}
         </section>
       ) : null}
@@ -8117,7 +8117,7 @@ function InventoryUnitsView({ data, onRowsChange }) {
   );
 
   const renderMobileUnit = (unit, nested = false) => (
-    <ClickableRow as="li" key={unit.id} href={unitProductHref(unit)} className={`py-3 ${nested ? "bg-black/20 pl-8 pr-4" : "px-4"}`}>
+    <ClickableRow as="li" key={unit.id} href={unitProductHref(unit)} className={`py-3 ${nested ? "bg-nexus-panel2 pl-8 pr-4" : "px-4"}`}>
       <div className="flex items-start justify-between gap-3">
         <a href={unitProductHref(unit)} className="min-w-0 break-all font-mono text-sm font-semibold text-[var(--bim-orange-text)]">
           {unit.serial_number}
@@ -8145,7 +8145,7 @@ function InventoryUnitsView({ data, onRowsChange }) {
   );
 
   const renderDesktopUnit = (unit, nested = false) => (
-    <ClickableRow key={unit.id} href={unitProductHref(unit)} className={`border-t border-nexus-line hover:bg-nexus-panel2/60 ${nested ? "bg-black/20" : ""}`}>
+    <ClickableRow key={unit.id} href={unitProductHref(unit)} className={`border-t border-nexus-line hover:bg-nexus-panel2/60 ${nested ? "bg-nexus-panel2" : ""}`}>
       <td className={`py-3 ${nested ? "pl-12 pr-4" : "px-4"}`}>
         <a href={unitProductHref(unit)} className="font-mono text-xs font-semibold text-[var(--bim-orange-text)] hover:text-white">
           {unit.serial_number}
@@ -8526,7 +8526,7 @@ function InventoryTable({ rows, sort, onSort, selectedId, onSelect, loading, err
 function InventoryProductRow({ product, selected, onSelect, statusFilter, nested = false }) {
   return (
     <tr
-      className={`cursor-pointer border-t border-nexus-line hover:bg-zinc-900/70 ${nested ? "bg-black/20" : ""} ${
+      className={`cursor-pointer border-t border-nexus-line hover:bg-zinc-900/70 ${nested ? "bg-nexus-panel2" : ""} ${
         selected ? "bg-amber-950/20 outline outline-1 outline-[rgb(var(--bim-orange-focus-rgb)/50%)]" : ""
       }`}
       onClick={() => onSelect(product.id)}
@@ -8616,7 +8616,7 @@ function InventoryGroupRows({ row, expanded, onToggle, showEmpty, onToggleEmpty,
             />
           ))}
           {emptyMembers.length || !visibleMembers.length ? (
-            <tr className="border-t border-nexus-line bg-black/20">
+            <tr className="border-t border-nexus-line bg-nexus-panel2">
               <td colSpan="6" className="px-4 py-2.5 pl-9 text-xs text-zinc-500 md:pl-12">
                 {!visibleMembers.length ? "No member has stock. " : null}
                 {emptyMembers.length ? (
@@ -8664,7 +8664,7 @@ function Avatar({ product }) {
             event.stopPropagation();
             setEnlarged(true);
           }}
-          className="grid h-9 w-9 shrink-0 cursor-zoom-in place-items-center overflow-hidden rounded-lg bg-zinc-900"
+          className="grid h-9 w-9 shrink-0 cursor-zoom-in place-items-center overflow-hidden rounded-lg bg-nexus-panel2"
           title="View full image"
         >
           <img
@@ -8690,7 +8690,7 @@ function Avatar({ product }) {
                 setEnlarged(false);
               }}
               aria-label="Close image preview"
-              className="absolute right-5 top-5 text-zinc-300 hover:text-white"
+              className="absolute right-5 top-5 grid h-9 w-9 place-items-center rounded-full border border-nexus-line bg-nexus-panel text-zinc-200 hover:bg-nexus-panel2"
             >
               <X className="h-6 w-6" />
             </button>
@@ -8707,7 +8707,7 @@ function Avatar({ product }) {
   }
   const letters = (product.brand_name || product.display_name || "?").slice(0, 2).toUpperCase();
   return (
-    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-600 text-xs font-bold text-white">
+    <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-[rgb(var(--bim-blue-rgb)/15%)] text-xs font-bold text-[var(--tone-blue-text)]">
       {letters}
     </span>
   );
@@ -10164,7 +10164,7 @@ function AddProductPage({ data, isNew = true }) {
                         <button
                           type="button"
                           onClick={clearImageFile}
-                          className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-black/70 text-white hover:bg-black/90"
+                          className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full border border-nexus-line bg-nexus-panel text-zinc-200 hover:bg-nexus-panel2"
                           aria-label="Remove image"
                         >
                           <X className="h-4 w-4" />
@@ -12402,11 +12402,11 @@ function SearchableCreatableSelect({
           />
         </span>
       </label>
-      {helperText ? <p className="mt-2 text-xs text-zinc-500">{helperText}</p> : null}
+      {helperText ? <p className="mt-2 text-xs text-zinc-400">{helperText}</p> : null}
       {createError ? <p className="mt-2 text-xs font-semibold text-[var(--tone-red-text)]">{createError}</p> : null}
       {open && !disabled ? (
-        <div className="absolute z-30 mt-2 max-h-72 w-full overflow-auto rounded-md border border-nexus-line bg-zinc-950 p-1 shadow-2xl shadow-black/50">
-          {loading ? <div className="px-3 py-2 text-sm text-zinc-500">Loading...</div> : null}
+        <div className="absolute z-30 mt-2 max-h-72 w-full overflow-auto rounded-md border border-nexus-line bg-nexus-panel p-1 shadow-panel">
+          {loading ? <div className="px-3 py-2 text-sm text-zinc-400">Loading...</div> : null}
           {!loading && visibleOptions.length ? (
             visibleOptions.map((option) => (
               <button
@@ -12414,7 +12414,7 @@ function SearchableCreatableSelect({
                 type="button"
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => selectOption(option)}
-                className="flex w-full items-center justify-between rounded px-3 py-2 text-left text-sm text-zinc-200 hover:bg-nexus-panel"
+                className="flex w-full items-center justify-between rounded px-3 py-2 text-left text-sm text-zinc-200 hover:bg-nexus-panel2"
               >
                 <span className="min-w-0 truncate">{getOptionLabel(option)}</span>
                 {String(getOptionValue(option)) === String(value) ? <span className="text-xs text-[var(--bim-orange-text)]">Selected</span> : null}
@@ -12422,7 +12422,7 @@ function SearchableCreatableSelect({
             ))
           ) : null}
           {!loading && !visibleOptions.length ? (
-            <div className="px-3 py-2 text-sm text-zinc-500">No matches found.</div>
+            <div className="px-3 py-2 text-sm text-zinc-400">No matches found.</div>
           ) : null}
           {!loading && canCreate ? (
             <button
@@ -12996,7 +12996,7 @@ function RecentActivity({ items, endpoint }) {
       </div>
       <div className="max-h-[26rem] overflow-auto" onScroll={handleScroll}>
         <table className="min-w-full text-left text-sm">
-          <thead className="sticky top-0 z-10 bg-zinc-800/95 text-zinc-400">
+          <thead className="sticky top-0 z-10 bg-nexus-panel2 text-zinc-400">
             <tr>
               <th className="px-4 py-3 font-medium">Reference</th>
               <th className="px-4 py-3 font-medium">Activity</th>
@@ -13226,7 +13226,7 @@ function SignatureSection({ data, type, id, onSaved }) {
               <div className="min-w-0 text-sm">
                 <p className="font-semibold text-white">{signature.signer_name}</p>
                 {signature.role_label ? <p className="text-zinc-300">{signature.role_label}</p> : null}
-                <p className="bim-helper-text mt-1">
+                <p className="mt-1 text-xs leading-5 text-zinc-400">
                   Captured by {signature.captured_by || "-"} on{" "}
                   {new Date(signature.signed_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
                 </p>

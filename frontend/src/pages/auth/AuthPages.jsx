@@ -59,7 +59,7 @@ function FieldErrorList({ errors = [], id }) {
   }
 
   return (
-    <ul id={id} className="mb-2 list-disc pl-5 text-xs text-red-300">
+    <ul id={id} className="mb-2 list-disc pl-5 text-xs text-[var(--bim-error-text)]">
       {errors.map((error) => (
         <li key={error}>{error}</li>
       ))}
@@ -88,7 +88,7 @@ function AuthInput({ label, name, type = "text", autoComplete, placeholder, erro
         aria-describedby={hasError ? errorId : undefined}
         {...props}
       />
-      {error ? <p id={errorId} className="text-xs font-medium leading-5 text-red-300">{error}</p> : null}
+      {error ? <p id={errorId} className="text-xs font-medium leading-5 text-[var(--bim-error-text)]">{error}</p> : null}
       {!error ? <FieldErrorList id={errorId} errors={errors} /> : null}
     </div>
   );
@@ -158,7 +158,7 @@ export function LoginPage({ data }) {
   return (
     <AuthShell title={data.title || "Welcome Back"} subtitle="Internal IT Operations Platform">
       {data.errors?.length ? (
-        <p className="auth-error-alert mb-4 rounded-md border border-red-300/30 bg-red-950/25 px-3 py-2 text-xs leading-5 text-red-300" role="alert">
+        <p className="auth-error-alert mb-4 rounded-md border border-red-300/30 bg-red-950/25 px-3 py-2 text-xs leading-5 text-[var(--bim-error-text)]" role="alert">
           {data.errors[0]}
         </p>
       ) : null}
@@ -212,7 +212,7 @@ export function LoginPage({ data }) {
             </button>
           </div>
           {fieldErrors.password ? (
-            <p id="id_password_error" className="text-xs font-semibold text-red-300">
+            <p id="id_password_error" className="text-xs font-semibold text-[var(--bim-error-text)]">
               {fieldErrors.password}
             </p>
           ) : null}
