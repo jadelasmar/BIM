@@ -503,6 +503,24 @@ Rules:
 - Keep `bim_stock` and `bim_accounts` labels for compatibility.
 - Add new models only when the workflow needs durable data.
 
+### RecordSignature
+
+Append-only drawn signature on an operational record (Receiving, Delivery, Issue, Client Return). Keyed by type and id, not a foreign key, like `RecordChange`.
+
+Fields:
+
+- `record_type`, `record_id`, `record_number` (copied at signing time)
+- `signer_name`, `role_label` (both optional)
+- `image` (BinaryField, validated PNG, at most 204800 bytes)
+- `signed_at`
+- `captured_by`
+
+Rules:
+
+- Never edited or deleted by the app; the admin is read-only.
+- Stored in the database (not `media/`) so a backup or rollback carries signatures with the records.
+- Index on `(record_type, record_id)`. Migration `0045`.
+
 ## Future Data Expansion
 
 Likely future models:

@@ -150,6 +150,17 @@ Units received without a typed serial are "generic": `ProductUnit.serial_is_gene
 - `GET /api/stock/client-returns/returnable-generic-groups/` (`q`, `delivery`; needs the client return view permission) returns generic sold units grouped per product and client: `count` and `unit_ids` ordered oldest delivery first. Only units `create_client_return_record` would accept are included. `returnable-units/` no longer lists generic units unless `q` equals the serial exactly.
 - The pickers resolve a quantity to specific unit ids before submitting, so every workflow endpoint receives the usual `unit_ids`. If a picked unit was taken meanwhile, the existing service validation answers with a normal 400 message.
 
+## Record signatures
+
+`RecordSignature` (`models.py`, migration `0045`) holds a drawn PNG signature for a Receiving, Delivery, Assignment (Issue) or Client Return record, keyed by `record_type` + `record_id` like `RecordChange`. Logic lives in `backend/apps/stock/signatures.py` (`SIGNABLE_RECORDS` registry, `validate_signature_png`, `add_record_signature`), not in `services.py`: it never changes a unit status and never writes a `StockMovement`. Adding another signable type is one registry entry.
+
+- `GET /api/stock/signatures/?type=&id=` lists a record's signatures (oldest first, metadata and `image_url` only). Needs `VIEW_RECORD_SIGNATURE` and the record type's view permission.
+- `POST /api/stock/signatures/` `{type, id, image, signer_name, role_label}` adds one. Needs `ADD_RECORD_SIGNATURE` and the record type's view permission, checked before the body is read. It deliberately does not need `CHANGE_PRODUCT_UNIT` (convention 2's pairing is for writes that mutate units; this touches none). Viewer cannot add; IT Support can.
+- `GET /api/stock/signatures/<id>/image/` serves the PNG (`Cache-Control: private, no-store`), same permissions. Signatures are stored in the database (not `media/`), so one backup or rollback carries records and signatures together.
+- Append-only: no PUT/PATCH/DELETE routes, read-only admin, no group is given a delete path. A cancelled record keeps its signatures and can still be signed.
+- Validation: PNG only, at most 204800 bytes, at most 1600x800, not blank; name max 150, role max 50, both optional. Each signature writes a "Signature added" `RecordChange` row in the same atomic block.
+- A drawn image is evidence a person signed, not a cryptographic signature.
+
 ## Selectors
 
 Stock read/query helpers live in `backend/apps/stock/selectors.py`.

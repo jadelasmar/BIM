@@ -268,6 +268,14 @@ Editable logos:
 
 Tailwind directives, theme CSS variables, and light-theme overrides.
 
+### Signatures and printable notes
+
+- `backend/apps/stock/signatures.py`: signable-record registry, PNG validation, `add_record_signature` (no stock side effects).
+- `RecordSignature` in `models.py`; API views in `api_views.py` (`/api/stock/signatures/`, `signatures/<id>/image/`).
+- `frontend/src/components/signature/SignaturePad.jsx`: drawing pad.
+- `frontend/src/components/print/RecordNote.jsx` (the one note layout), `noteTypes.js` (per-type fields), `PrintPreview.jsx` (overlay + `window.print()`).
+- `SignatureSection` and `PrintNoteButton` in `AppRouter.jsx`; print CSS in `styles.css`.
+
 ## Important Flows
 
 ### Protected App Load

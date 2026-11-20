@@ -219,6 +219,12 @@ Light theme is implemented with CSS variable overrides in `frontend/src/styles.c
 - No page exists for users, employees (internal parties) or Edit History values, so those are plain text.
 - Use text and icons, not color alone, for status.
 
+## Signature Pad And Printed Notes
+
+- The signature pad is always a white canvas with dark ink (`#111827`), in both themes, so a saved signature looks the same everywhere. It fills its container width and works with finger, stylus or mouse.
+- A printed note is a white A4 sheet with black text regardless of theme, one layout component (`RecordNote.jsx`), brand logo `logo-primary.svg`, footer "Built for BIMPOS". It is an operational note: never show prices, costs or invoice figures.
+- The surrounding on-screen controls (Collect signature, Print, overlay buttons) use the normal solid Button/Card styles.
+
 ## Future Page Rules
 
 - Follow existing shell, header, card, button, form, table, and status patterns.

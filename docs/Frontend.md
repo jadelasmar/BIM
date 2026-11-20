@@ -261,7 +261,16 @@ References that link: product name and serial in every record item table (serial
 - Client Return takes generic units from `returnable-generic-groups/`: one row per product and client ("N returnable"), oldest delivery first; once a unit is picked only that client's rows are offered.
 - Record detail item tables (Receiving, Delivery, Reservation, Issue, Repair, Removal, Client Return) merge identical generic lines through `groupGenericItems` into "No serial / N units"; real serials list individually. The Receiving and Delivery edit panels edit a merged line for every item in it.
 - Inventory Stock Units view still lists every unit with its serial and adds a Serial Type column (Generated / Real); its CSV gains `Serial Type` after `Serial Number`. The Product Details unit register tags generated serials.
-- There is no printed note/PDF view in the app; if one is added it must reuse `groupGenericItems`.
+- The printed notes (see Signatures and printable notes) reuse `groupGenericItems`: real serials one line each, generic units of a product one line with a count and "No serial".
+
+## Signatures and printable notes
+
+- `components/signature/SignaturePad.jsx`: drawing pad (canvas + pointer events, `touch-action: none`, Clear, Undo per stroke, no library). Always a white canvas with dark ink, in both themes; fills the container width, so it works at phone width.
+- `SignatureSection` (`AppRouter.jsx`, above `RecordHistory` on the Receiving, Delivery, Assignment and Client Return detail pages): lists signatures read-only and, with `permissions.canAddSignature`, offers "Collect signature" (name, role preset per type, pad, Save). Cancelled records still show and accept signatures. The create pages redirect to `<detail>/#signature`, which opens the pad.
+- Print: the Print button on those four detail pages (`PrintNoteButton`) opens `PrintPreview` (full-screen white overlay with Print / Close; Print calls `window.print()`). `@media print` in `styles.css` shows only the sheet: A4, 12mm margin, white background and black text even in dark theme, repeating table header.
+- The layout is ONE component, `components/print/RecordNote.jsx` (header with `logo-primary.svg`, party block, items, notes, signature block, "Built for BIMPOS" footer). Per-type titles and party fields are the small config in `components/print/noteTypes.js`. To restyle, edit `RecordNote.jsx`; to add a type, add one `NOTE_TYPES` entry and a Print button.
+- These are operational notes, not invoices: no cost, price, sale price, invoice or PO number is ever read by the note.
+- The note components are separate leaf files because `tests.py` slices `AppRouter.jsx` by function name; only thin wiring was added there.
 
 ## Inventory CSV Export
 

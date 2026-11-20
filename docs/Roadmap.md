@@ -30,6 +30,7 @@ This roadmap documents product direction, not implementation history.
 - Uploaded media (`/media/`) requires a login and `backend\media` is copied to the backup share on deploy
 - Global search across products, groups, units, suppliers, clients and every record type, permission-gated
 - Record edit history (`RecordChange`) shown on detail pages, plus the per-unit journey from `StockMovement`
+- Digital signatures (append-only, stored in the database) and printable A4 notes for Receiving, Delivery, Assignment and Client Return
 - Office-ready ProductUnit status vocabulary
 - First office testing/deployment checklist
 - Supplier and Client master data modules
