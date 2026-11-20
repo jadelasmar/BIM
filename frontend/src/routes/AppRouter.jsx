@@ -3459,7 +3459,7 @@ function CreateIssuePage({ data }) {
 
       const created = await response.json();
       showSuccess("Temporary assignment created.");
-      navigateAfterDelay(created.id ? `/operations/issues/${created.id}/#signature` : data.routes.issueRecords);
+      navigateAfterDelay(created.id ? `/operations/issues/${created.id}/` : data.routes.issueRecords);
     } catch (saveError) {
       showError(saveError.message);
       setSaving(false);
@@ -6653,7 +6653,7 @@ function CreateClientReturnPage({ data }) {
 
       const created = await response.json();
       showSuccess("Client return created.");
-      navigateAfterDelay(created.id ? `/operations/client-returns/${created.id}/#signature` : data.routes.clientReturnRecords);
+      navigateAfterDelay(created.id ? `/operations/client-returns/${created.id}/` : data.routes.clientReturnRecords);
     } catch (saveError) {
       showError(saveError.message);
       setSaving(false);
@@ -10524,7 +10524,7 @@ function StockEntryPage({ data, mode = "add-unit" }) {
         ? `Receiving record created. Reserved for ${created.reservation.reserved_for} (${created.reservation.reservation_number}).`
         : "Receiving record created."
     );
-    navigateAfterDelay(created.id ? `/operations/receiving/${created.id}/#signature` : data.routes.receivingRecords);
+    navigateAfterDelay(created.id ? `/operations/receiving/${created.id}/` : data.routes.receivingRecords);
   }
 
   async function createProductUnits() {
@@ -11258,7 +11258,7 @@ function CreateDeliveryPage({ data }) {
 
       const created = await response.json();
       showSuccess("Delivery completed.");
-      navigateAfterDelay(created.id ? `/operations/deliveries/${created.id}/#signature` : data.routes.deliveryRecords);
+      navigateAfterDelay(created.id ? `/operations/deliveries/${created.id}/` : data.routes.deliveryRecords);
     } catch (saveError) {
       showError(saveError.message);
       setSaving(false);
