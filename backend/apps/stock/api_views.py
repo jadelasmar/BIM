@@ -1490,16 +1490,16 @@ class RecordSignatureListCreateAPIView(APIView):
             return Response({"detail": "A record id is required."}, status=400)
         signatures = RecordSignature.objects.filter(
             record_type=record_type, record_id=record_id
-        ).select_related("captured_by")
+        ).select_related("captured_by").defer("image")
         return Response(RecordSignatureSerializer(signatures, many=True).data)
 
     def post(self, request):
+        # Permissions first, so a caller without them never has the body parsed.
+        _require_perm(request.user, stock_constants.ADD_RECORD_SIGNATURE)
         data = request.data if hasattr(request.data, "get") else {}
         record_type = data.get("type", "")
         if not isinstance(record_type, str):
             record_type = ""
-        # Permissions first, so a caller without them learns nothing about the body.
-        _require_perm(request.user, stock_constants.ADD_RECORD_SIGNATURE)
         entry = _require_record_view(request.user, record_type)
         if entry is None:
             return Response({"detail": "This record type cannot be signed."}, status=400)
@@ -1534,6 +1534,7 @@ class RecordSignatureImageAPIView(APIView):
     permission_classes = (permissions.IsAuthenticated,)
 
     def get(self, request, pk):
+        _require_perm(request.user, stock_constants.VIEW_RECORD_SIGNATURE)
         signature = get_object_or_404(RecordSignature, pk=pk)
         _require_signature_view(request.user, signature.record_type)
         response = HttpResponse(bytes(signature.image), content_type="image/png")

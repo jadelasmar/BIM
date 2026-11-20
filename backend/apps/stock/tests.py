@@ -3,12 +3,14 @@ from django.contrib.auth.models import Group, Permission, User
 from django.contrib.auth.tokens import default_token_generator
 from django.contrib.messages.storage.fallback import FallbackStorage
 from django.core import mail
+from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError, models
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from django.utils import timezone
+import base64
 from io import BytesIO
 from datetime import timedelta
 from pathlib import Path
@@ -67,6 +69,7 @@ from .models import (
     ReservationItem,
     ClientUpgradeRecord,
     RecordChange,
+    RecordSignature,
     ReservationRecord,
     StockMovement,
     Supplier,
@@ -7955,8 +7958,6 @@ class SignatureModelTests(TestCase):
         return buffer.getvalue()
 
     def _data_url(self, **kwargs):
-        import base64
-
         return "data:image/png;base64," + base64.b64encode(self._png_bytes(**kwargs)).decode()
 
     def _add(self, image=None, **kwargs):
@@ -7985,25 +7986,16 @@ class SignatureModelTests(TestCase):
         self.assertEqual(RecordChange.objects.get().new_value, "unnamed (no role)")
 
     def test_oversize_rejected(self):
-        import base64
-        from django.core.exceptions import ValidationError
-
         big = self._png_bytes() + b"\0" * 205000
         with self.assertRaises(ValidationError):
             self._add(image=base64.b64encode(big).decode())
 
     def test_non_png_rejected(self):
-        import base64
-        from django.core.exceptions import ValidationError
-
         jpeg = self._png_bytes(fmt="JPEG", mode="RGB")
         with self.assertRaises(ValidationError):
             self._add(image=base64.b64encode(jpeg).decode())
 
     def test_corrupt_png_rejected(self):
-        import base64
-        from django.core.exceptions import ValidationError
-
         with self.assertRaises(ValidationError):
             self._add(image=base64.b64encode(b"\x89PNG\r\n\x1a\nnot really").decode())
         with self.assertRaises(ValidationError):
@@ -8012,22 +8004,16 @@ class SignatureModelTests(TestCase):
             self._add(image="")
 
     def test_blank_png_rejected(self):
-        from django.core.exceptions import ValidationError
-
         with self.assertRaises(ValidationError):
             self._add(image=self._data_url(draw=False))
 
     def test_dimensions_rejected(self):
-        from django.core.exceptions import ValidationError
-
         with self.assertRaises(ValidationError):
             self._add(image=self._data_url(size=(1700, 100)))
         with self.assertRaises(ValidationError):
             self._add(image=self._data_url(size=(100, 900)))
 
     def test_bare_base64_and_data_url_with_whitespace_accepted(self):
-        import base64
-
         bare = base64.b64encode(self._png_bytes()).decode()
         self._add(image=bare)
         spaced = "data:image/png;base64," + "\n".join(
@@ -8036,8 +8022,6 @@ class SignatureModelTests(TestCase):
         self._add(image="  " + spaced + "  ")
 
     def test_unknown_type_rejected(self):
-        from django.core.exceptions import ValidationError
-
         with self.assertRaises(ValidationError):
             self._add(record_type="repair")
 
@@ -8091,8 +8075,6 @@ class SignatureAPITests(TestCase):
         self.delivery = DeliveryRecord.objects.create(customer_name="Acme")
 
     def _data_url(self, draw=True):
-        import base64
-
         image = Image.new("RGBA", (200, 80), (255, 255, 255, 0))
         if draw:
             for x in range(10, 60):
@@ -8246,6 +8228,12 @@ class SignatureAPITests(TestCase):
         self.assertEqual(rows[0]["field_label"], "Signature added")
         self.assertEqual(rows[0]["new_value"], "Sam (Receiver)")
 
+    @override_settings(
+        STORAGES={
+            "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+            "staticfiles": {"BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"},
+        }
+    )
     def test_initial_data_permissions_and_api_url(self):
         self.client.force_login(self.viewer)
         data = self.client.get("/").context["initial_data"]
@@ -8255,3 +8243,58 @@ class SignatureAPITests(TestCase):
         self.client.force_login(self.support)
         data = self.client.get("/").context["initial_data"]
         self.assertTrue(data["permissions"]["canAddSignature"])
+
+
+    def test_admin_is_read_only(self):
+        model_admin = admin.site._registry[RecordSignature]
+        request = RequestFactory().get("/")
+        request.user = User.objects.create_superuser("sig-root", "r@example.com", "pw")
+        self.assertFalse(model_admin.has_add_permission(request))
+        self.assertFalse(model_admin.has_change_permission(request))
+        self.assertFalse(model_admin.has_delete_permission(request))
+
+    def test_each_signable_type_creates_and_lists_with_its_number(self):
+        records = {
+            "receiving": (ReceivingRecord.objects.create(), "receiving_number"),
+            "issue": (IssueRecord.objects.create(issued_to="Alex"), "issue_number"),
+            "client_return": (ClientReturnRecord.objects.create(), "return_number"),
+        }
+        self.client.force_login(self.support)
+        for record_type, (record, attr) in records.items():
+            response = self._post(self._body(type=record_type, id=record.pk))
+            self.assertEqual(response.status_code, 201, record_type)
+            self.assertEqual(response.json()["record_number"], getattr(record, attr))
+            rows = self._list(type_=record_type, id_=record.pk).json()
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["record_type"], record_type)
+
+    def test_boundary_dimensions_accepted(self):
+        image = Image.new("RGBA", (1600, 800), (255, 255, 255, 0))
+        image.putpixel((5, 5), (0, 0, 0, 255))
+        buffer = BytesIO()
+        image.save(buffer, format="PNG")
+        self.client.force_login(self.support)
+        body = self._body(image=base64.b64encode(buffer.getvalue()).decode())
+        self.assertEqual(self._post(body).status_code, 201)
+
+    def test_payload_at_size_cap_accepted_and_one_over_rejected(self):
+        from .signatures import MAX_IMAGE_BYTES
+
+        base = base64.b64decode(self._data_url().split(",", 1)[1])
+        self.client.force_login(self.support)
+        at_cap = base + b"\0" * (MAX_IMAGE_BYTES - len(base))
+        over = at_cap + b"\0"
+        self.assertEqual(self._post(self._body(image=base64.b64encode(at_cap).decode())).status_code, 201)
+        self.assertEqual(self._post(self._body(image=base64.b64encode(over).decode())).status_code, 400)
+
+    def test_malformed_json_from_viewer_is_403(self):
+        self.client.force_login(self.viewer)
+        response = self.client.post("/api/stock/signatures/", "{not json", content_type="application/json")
+        self.assertEqual(response.status_code, 403)
+
+    def test_image_route_hides_existence_from_unauthorised_user(self):
+        self.client.force_login(self.support)
+        pk = self._post().json()["id"]
+        self._as_user("no-sig-perms")
+        self.assertEqual(self.client.get(f"/api/stock/signatures/{pk}/image/").status_code, 403)
+        self.assertEqual(self.client.get("/api/stock/signatures/999999/image/").status_code, 403)
