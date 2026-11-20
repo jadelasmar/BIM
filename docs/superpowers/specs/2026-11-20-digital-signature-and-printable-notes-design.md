@@ -20,7 +20,7 @@ No PDF library, no new npm/pip dependency, no prices/costs on the note (it is an
 | `record_type` | CharField(30); one of `receiving`, `delivery`, `issue`, `client_return` (same slugs as `RecordChange` and record history) |
 | `record_id` | PositiveIntegerField; indexed together with `record_type` |
 | `record_number` | CharField(32), copied at signing time like `RecordChange` |
-| `signer_name` | CharField(150), printed name, optional (blank allowed) |
+| `signer_name` | CharField(150), printed name; the form requires it, the API accepts blank (see Validation) |
 | `role_label` | CharField(50), optional, e.g. Deliverer / Receiver / Assigned to / Returned by |
 | `image` | BinaryField, validated PNG bytes, at most 200 KB (204800 bytes) |
 | `signed_at` | DateTimeField(default=timezone.now) |
@@ -37,7 +37,8 @@ Keyed by type + id (no FK), like `RecordChange`, so a new type is one entry in a
 - `image` is a `data:image/png;base64,...` string (bare base64 also accepted). Decoded size 1..204800 bytes, else 400.
 - Must open with Pillow (`Image.open` + `verify`), format `PNG`, width <= 1600, height <= 800, else 400.
 - Must not be blank: flattened onto white it needs at least one non-white pixel, else 400.
-- `signer_name` max 150, `role_label` max 50, both stripped, both optional.
+- `signer_name` max 150, `role_label` max 50, both stripped.
+- Decision (2026-11-20): the typed signer name stays REQUIRED in the signature form (`SignatureSection` refuses to save without it), because a drawn signature alone does not say who signed. The API itself still accepts a blank name; making it a 400 there is a one-line change if a non-UI client ever matters. `role_label` stays optional.
 - Record must exist and be of a signable type; unknown type 400, missing record 404. A cancelled/inactive record can still be signed and its signatures stay visible.
 
 ## API
@@ -59,6 +60,7 @@ Constants `VIEW_RECORD_SIGNATURE`, `ADD_RECORD_SIGNATURE` in `constants.py`. `ro
 - Post-create success flow: the create pages already redirect to the detail page; the redirect text is left exactly as is (existing source-assertion tests pin it); the detail page has the "Collect signature" button, and a `#signature` URL hash opens the pad. Ruling made at verification: the spec's earlier idea of appending `#signature` to the redirects was dropped. Nothing blocks or delays creation.
 - Print: a Print button on the four detail pages opens `PrintPreview`, a full-screen white overlay holding the A4 sheet with Print / Close buttons. Print calls `window.print()`. `@media print` hides everything except the sheet, sets `@page { size: A4; margin: 12mm }`, white background and black text regardless of theme.
 - Template: ONE component, `components/print/RecordNote.jsx`, renders header (logo-primary.svg, note title, record number, date), party block, items table, notes, signature block (image, printed name, role, captured by / time; an empty signature line when unsigned) and footer "Built for BIMPOS". Per-type content lives in a small config `NOTE_TYPES` in `components/print/noteTypes.js`: title, date label, party rows, notes picker. Restyling = edit `RecordNote.jsx` only; adding a type = one `NOTE_TYPES` entry plus a Print button.
+- Party block fields (added 2026-11-20): every note also shows Status (with the cancel reason when cancelled), Delivery adds Receiver (right after the client) and the source reservation / repair number, Assignment adds the party kind and returned date / reason, Client Return adds Resolution. Still omitted on purpose: PO, invoice, cost and price fields.
 - Items use the existing `groupGenericItems` (real serials one line each; generic units of one product one line with a count and "no serial"). The note shows no cost, price, sale price, invoice number, PO number or supplier invoice amount. Decision: even reference numbers like invoice/PO are omitted so the note is unambiguously not an invoice.
 - `AppRouter.jsx` stays one file. `tests.py` asserts on it by slicing between function names, so the new components go into separate leaf files under `components/` (no test slices cover them, and they depend on nothing inside `AppRouter`), and only thin wiring (`SignatureSection`, Print button) is added to `AppRouter.jsx`.
 - Design: existing solid Card/Button/Input styles; screen UI supports dark theme; the pad and the print sheet are always white.

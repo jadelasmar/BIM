@@ -113,7 +113,7 @@ Stock API views:
 - inventory summary
 - lookup endpoints for categories, brands, models, suppliers, clients
 
-Delivery record list search currently supports delivery number, linked client name, compatibility client text, receiver name, product-unit serial number, product description, and product SKU. The API field `customer_name` remains for compatibility, while new office records can also link to `client`. Delivery list/detail access uses the delivery record view permission. Creating a delivery requires both the delivery record add permission and product-unit change permission because selected stock units are marked sold.
+Delivery record list search currently supports delivery number, linked client name, compatibility client text, receiver name, product-unit serial number, product description, and product SKU. The API field `customer_name` remains for compatibility, while new office records can also link to `client`. The delivery payload includes the read-only `receiver_name` (editable only in Django admin for now). Delivery list/detail access uses the delivery record view permission. Creating a delivery requires both the delivery record add permission and product-unit change permission because selected stock units are marked sold.
 
 Create Delivery only accepts active available product units. Reserved units must be released before they can be delivered.
 

@@ -8116,6 +8116,14 @@ class SignatureAPITests(TestCase):
         self.assertEqual(self._post({}).status_code, 403)
         self.assertEqual(self._post().status_code, 403)
 
+    def test_delivery_detail_payload_carries_receiver_name_for_the_note(self):
+        self.delivery.receiver_name = "Hassan"
+        self.delivery.save(update_fields=["receiver_name"])
+        self.client.force_login(self.viewer)
+        response = self.client.get(f"/api/stock/deliveries/{self.delivery.pk}/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["receiver_name"], "Hassan")
+
     def test_it_support_post_returns_shape_without_image_bytes(self):
         self.client.force_login(self.support)
         response = self._post(self._body(signer_name=" Sam ", role_label="Receiver"))
