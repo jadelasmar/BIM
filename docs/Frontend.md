@@ -249,7 +249,7 @@ Current Delivery Records integration:
 
 ## Clickable rows and references
 
-Shared helpers in `AppRouter.jsx` (next to `PartyLink`): `ClickableRow` (row opens `href` on click, Enter, middle-click; clicks on links/buttons/fields inside, or ending a text selection, are ignored), `RecordNumberLink` (the real link inside a row), `EntityLink` (product, serial, supplier, client or record link; plain text when there is no id) and `productHref`. Rows using `ClickableRow`: all record lists, Supplier and Client lists, Stock Units, Recent Activity.
+Shared helpers in `AppRouter.jsx` (next to `PartyLink`): `ClickableRow` (a `<tr>` by default, or any element via `as`, e.g. `as="li"`; opens `href` on click, Enter, middle-click; clicks on links/buttons/fields inside, or ending a text selection, are ignored), `RecordNumberLink` (the real link inside a row), `EntityLink` (product, serial, supplier, client or record link; plain text when there is no id) and `productHref`. Rows using `ClickableRow`: all record lists, Supplier and Client lists, Stock Units (table rows and the narrow-screen unit cards), Recent Activity.
 
 References that link: product name and serial in every record item table (serial opens the product page filtered to that unit, generic serials excluded), supplier/client names in lists and details, Original Delivery on Client Return, movement history serial and record references (`MovementReference`), Stock Units and unit register product/supplier, global search results (real anchors), Unit Journey steps and Stock Units "Where" (backend href). Not linked, no page exists: users, employees, Edit History values.
 

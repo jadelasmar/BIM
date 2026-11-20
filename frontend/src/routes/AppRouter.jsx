@@ -8107,7 +8107,7 @@ function InventoryUnitsView({ data, onRowsChange }) {
   );
 
   const renderMobileUnit = (unit, nested = false) => (
-    <li key={unit.id} className={`py-3 ${nested ? "bg-black/20 pl-8 pr-4" : "px-4"}`}>
+    <ClickableRow as="li" key={unit.id} href={unitProductHref(unit)} className={`py-3 ${nested ? "bg-black/20 pl-8 pr-4" : "px-4"}`}>
       <div className="flex items-start justify-between gap-3">
         <a href={unitProductHref(unit)} className="min-w-0 break-all font-mono text-sm font-semibold text-[var(--bim-orange-text)]">
           {unit.serial_number}
@@ -8131,7 +8131,7 @@ function InventoryUnitsView({ data, onRowsChange }) {
           </button>
         ) : null}
       </div>
-    </li>
+    </ClickableRow>
   );
 
   const renderDesktopUnit = (unit, nested = false) => (
@@ -11883,12 +11883,12 @@ function RecordNumberLink({ href, children }) {
   );
 }
 
-function ClickableRow({ href, className = "", children, ...rest }) {
+function ClickableRow({ as: Tag = "tr", href, className = "", children, ...rest }) {
   if (!href) {
     return (
-      <tr className={className} {...rest}>
+      <Tag className={className} {...rest}>
         {children}
-      </tr>
+      </Tag>
     );
   }
   const open = (event) => {
@@ -11900,7 +11900,7 @@ function ClickableRow({ href, className = "", children, ...rest }) {
     return Boolean(control && event.currentTarget.contains(control));
   };
   return (
-    <tr
+    <Tag
       {...rest}
       tabIndex={0}
       className={`cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[color:var(--bim-orange-focus)] ${className}`}
@@ -11921,7 +11921,7 @@ function ClickableRow({ href, className = "", children, ...rest }) {
       }}
     >
       {children}
-    </tr>
+    </Tag>
   );
 }
 
