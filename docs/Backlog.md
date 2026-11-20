@@ -19,7 +19,7 @@ Small fixes go straight to Claude Code. Features and schema changes go through a
 
 ## Items
 
-- UI | Records and references not clickable everywhere (Receiving list had no link at all) | bug | in progress
+- UI | Records and references not clickable everywhere (Receiving list had no link at all) | bug | done
 - Operations | Generic (auto-serial) units picked by quantity, oldest first; real serials still picked one by one | feature | done
 - Operations | Digital signature and printable Receiving / Delivery / Issue / Client Return notes | feature | open
 - UI | Glass restyle on the shell and KPI cards only, both themes | UI | open
@@ -29,3 +29,5 @@ Small fixes go straight to Claude Code. Features and schema changes go through a
 - Deployment | rollback.ps1 restores only the database; media restore from the share is a manual robocopy | small fix | open
 - Deployment | Remove the untracked backend\backup_db.ps1 and old root-level script copies from BIM-Release now that the new backup tasks are proven | small fix | open
 - Operations | Client return and repair header edits have no rollback test (covered only by the atomic guard) | small fix | open
+- Clients/Suppliers | Supplier and client detail pages show none of their records (deliveries, receivings, reservations, returns) | feature | open
+- UI | Real mouse middle-click on a clickable row is untested; confirm in a normal browser | small fix | open
