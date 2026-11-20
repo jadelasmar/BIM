@@ -2,6 +2,8 @@
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "permissions": {
     "allow": [
+      "Bash",
+      "PowerShell",
       "PowerShell(Start-Process -FilePath \"C:\\nssm-2.24\\win64\\nssm.exe\" *)"
     ],
     "deny": [
@@ -10,28 +12,68 @@
       "Read(**/db*.sqlite3)"
     ],
     "ask": [
-      "Bash(python manage.py flush:*)",
-      "Bash(python manage.py migrate * zero)",
-      "Bash(python manage.py dbshell:*)",
-      "Bash(python manage.py shell:*)",
-      "Bash(dropdb:*)",
-      "Bash(rm -rf:*)",
+      "Bash(*manage.py flush*)",
+      "PowerShell(*manage.py flush*)",
+      "Bash(*manage.py migrate* zero*)",
+      "PowerShell(*manage.py migrate* zero*)",
+      "Bash(dropdb*)",
+      "PowerShell(dropdb*)",
+      "Bash(rm *sqlite3*)",
+      "Bash(mv *sqlite3*)",
+      "Bash(cp *sqlite3*)",
+      "Bash(*manage.py dbshell*)",
+      "PowerShell(*manage.py dbshell*)",
+      "Bash(*manage.py shell*)",
+      "PowerShell(*manage.py shell*)",
+      "Bash(*db_prod*)",
+      "PowerShell(*db_prod*)",
+      "Bash(*BIM-Release*)",
+      "PowerShell(*BIM-Release*)",
+      "Bash(*deploy.bat*)",
+      "PowerShell(*deploy.bat*)",
+      "Bash(*deploy.ps1*)",
+      "PowerShell(*deploy.ps1*)",
+      "Bash(*rollback.bat*)",
+      "PowerShell(*rollback.bat*)",
+      "Bash(*rollback.ps1*)",
+      "PowerShell(*rollback.ps1*)",
+      "Bash(*grant-restart-permission.ps1*)",
+      "PowerShell(*grant-restart-permission.ps1*)",
+      "Bash(*schedule-backup.bat*)",
+      "PowerShell(*schedule-backup.bat*)",
+      "Bash(*schtasks*)",
+      "PowerShell(*schtasks*)",
+      "Bash(rm -rf*)",
+      "Bash(git reset --hard*)",
+      "PowerShell(git reset --hard*)",
+      "Bash(git clean*)",
+      "PowerShell(git clean*)",
+      "Bash(git push --force*)",
+      "PowerShell(git push --force*)",
+      "Bash(git push * --force*)",
+      "PowerShell(git push * --force*)",
+      "Bash(git push -f*)",
+      "PowerShell(git push -f*)",
+      "Bash(git push * -f*)",
+      "PowerShell(git push * -f*)",
+      "Bash(git checkout -- *)",
+      "PowerShell(git checkout -- *)",
+      "Bash(git checkout * -- *)",
+      "PowerShell(git checkout * -- *)",
+      "Bash(git branch -D*)",
+      "PowerShell(git branch -D*)",
+      "Bash(git branch * -D*)",
+      "PowerShell(git branch * -D*)",
       "PowerShell(Remove-Item*-Recurse*)",
       "PowerShell(Remove-Item*-Force*)",
-      "PowerShell(*deploy.ps1*)",
-      "PowerShell(*rollback.ps1*)",
-      "PowerShell(*grant-restart-permission.ps1*)",
-      "PowerShell(*deploy.bat*)",
-      "PowerShell(*rollback.bat*)",
-      "Bash(*deploy.bat*)",
-      "Bash(*rollback.bat*)",
-      "PowerShell(*db_prod*)",
-      "Bash(*db_prod*)",
-      "PowerShell(git push*)",
-      "Bash(git push:*)"
+      "PowerShell(Remove-Item*sqlite3*)",
+      "PowerShell(Move-Item*sqlite3*)",
+      "PowerShell(Copy-Item*sqlite3*)",
+      "PowerShell(del *sqlite3*)"
     ]
   },
   "model": "opusplan",
+  "advisorModel": "fable",
   "hooks": {
     "PreToolUse": [
       {
@@ -64,15 +106,6 @@
       }
     }
   },
-  "effortLevel": "high",
-  "initialPermissionMode": "acceptEdits",
-  "allowedTools": [
-    "Bash",
-    "PowerShell",
-    "Edit",
-    "Write",
-    "Read",
-    "Glob",
-    "Grep"
-  ]
+  "effortLevel": "medium",
+  "initialPermissionMode": "acceptEdits"
 }
